@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* You can add global custom styles below */
+body {
+  font-family: 'League Spartan' sans-serif;
+  background-color: #bbe1ac;
+  color: #33296b;
+}
+
+.react-datepicker {
+    font-family: inherit;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+  }
+  
+  .react-datepicker__header {
+    background-color: #f3f4f6;
+  }
+
+@font-face {
+font-family: 'League Spartan';
+src: url('/fonts/LeagueSpartan-VariableFont_wght.ttf') format('ttf');
+font-weight: 400; /* Normal weight */
+font-style: normal;
+font-display: swap; /* Prevents invisible text during load */
+}
