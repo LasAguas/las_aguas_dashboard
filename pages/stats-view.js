@@ -256,7 +256,7 @@ export default function StatsView() {
 
   return (
     <div className="p-6 space-y-6">
-      <Link href="/dashboard">
+      <Link href="/">
         <button className="absolute top-4 right-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
           View Calendar
         </button>

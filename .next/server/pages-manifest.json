@@ -3,7 +3,5 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/artist-dashboard": "pages/artist-dashboard.js",
-  "/stats-view": "pages/stats-view.js",
-  "/login": "pages/login.js",
-  "/dashboard": "pages/dashboard.js"
+  "/stats-view": "pages/stats-view.js"
 }
