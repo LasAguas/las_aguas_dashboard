@@ -1,0 +1,64 @@
+import fetch from "node-fetch";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+export default async function handler(req, res) {
+  const code = req.query.code;
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+    client_id: process.env.SPOTIFY_CLIENT_ID,
+    client_secret: process.env.SPOTIFY_CLIENT_SECRET,
+  });
+
+  const r = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+
+  const tokens = await r.json();
+  // tokens = { access_token, refresh_token, expires_in }
+
+  // Save tokens in Supabase
+  await supabase.from("artist_api_tokens").insert({
+    artist_id: 1, // TODO: pass artist ID dynamically
+    platform: "spotify",
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token,
+    expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+  });
+
+  res.send("Spotify connected! You can close this window.");
+}
+
+export default async function handler(req, res) {
+    const code = req.query.code;
+  
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+      client_id: process.env.SPOTIFY_CLIENT_ID,
+      client_secret: process.env.SPOTIFY_CLIENT_SECRET,
+    });
+  
+    const r = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+  
+    const tokens = await r.json();
+  
+    if (tokens.error) {
+      console.error(tokens);
+      return res.status(400).json(tokens);
+    }
+  
+    // Store in Supabase later — for now just show on screen
+    res.status(200).json(tokens);
+  }
+  
