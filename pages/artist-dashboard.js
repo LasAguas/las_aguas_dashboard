@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-
+import Link from "next/link";
 
 // Helpers
 const pad = (n) => String(n).padStart(2, '0')
@@ -172,10 +172,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
         </div>
       </div>
     );
-  }
-  
-  
-    
+  }    
 
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
@@ -525,6 +522,15 @@ const [weeks, setWeeks] = useState([])
 const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
 
+// Checking width for dates
+const [isNarrow, setIsNarrow] = useState(false);
+
+useEffect(() => {
+  const handleResize = () => setIsNarrow(window.innerWidth < 800);
+  handleResize(); // run once at mount
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, []);
 
 // View switching
 const [viewMode, setViewMode] = useState('4weeks') // '4weeks' (Current) | 'month'
@@ -767,7 +773,6 @@ return (
     {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
 
     {/* Calendar: stacked weeks */}
-    {/* Calendar: stacked weeks */}
 <div className="space-y-6">
   {weeks.map((week, wi) => (
     <div
@@ -788,10 +793,17 @@ return (
         {week.days.map((day) => (
           <div
             key={day.ymd}
-            className="min-h-[120px] border-l first:border-l-0 border-t-0 p-2"
+            className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2 ${
+              day.date.toDateString() === new Date().toDateString()
+                ? 'bg-[#eef8ea]'  // highlight today
+                : ''
+            }`}
           >
             <div className="text-xs text-gray-500 mb-1">
-              {day.date.toLocaleDateString()}
+              {isNarrow
+                ? `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}`
+                : `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}/${day.date.getFullYear()}`
+              }
             </div>
 
             <div className="space-y-1">

@@ -3,6 +3,6 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/artist-dashboard": "pages/artist-dashboard.js",
-  "/api/auth/spotify/login": "pages/api/auth/spotify/login.js",
-  "/": "pages/index.js"
+  "/": "pages/index.js",
+  "/login": "pages/login.js"
 }

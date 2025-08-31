@@ -774,6 +774,16 @@ const [viewMode, setViewMode] = useState('4weeks') // '4weeks' (Current) | 'mont
 const [months, setMonths] = useState([])
 const [selectedMonth, setSelectedMonth] = useState('')
 
+// Checking width for dates
+const [isNarrow, setIsNarrow] = useState(false);
+
+useEffect(() => {
+  const handleResize = () => setIsNarrow(window.innerWidth < 800);
+  handleResize(); // run once at mount
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, []);
+
 // For Add Post modal
 const [showAddPostModal, setShowAddPostModal] = useState(false);
 const [newPostDate, setNewPostDate] = useState('');
@@ -1228,12 +1238,20 @@ return (
                 <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
                   {(dropProvided, dropSnapshot) => (
                     <div
-                      ref={dropProvided.innerRef}
-                      {...dropProvided.droppableProps}
-                      className="min-h-[120px] border-l first:border-l-0 border-t-0 p-2"
-                    >
+                    ref={dropProvided.innerRef}
+                    {...dropProvided.droppableProps}
+                    className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2`}
+                    style={{
+                      backgroundColor: day.date.toDateString() === new Date().toDateString()
+                        ? "#eef8ea" // halfway between #bbe1ac and white
+                        : "transparent"
+                    }}
+                  >
                       <div className="text-xs text-gray-500 mb-1">
-                        {day.date.toLocaleDateString()}
+                        {isNarrow
+                          ? `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}`
+                          : `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}/${day.date.getFullYear()}`
+                        }
                       </div>
 
                       <div className="space-y-1">
