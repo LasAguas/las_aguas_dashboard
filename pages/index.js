@@ -11,40 +11,50 @@ const pad = (n) => String(n).padStart(2, '0')
 const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 // Move a post from one day (sourceYMD) to another (destYMD) inside weeks[]
-function movePostInWeeks(weeksArr, postId, sourceYMD, destYMD, destIndex = 0) {
+function movePostInWeeks(weeksArr, itemId, sourceYMD, destYMD, destIndex = 0, isVariation = false) {
+  // Clone weeks deeply enough to avoid mutating state
   const clone = weeksArr.map(w => ({
     ...w,
-    days: w.days.map(d => ({ ...d, posts: [...d.posts] }))
+    days: w.days.map(d => ({
+      ...d,
+      posts: [...d.posts],
+      variations: [...d.variations],
+    }))
   }))
 
-  // Find source day + extract post
-  let movedPost = null
+  const key = isVariation ? "variations" : "posts"
+  let movedItem = null
+
+  // 1. Find source day and remove the item
   for (const w of clone) {
     for (const d of w.days) {
       if (d.ymd === sourceYMD) {
-        const idx = d.posts.findIndex(p => p.id === postId)
+        const idx = d[key].findIndex(p => p.id === itemId)
         if (idx !== -1) {
-          movedPost = d.posts.splice(idx, 1)[0]
+          movedItem = d[key].splice(idx, 1)[0]
           break
         }
       }
     }
-    if (movedPost) break
+    if (movedItem) break
   }
-  if (!movedPost) return clone
+  if (!movedItem) return clone
 
-  // Insert into dest day
+  // 2. Insert into destination day
   for (const w of clone) {
     for (const d of w.days) {
       if (d.ymd === destYMD) {
-        const insertAt = Math.max(0, Math.min(destIndex, d.posts.length))
-        d.posts.splice(insertAt, 0, { ...movedPost, post_date: destYMD })
+        const insertAt = Math.max(0, Math.min(destIndex, d[key].length))
+        d[key].splice(insertAt, 0, {
+          ...movedItem,
+          [isVariation ? "variation_post_date" : "post_date"]: destYMD
+        })
         return clone
       }
     }
   }
 
-  // If destination not found (shouldn't happen), put it back where it was
+  // If destination not found (shouldn't happen), revert
   return weeksArr
 }
 
@@ -812,33 +822,38 @@ const [updateError, setUpdateError] = useState('');
 
 //Drag and Drop Handler
 const onDragEnd = async (result) => {
-  const { destination, source, draggableId } = result;
-  if (!destination) return;
+  const { destination, source, draggableId } = result
+  if (!destination) return
 
-  const postId = Number(draggableId);
-  const sourceYMD = source.droppableId;
-  const destYMD = destination.droppableId;
+  const isVariation = draggableId.startsWith("var-")
+  const itemId = isVariation ? Number(draggableId.replace("var-", "")) : Number(draggableId)
+  const sourceYMD = source.droppableId
+  const destYMD = destination.droppableId
 
   // No move?
-  if (sourceYMD === destYMD && source.index === destination.index) return;
+  if (sourceYMD === destYMD && source.index === destination.index) return
 
   // Optimistic UI update
-  setWeeks(prev => movePostInWeeks(prev, postId, sourceYMD, destYMD, destination.index));
+  setWeeks(prev => movePostInWeeks(prev, itemId, sourceYMD, destYMD, destination.index, isVariation))
 
   // Persist to DB if date changed
   if (sourceYMD !== destYMD) {
     try {
-      await updatePostDateById(postId, destYMD);
+      if (isVariation) {
+        await updateVariationDateById(itemId, destYMD) // new helper
+      } else {
+        await updatePostDateById(itemId, destYMD)
+      }
     } catch (err) {
       // Revert on failure
-      setWeeks(prev => movePostInWeeks(prev, postId, destYMD, sourceYMD, source.index));
-      alert('Failed to move post. Please try again.');
+      setWeeks(prev => movePostInWeeks(prev, itemId, destYMD, sourceYMD, source.index, isVariation))
+      console.error("Failed to move item:", err)
+      alert('Failed to move item. Please try again.')
     }
-  } else {
-    // Same day re-order: not persisted (no sort column). If you want persistence,
-    // add a `sort_order` INT column and update here.
   }
-};
+}
+
+
 
 //don't show calendar picker unless clicked
 const [showDatePicker, setShowDatePicker] = useState(false);
@@ -887,9 +902,6 @@ useEffect(() => {
     if (!selectedArtistId) return
     setErrorMsg('')
 
-
-
-
     let from, to
     if (viewMode === '4weeks') {
       const today = new Date()
@@ -910,9 +922,6 @@ useEffect(() => {
       return
     }
 
-
-
-
     const { data: posts, error } = await supabase
       .from('posts')
       .select('id, post_name, post_date, status, artist_id')
@@ -921,17 +930,21 @@ useEffect(() => {
       .lte('post_date', to)
       .order('post_date', { ascending: true })
 
-
-
-
     if (error) {
       console.error('Supabase error (posts):', error)
       setErrorMsg('Error loading posts. Check console.')
       return
     }
 
+    const { data: variations, error: varError } = await supabase
+      .from('postvariations')
+      .select('id, post_id, variation_post_date, posts!inner(post_name)')
+      .gte('variation_post_date', from)
+      .lte('variation_post_date', to)
 
-
+    if (varError) {
+      console.error('Supabase error (variations):', varError)
+    }
 
     // Build week rows across range
     const startDate = new Date(from)
@@ -940,22 +953,44 @@ useEffect(() => {
     let currentStart = startOfWeekMonday(startDate)
 
 
-
-
     while (currentStart <= endDate) {
       const days = []
       for (let d = 0; d < 7; d++) {
         const dayDate = addDays(currentStart, d)
         const ymd = toYMD(dayDate)
-        const postsForDay = (posts || []).filter(p => toYMD(new Date(p.post_date)) === ymd)
-        days.push({ date: dayDate, ymd, posts: postsForDay })
+        const postsForDay = (posts || [])
+          .filter(p => toYMD(new Date(p.post_date)) === ymd)
+        
+          const varsForDay = (variations || [])
+          // only variations on this day
+          .filter(v => toYMD(new Date(v.variation_post_date)) === ymd)
+          // exclude variations that fall on the same day as their parent post
+          .filter(v => {
+            const parent = posts.find(p => p.id === v.post_id)
+            if (!parent) return true // fallback if somehow orphaned
+            return toYMD(new Date(parent.post_date)) !== ymd
+          })
+          // now format them for rendering
+          .map(v => ({
+            id: v.id,
+            post_id: v.post_id, // keep this so click can open the parent post
+            post_name: `${v.posts.post_name} (var)`,
+            status: null,
+            isVariation: true
+          }))
+        
+        days.push({
+          date: dayDate,
+          ymd,
+          posts: postsForDay,
+          variations: varsForDay
+        })
+      
+
       }
       weeksArr.push({ weekStart: currentStart, days })
       currentStart = addDays(currentStart, 7)
     }
-
-
-
 
     setWeeks(weeksArr)
   }
@@ -984,6 +1019,15 @@ async function updatePostDateById(postId, newDate) {
     setUpdateError('Failed to update date');
     throw err;
   }
+}
+
+async function updateVariationDateById(variationId, newYMD) {
+  const { error } = await supabase
+    .from("postvariations")
+    .update({ variation_post_date: newYMD })
+    .eq("id", variationId)
+
+  if (error) throw error
 }
 
 //post status function
@@ -1238,15 +1282,15 @@ return (
                 <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
                   {(dropProvided, dropSnapshot) => (
                     <div
-                    ref={dropProvided.innerRef}
-                    {...dropProvided.droppableProps}
-                    className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2`}
-                    style={{
-                      backgroundColor: day.date.toDateString() === new Date().toDateString()
-                        ? "#eef8ea" // halfway between #bbe1ac and white
-                        : "transparent"
-                    }}
-                  >
+                      ref={dropProvided.innerRef}
+                      {...dropProvided.droppableProps}
+                      className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2`}
+                      style={{
+                        backgroundColor: day.date.toDateString() === new Date().toDateString()
+                          ? "#eef8ea" // halfway between #bbe1ac and white
+                          : "transparent"
+                      }}
+                    >
                       <div className="text-xs text-gray-500 mb-1">
                         {isNarrow
                           ? `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}`
@@ -1279,6 +1323,32 @@ return (
                             )}
                           </Draggable>
                         ))}
+
+                        {/* Variations*/}
+                        {day.variations.map((variation, vIndex) => (
+                        <Draggable
+                          key={`var-${variation.id}`}
+                          draggableId={`var-${variation.id}`}
+                          index={day.posts.length + vIndex} // avoid index collision
+                        >
+                          {(dragProvided) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              {...dragProvided.dragHandleProps}
+                              className="text-xs px-2 py-1 rounded cursor-pointer"
+                              style={{
+                                backgroundColor: "#dcd9f4", // variations transparent
+                                border: "1px solid #ccc",      // optional styling to distinguish
+                                ...dragProvided.draggableProps.style
+                              }}
+                              onClick={() => openPostDetails(variation.post_id)}
+                            >
+                              {variation.post_name}
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
 
                         {dropProvided.placeholder}
 
