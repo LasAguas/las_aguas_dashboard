@@ -1212,11 +1212,23 @@ function goToStats() {
 
 return (
   <div className="p-6">
-            <Link href="/stats-view">
-        <button className="absolute top-4 right-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
-          View Stats
-        </button>
-      </Link>
+      <div className="absolute top-4 right-4 flex space-x-2">
+        <Link
+          href="https://supabase.com/dashboard/project/gtccctajvobfvhlonaot/editor/17407?schema=public"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <button className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 shadow-md">
+            Supabase Tables
+          </button>
+        </Link>
+
+        <Link href="/stats-view">
+          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
+            View Stats
+          </button>
+        </Link>
+      </div>
     <h1 className="text-2xl font-bold mb-4">Las Aguas Dashboard</h1>
     <div className="mb-4 flex items-center gap-3 flex-wrap">
       <label className="font-medium">Artist:</label>
