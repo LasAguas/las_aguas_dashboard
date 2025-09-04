@@ -936,15 +936,18 @@ useEffect(() => {
       return
     }
 
-    const { data: variations, error: varError } = await supabase
-      .from('postvariations')
-      .select('id, post_id, variation_post_date, posts!inner(post_name)')
-      .gte('variation_post_date', from)
-      .lte('variation_post_date', to)
+    const postIds = (posts || []).map(p => p.id)
 
-    if (varError) {
-      console.error('Supabase error (variations):', varError)
-    }
+    const { data: variations, error: varError } = await supabase
+      .from("postvariations")
+      .select(`
+        id,
+        variation_post_date,
+        post_id
+      `)
+      .in("post_id", postIds) // 👈 ReferenceError
+      .gte("variation_post_date", from)
+      .lte("variation_post_date", to)
 
     // Build week rows across range
     const startDate = new Date(from)
@@ -971,13 +974,18 @@ useEffect(() => {
             return toYMD(new Date(parent.post_date)) !== ymd
           })
           // now format them for rendering
-          .map(v => ({
-            id: v.id,
-            post_id: v.post_id, // keep this so click can open the parent post
-            post_name: `${v.posts.post_name} (var)`,
-            status: null,
-            isVariation: true
-          }))
+          .map(v => {
+            const parentPost = posts.find(p => p.id === v.post_id)
+            if (!parentPost) return null // 👈 skip if not found (filters out Untitleds)
+            return {
+              id: v.id,
+              post_id: v.post_id,
+              post_name: `${parentPost.post_name} (var)`,
+              status: null,
+              isVariation: true
+            }
+          })
+          .filter(Boolean) // removes the nulls
         
         days.push({
           date: dayDate,
