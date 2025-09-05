@@ -126,7 +126,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               <img
                 src={mediaUrl}
                 alt={variation.file_name}
-                className="max-h-[70vh] object-contain"
+                className="h-[60h] max-h-[70vh] object-contain"
               />
             )}
             {isVideo && (

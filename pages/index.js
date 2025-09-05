@@ -332,6 +332,9 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
           width: `${displayWidth}px`,
           maxWidth: "90vw",
           minWidth: "100px",
+          width: isImage ? "60vw" : `${displayWidth}px`,
+          maxWidth: isImage ? "60vw" : "90vw",
+          minWidth: "100px",
         }}
       >
         <button
@@ -347,11 +350,11 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               src={mediaUrl}
               alt={variation.file_name}
               style={{
-                width: `${displayWidth}px`,
-                height: `${displayHeight}px`,
+                width: "100%",         // now fill the parent (60vw)
+                maxHeight: "70vh",     // keep it within viewport vertically
                 objectFit: "contain",
               }}
-            />
+            />        
           )}
           {isVideo && (
             <video
