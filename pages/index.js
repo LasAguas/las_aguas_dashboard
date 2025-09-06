@@ -1234,6 +1234,14 @@ return (
           </button>
         </Link>
 
+        <Link
+          href="/thisweek"
+        >
+          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
+            This Week's Posts
+          </button>
+        </Link>
+        
         <Link href="/stats-view">
           <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
             View Stats
