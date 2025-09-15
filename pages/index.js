@@ -121,7 +121,7 @@ function AddPostModal({ artistId, defaultDate, onClose, onPostAdded }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-lg max-w-lg w-full p-6"
+        className="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 max-h-[95vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-xl font-bold mb-4">Add New Post</h2>
