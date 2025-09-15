@@ -634,9 +634,15 @@ useEffect(() => {
       const today = new Date()
       const startThisWeek = startOfWeekMonday(today)
       const startLastWeek = addDays(startThisWeek, -7)
-      const endNextTwoWeeks = addDays(startThisWeek, 21)
+    
+      // ✅ extend to 4 full weeks (28 days) ahead
+      const endNextFourWeeks = addDays(startThisWeek, 28)
+    
+      // ✅ snap to Sunday so we cover the full calendar grid
+      const endVisibleSunday = addDays(endNextFourWeeks, 6 - endNextFourWeeks.getDay())
+    
       from = toYMD(startLastWeek)
-      to = toYMD(endNextTwoWeeks)
+      to = toYMD(endVisibleSunday)
       setRangeLabel(`${from} → ${to}`)
     } else if (viewMode === 'month' && selectedMonth) {
       const [y, m] = selectedMonth.split('-').map(Number)

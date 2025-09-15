@@ -27,15 +27,15 @@
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/stats-view": [
+    "/artist-dashboard": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/stats-view.js"
+      "static/chunks/pages/artist-dashboard.js"
     ],
-    "/thisweek": [
+    "/login": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/thisweek.js"
+      "static/chunks/pages/login.js"
     ]
   },
   "ampFirstPages": []

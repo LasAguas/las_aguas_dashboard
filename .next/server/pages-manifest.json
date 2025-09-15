@@ -2,7 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/stats-view": "pages/stats-view.js",
-  "/thisweek": "pages/thisweek.js",
+  "/login": "pages/login.js",
+  "/artist-dashboard": "pages/artist-dashboard.js",
   "/": "pages/index.js"
 }
