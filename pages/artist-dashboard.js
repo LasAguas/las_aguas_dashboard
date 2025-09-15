@@ -381,11 +381,35 @@ function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
 
 //captions function
 function CaptionsModal({ captions, onClose, onSave }) {
-const [tempCaptions, setTempCaptions] = useState(captions);
-const [isEditing, setIsEditing] = useState(false);
+  const [tempCaptions, setTempCaptions] = useState(captions || { a: '', b: '' });
+  const [isEditing, setIsEditing] = useState(false);
 
-//Captions editing - to remove but not all of it
-return (
+  const handleSave = async () => {
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          caption_a: tempCaptions.a,
+          caption_b: tempCaptions.b,
+        })
+        .eq("id", captions.post_id); // ✅ update by post_id we passed in
+  
+      if (error) throw error;
+
+      // ✅ notify parent with fresh captions
+      if (onSave) onSave(tempCaptions);
+  
+      alert("Captions saved!");
+      setIsEditing(false);
+      if (onClose) onClose(); // ✅ close modal after save
+    } catch (err) {
+      console.error("Error saving captions:", err);
+      alert("Failed to save captions.");
+    }
+  };
+  
+
+  return (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     {/* Changed max-w-[85vw] and added mx-auto for centering */}
     <div className="relative bg-white rounded-lg w-auto max-w-[85vw] p-4 mx-auto">
@@ -400,23 +424,23 @@ return (
           />
         ) : (
           <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem]">
-            {tempCaptions.a || <span className="text-gray-400">No caption</span>}
+            {tempCaptions?.a || <span className="text-gray-400">No caption</span>}
           </div>
         )}
         
-        {tempCaptions.b && (
-          <>
-            <h4 className="font-medium">Caption B:</h4>
+        {tempCaptions?.b && (
+        <>
+          <h4 className="font-medium">Caption B:</h4>
             {isEditing ? (
               <textarea
-                value={tempCaptions.b || ''}
-                onChange={(e) => setTempCaptions({...tempCaptions, b: e.target.value})}
+                value={tempCaptions?.b || ''}
+                onChange={(e) => setTempCaptions({ ...tempCaptions, b: e.target.value })}
                 className="w-full p-2 border rounded"
                 rows={3}
               />
             ) : (
               <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem]">
-                {tempCaptions.b}
+                {tempCaptions?.b}
               </div>
             )}
           </>
@@ -954,10 +978,25 @@ return (
 
 
 {showCaptions && (
-<CaptionsModal
-  captions={postDetails.captions}
-  onClose={() => setShowCaptions(false)}
-/>
+  <CaptionsModal
+    captions={{
+      a: postDetails.post?.caption_a,
+      b: postDetails.post?.caption_b,
+      post_id: postDetails.post?.id   // ✅ add post_id here
+    }}
+    onClose={() => setShowCaptions(false)}
+    onSave={(newCaptions) => {
+      // ✅ update parent state so re-opening shows fresh captions
+      setPostDetails(prev => ({
+        ...prev,
+        post: {
+          ...prev.post,
+          caption_a: newCaptions.a,
+          caption_b: newCaptions.b,
+        }
+      }));
+    }}
+    />
 )}
     {showMediaPlayer && selectedVariation && (
 <MediaPlayer
