@@ -130,7 +130,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               />
             )}
             {isVideo && (
-              <video controls className="max-h-[70vh] object-contain">
+              <video controls controlsList="nodownload" className="max-h-[70vh] object-contain">
                 <source src={mediaUrl} type="video/mp4" />
               </video>
             )}
