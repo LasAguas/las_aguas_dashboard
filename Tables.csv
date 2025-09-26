@@ -1,0 +1,57 @@
+table_name,column_name,data_type
+artists,id,integer
+artists,name,character varying
+artists,start_date,date
+posts,id,integer
+posts,artist_id,integer
+posts,post_date,date
+posts,post_type,character varying
+posts,post_name,character varying
+posts,test_type,character varying
+posts,song,character varying
+posts,caption_a,text
+posts,caption_b,text
+posts,notes,text
+posts,status,character varying
+postvariations,id,integer
+postvariations,post_id,integer
+postvariations,platform,character varying
+postvariations,file_name,character varying
+postvariations,test_version,character varying
+postvariations,length_seconds,integer
+postvariations,variation_post_date,date
+postvariations,notes,text
+postvariations,winner,boolean
+postvariations,views,integer
+postvariations,likes,integer
+postvariations,comments,integer
+postvariations,shares,integer
+postvariations,saves,integer
+postvariations,clickthroughs,integer
+profiles,id,uuid
+profiles,full_name,text
+profiles,role,text
+profiles,created_at,timestamp without time zone
+profiles,artist_id,uuid
+profilestats,id,integer
+profilestats,artist_id,integer
+profilestats,week_start,date
+profilestats,platform,character varying
+profilestats,followers,integer
+profilestats,engagement_rate,numeric
+profilestats,views,integer
+profilestats,interactions,integer
+profilestats,likes,integer
+profilestats,comments,integer
+profilestats,link_clicks,integer
+profilestats,saves,integer
+profilestats,shares,integer
+profilestats,streams,integer
+profilestats,listeners,integer
+profilestats,total_audience_size,integer
+profilestats,active_audience_size,integer
+profilestats,popularity_score,numeric
+profilestats,playlist_adds,integer
+profilestats,shazams,integer
+profilestats,radio_spins,integer
+profilestats,release_engagement,numeric
