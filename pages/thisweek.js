@@ -169,6 +169,40 @@ function MediaPlayer({ variation, onClose }) {
   if (!variation || !mediaUrl) return null;
   const isImage = /\.(jpe?g|png|gif|webp)$/i.test(variation.file_name || "");
   const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(variation.file_name || "");
+  {/*const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);*/}
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this variation?")) return;
+    try {
+      const payload = {
+        path: variation.file_name,
+        variationId: variation.id,
+      };
+
+      const res = await fetch("/api/deleteVariation", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        console.error("Server delete failed:", result);
+        alert(result.error || "Failed to delete variation.");
+        return;
+      }
+
+      if (onClose) onClose();
+      if (onRefreshPost) onRefreshPost();
+    } catch (err) {
+      console.error("Error deleting variation:", err);
+      alert("Failed to delete variation. Check console for details.");
+    }
+  };
+
+  console.log("Feedback value:", variation.feedback);
+  const hasFeedback = Boolean(variation.feedback && variation.feedback.trim() !== "");
+  console.log("Has feedback?", hasFeedback);
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -191,6 +225,40 @@ function MediaPlayer({ variation, onClose }) {
           <p><strong>Platform:</strong> {variation.platform}</p>
           <p><strong>Version:</strong> {variation.test_version || "N/A"}</p>
         </div>
+
+        {/* Buttons */}{/*
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleDelete}
+            className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition-colors"
+          >
+            Delete Variation
+          </button>
+
+          <button
+            onClick={() => setFeedbackModalOpen(true)}
+            className={`flex-1 py-2 rounded text-white transition-colors ${
+              hasFeedback ? "bg-green-600 hover:bg-green-700" : "bg-gray-400"
+            }`}
+            disabled={!hasFeedback}
+          >
+            Show Feedback
+          </button>
+        </div>
+        {/* Feedback Modal */}{/*
+        {feedbackModalOpen && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60">
+            <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
+              <button
+                onClick={() => setFeedbackModalOpen(false)}
+                className="absolute top-2 right-2 text-gray-500 hover:text-black p-1 rounded-full"
+              >
+                ✕
+              </button>
+              <h3 className="text-lg font-semibold mb-4">Feedback</h3>
+              <p className="whitespace-pre-wrap">{variation.feedback}</p>
+            </div>
+          </div>)} */}
       </div>
     </div>
   );
@@ -388,19 +456,21 @@ export default function ThisWeek() {
     setSelectedPostId(postId);
     setPostLoading(true);
     setPostError("");
+    setPostDetails(null)
     try {
       const { data: post } = await supabase.from("posts").select("*").eq("id", postId).single();
       const { data: vars } = await supabase
         .from("postvariations")
-        .select("*")
-        .eq("post_id", postId)
-        .order("test_version", { ascending: true });
+        .select('id, platform, test_version, file_name, length_seconds, feedback')
+      .eq('post_id', postId)
+      .order('test_version', { ascending: true })
 
       setPostDetails({
         post,
         variations: vars || [],
         captions: { a: post.caption_a, b: post.caption_b },
       });
+      
     } catch (e) {
       console.error(e);
       setPostError("Could not load post details.");
