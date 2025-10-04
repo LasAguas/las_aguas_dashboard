@@ -381,6 +381,7 @@ export default function ThisWeek() {
     load();
   }, []);
   
+  
 
   // Post details modal
   async function openPostDetails(postId) {
@@ -734,7 +735,36 @@ export default function ThisWeek() {
         <CaptionsModal
           captions={postDetails?.captions || {}}
           onClose={() => setShowCaptions(false)}
-          onSave={() => setShowCaptions(false)}
+          onSave={async (newCaptions) => {
+            try {
+              const { error } = await supabase
+                .from("posts")
+                .update({
+                  caption_a: newCaptions.a,
+                  caption_b: newCaptions.b,
+                })
+                .eq("id", selectedPostId);
+          
+              if (error) throw error;
+          
+              // Update local state so UI matches
+              setPostDetails((prev) => ({
+                ...prev,
+                captions: newCaptions,
+                post: {
+                  ...prev.post,
+                  caption_a: newCaptions.a,
+                  caption_b: newCaptions.b,
+                },
+              }));
+          
+              setShowCaptions(false);
+            } catch (err) {
+              console.error("Failed to save captions:", err);
+              alert("Could not save captions — see console for details.");
+            }
+          }}
+          
         />
       )}
 
