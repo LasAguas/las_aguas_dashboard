@@ -78,7 +78,7 @@ function CaptionsModal({ captions, onClose, onSave }) {
               rows={3}
             />
           ) : (
-            <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem]">
+            <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap">
               {tempCaptions.a || (
                 <span className="text-gray-400">No caption</span>
               )}
@@ -98,7 +98,7 @@ function CaptionsModal({ captions, onClose, onSave }) {
                   rows={3}
                 />
               ) : (
-                <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem]">
+                <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap">
                   {tempCaptions.b}
                 </div>
               )}
