@@ -413,6 +413,44 @@ export default function ThisWeek() {
     setPostDetails(null);
   }
 
+  async function handleDragEnd(result) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+  
+    const sourceDate = source.droppableId;
+    const destDate = destination.droppableId;
+    if (sourceDate === destDate) return;
+  
+    const movedPostId = parseInt(draggableId.replace(/\D/g, ""), 10);
+    if (isNaN(movedPostId)) return;
+  
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .update({ post_date: destDate })
+        .eq("id", movedPostId);
+  
+      if (error) throw error;
+  
+      // 🔹 Update both arrays
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === movedPostId ? { ...p, post_date: destDate } : p
+        )
+      );
+      setNextWeekPosts((prev) =>
+        prev.map((p) =>
+          p.id === movedPostId ? { ...p, post_date: destDate } : p
+        )
+      );
+    } catch (err) {
+      console.error("Error updating post date:", err);
+      alert("Could not save new date. See console for details.");
+    }
+  }
+  
+  
+
   return (
     <div className="p-6">
       <div className="absolute top-4 right-4 flex space-x-2">
@@ -433,7 +471,7 @@ export default function ThisWeek() {
       {error && <div className="text-red-600 mb-4">{error}</div>}
 
       {/* Calendar grid */}
-      <DragDropContext onDragEnd={() => {}}>
+      <DragDropContext onDragEnd={handleDragEnd}>
         <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
           <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
             {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
@@ -459,40 +497,46 @@ export default function ThisWeek() {
                       {day.date.getDate()}/{day.date.getMonth() + 1}
                     </div>
                     <div className="space-y-1">
-                      {posts
+                    {[...posts
                         .filter((p) => toYMD(new Date(p.post_date)) === day.ymd)
-                        .map((post, index) => (
-                          <Draggable
-                            key={`post-${post.id}`}
-                            draggableId={`post-${post.id}`}
-                            index={index}
-                          >
-                            {(dragProvided) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                {...dragProvided.dragHandleProps}
-                                className="text-xs px-2 py-1 rounded text-white cursor-pointer"
-                                style={{
-                                  backgroundColor: statusColor(post.status),
-                                  ...dragProvided.draggableProps.style,
-                                }}
-                                onClick={() => openPostDetails(post.id)}
-                              >
-                                {post.post_name} — {artistMap.get(post.artist_id)}
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      {variations
+                        .map((p) => ({ type: "post", data: p })),
+                        ...variations
                         .filter((v) => toYMD(new Date(v.variation_post_date)) === day.ymd)
-                        .map((v, vIndex) => {
+                        .map((v) => ({ type: "var", data: v }))
+                      ].map((item, index) => {
+                        if (item.type === "post") {
+                          const post = item.data;
+                          return (
+                            <Draggable
+                              key={`post-${post.id}`}
+                              draggableId={`post-${post.id}`}
+                              index={index}
+                            >
+                              {(dragProvided) => (
+                                <div
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
+                                  className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                  style={{
+                                    backgroundColor: statusColor(post.status),
+                                    ...dragProvided.draggableProps.style,
+                                  }}
+                                  onClick={() => openPostDetails(post.id)}
+                                >
+                                  {post.post_name} — {artistMap.get(post.artist_id)}
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        } else {
+                          const v = item.data;
                           const parent = posts.find((p) => p.id === v.post_id);
                           return (
                             <Draggable
                               key={`var-${v.id}`}
                               draggableId={`var-${v.id}`}
-                              index={posts.length + vIndex}
+                              index={index}
                             >
                               {(dragProvided) => (
                                 <div
@@ -508,7 +552,9 @@ export default function ThisWeek() {
                               )}
                             </Draggable>
                           );
-                        })}
+                        }
+                      })}
+
                       {dropProvided.placeholder}
                     </div>
                   </div>
@@ -517,12 +563,12 @@ export default function ThisWeek() {
             ))}
           </div>
         </div>
-      </DragDropContext>
+      
 
       {showNextWeek && (
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-2">Next Week</h2>
-          <DragDropContext onDragEnd={() => {}}>
+          {/* <DragDropContext onDragEnd={() => {}}> */}
             <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
               <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
                 {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
@@ -531,7 +577,7 @@ export default function ThisWeek() {
               </div>
               <div className="grid grid-cols-7">
                 {nextWeekDays.map((day) => (
-                  <Droppable droppableId={`next-${day.ymd}`} key={day.ymd} type="POST">
+                  <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
                     {(dropProvided) => (
                       <div
                         ref={dropProvided.innerRef}
@@ -600,10 +646,10 @@ export default function ThisWeek() {
                 ))}
               </div>
             </div>
-          </DragDropContext>
+          {/*</DragDropContext>*/}
         </div>
       )}
-
+      </DragDropContext>
       {/* Post Detail Modal */}
       {selectedPostId && postDetails && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={closeModal}>
