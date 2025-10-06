@@ -382,6 +382,15 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
 
         {/* Buttons */}
         <div className="mt-4 flex gap-2">
+        <a
+          href={mediaUrl}
+          download={variation.file_name.split('/').pop()}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 text-center transition-colors"
+        >
+          Download Media
+        </a>
           <button
             onClick={handleDelete}
             className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition-colors"
@@ -1426,23 +1435,14 @@ return (
             <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">✕</button>
           </div>
 
-
-
-
           {/* Loading / Error / Content */}
           {postLoading && (
             <div className="py-10 text-center text-gray-500">Loading…</div>
           )}
 
-
-
-
           {postError && (
             <div className="text-red-600">{postError}</div>
           )}
-
-
-
 
           {(!postLoading && !postError && postDetails) && (
             <>
@@ -1453,9 +1453,6 @@ return (
         <div className="text-lg font-semibold">{postDetails.post.post_name}</div>
       </div>
     </div>
-
-
-
 
     {/* Stacked Controls */}
     <div className="space-y-3 mt-3">
