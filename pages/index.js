@@ -382,15 +382,6 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
 
         {/* Buttons */}
         <div className="mt-4 flex gap-2">
-        <a
-          href={mediaUrl}
-          download={variation.file_name.split('/').pop()}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex-1 bg-green-600 text-white py-2 rounded hover:bg-green-700 text-center transition-colors"
-        >
-          Download Media
-        </a>
           <button
             onClick={handleDelete}
             className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition-colors"
@@ -1551,27 +1542,65 @@ return (
 
               <h3 className="text-md font-semibold mb-2">Variations</h3>
               <ul className="space-y-2 max-h-64 overflow-auto pr-1">
-{postDetails.variations.length > 0 ? (
-  postDetails.variations.map(v => (
+              {postDetails.variations.length > 0 ? (
+  postDetails.variations.map((v) => (
     <li
       key={v.id}
-      className="border rounded p-2 cursor-pointer hover:bg-gray-50"
-      onClick={() => {
-        setSelectedVariation(v)
-        setShowMediaPlayer(true)
-      }}
+      className="border rounded p-2 hover:bg-gray-50 transition-colors"
     >
-      <div className="text-sm">
-        <span className="font-medium">{v.platform}</span> — {v.test_version || '—'}
+      <div className="flex items-center justify-between text-sm">
+        <div>
+          <span className="font-medium">{v.platform}</span> — {v.test_version || "—"}
+        </div>
+
+        {/* Download icon button */}
+        <button
+          onClick={async (e) => {
+            e.stopPropagation(); // prevent opening media player
+            try {
+              const { data, error } = supabase.storage
+                .from("post-variations")
+                .getPublicUrl(v.file_name);
+              if (error) throw error;
+
+              const response = await fetch(data.publicUrl);
+              const blob = await response.blob();
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = v.file_name.split("/").pop();
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(url);
+            } catch (err) {
+              console.error("Download failed:", err);
+              alert("Could not download file.");
+            }
+          }}
+          title="Download"
+          className="p-1.5 rounded-full hover:bg-gray-200"
+        >
+          ⬇️
+        </button>
       </div>
-      <div className="text-xs text-gray-600">
-        {v.file_name || 'no file'} • {v.length_seconds ? `${v.length_seconds}s` : 'length n/a'}
+
+      <div
+        className="text-xs text-gray-600 cursor-pointer"
+        onClick={() => {
+          setSelectedVariation(v);
+          setShowMediaPlayer(true);
+        }}
+      >
+        {v.file_name || "no file"} •{" "}
+        {v.length_seconds ? `${v.length_seconds}s` : "length n/a"}
       </div>
     </li>
   ))
 ) : (
   <li className="text-sm text-gray-500">No variations</li>
 )}
+
 </ul>
 
 
