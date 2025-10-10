@@ -222,7 +222,7 @@ function AddPostModal({ artistId, defaultDate, onClose, onPostAdded }) {
 }
 
 // Media Player Function
-function MediaPlayer({ variation, onClose, onRefreshPost }) {
+function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested }) {
   const [mediaUrl, setMediaUrl] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -415,7 +415,11 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
           >
             Delete Variation
           </button>
-
+          <button
+            onClick={() => onReplaceRequested && onReplaceRequested(variation)}
+            className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors">
+            Replace Variation
+          </button>
           <button
             onClick={() => setFeedbackModalOpen(true)}
             className={`flex-1 py-2 rounded text-white transition-colors ${
@@ -466,7 +470,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
 }
 
 //Upload Modal Function
-function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
+function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, onClose, onSave }) {
  const [file, setFile] = useState(null);
  const [platform, setPlatform] = useState('');
  const [notes, setNotes] = useState('');
@@ -482,89 +486,95 @@ function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
 
 
  const handleSave = async () => {
-   if (!file || !platform || !notes) return;
-   setUploading(true);
+  // In replace mode we only need a file; in new mode keep your existing requirements
+  if (!file || (mode !== 'replace' && (!platform || !notes))) return;
+  setUploading(true);
 
+  try {
+    // 🔢 Determine which post to attach to (replace uses the variation's post)
+    const targetPostId = mode === 'replace' && variation ? variation.post_id : postId;
 
-   try {
-     // 1️⃣ Get next test_version
-     const { data: existingVars, error: tvError } = await supabase
-       .from('postvariations')
-       .select('test_version')
-       .eq('post_id', postId)
-       .order('test_version', { ascending: true });
+    // ⏱️ Compute length if video
+    let lengthSeconds = null;
+    if (file.type.startsWith('video/')) {
+      lengthSeconds = await new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = function () {
+          window.URL.revokeObjectURL(video.src);
+          resolve(Math.round(video.duration));
+        };
+        video.src = URL.createObjectURL(file);
+      });
+    }
 
+    // ☁️ Upload (upsert so we can replace files cleanly)
+    const filePath = `${artistId}/${targetPostId}/${file.name}`;
+    const { error: uploadError } = await supabase.storage
+      .from('post-variations')
+      .upload(filePath, file, { upsert: true });
+    if (uploadError) throw uploadError;
 
-     if (tvError) throw tvError;
+    const fullFilePath = `${artistId}/${targetPostId}/${file.name}`;
 
+    if (mode === 'replace' && variation) {
+      // 🔄 UPDATE existing variation with new file path + length
+      const { error: updateError } = await supabase
+        .from('postvariations')
+        .update({
+          file_name: fullFilePath,
+          length_seconds: lengthSeconds
+        })
+        .eq('id', variation.id);
+      if (updateError) throw updateError;
+    } else {
+      // ➕ NEW variation (existing behavior)
+      // 1) get next test_version
+      const { data: existingVars, error: tvError } = await supabase
+        .from('postvariations')
+        .select('test_version')
+        .eq('post_id', postId)
+        .order('test_version', { ascending: true });
+      if (tvError) throw tvError;
 
-     let nextVersion = 'A';
-     if (existingVars && existingVars.length > 0) {
-       const lastVersion = existingVars[existingVars.length - 1].test_version || 'A';
-       const nextCharCode = lastVersion.charCodeAt(0) + 1;
-       nextVersion = String.fromCharCode(nextCharCode);
-     }
+      let nextVersion = 'A';
+      if (existingVars && existingVars.length > 0) {
+        const lastVersion = existingVars[existingVars.length - 1].test_version || 'A';
+        const nextCharCode = lastVersion.charCodeAt(0) + 1;
+        nextVersion = String.fromCharCode(nextCharCode);
+      }
 
+      const { error: insertError } = await supabase
+        .from('postvariations')
+        .insert([{
+          post_id: postId,
+          platform,
+          file_name: fullFilePath,
+          test_version: nextVersion,
+          length_seconds: lengthSeconds,
+          variation_post_date: variationDate,
+          notes
+        }]);
+      if (insertError) throw insertError;
+    }
 
-     // 2️⃣ Get length_seconds if video
-     let lengthSeconds = null;
-     if (file.type.startsWith('video/')) {
-       lengthSeconds = await new Promise((resolve) => {
-         const video = document.createElement('video');
-         video.preload = 'metadata';
-         video.onloadedmetadata = function () {
-           window.URL.revokeObjectURL(video.src);
-           resolve(Math.round(video.duration));
-         };
-         video.src = URL.createObjectURL(file);
-       });
-     }
+    onSave(); // refresh + close in parent
+  } catch (err) {
+    console.error('Upload error:', err);
+    alert('Failed to upload media. See console.');
+  } finally {
+    setUploading(false);
+  }
+};
 
-
-     // 3️⃣ Upload to storage
-     const filePath = `${artistId}/${postId}/${file.name}`;
-     const { error: uploadError } = await supabase.storage
-       .from('post-variations')
-       .upload(filePath, file);
-
-
-     if (uploadError) throw uploadError;
-
-
-     // 4️⃣ Insert row into PostVariations
-     const fullFilePath = `${artistId}/${postId}/${file.name}`;
-
-
-     const { error: insertError } = await supabase
-       .from('postvariations')
-       .insert([{
-         post_id: postId,
-         platform,
-         file_name: fullFilePath,
-         test_version: nextVersion,
-         length_seconds: lengthSeconds,
-         variation_post_date: variationDate,
-         notes
-       }]);
-
-
-     if (insertError) throw insertError;
-
-
-     onSave(); // Let parent reload variations or close modal
-   } catch (err) {
-     console.error('Upload error:', err);
-     alert('Failed to upload media. See console.');
-   } finally {
-     setUploading(false);
-   }
- };
 
 
  return (
    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
      <div className="relative bg-white rounded-lg w-auto max-w-md p-6 mx-auto">
-       <h2 className="text-lg font-bold mb-4">Upload Media</h2>
+     <h2 className="text-lg font-bold mb-4">
+      {mode === 'replace' ? 'Replace Media' : 'Upload Media'}
+    </h2>
 
 
        {/* File upload */}
@@ -826,6 +836,8 @@ const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
 //const router = useRouter(); //for button links
 
+const [uploadMode, setUploadMode] = useState('new'); // 'new' | 'replace'
+const [replaceVariation, setReplaceVariation] = useState(null);
 const [allVariations, setAllVariations] = useState([]);
 
 // View switching
@@ -1710,7 +1722,11 @@ return (
 
               <div className="text-right mt-4">
                  <button
-                   onClick={() => setShowUploadModal(true)}
+                   onClick={() => {
+                      setUploadMode('new');
+                      setReplaceVariation(null);
+                      setShowUploadModal(true);
+                    }}
                    className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 mr-[10px]"
                  >
                    New Variation
@@ -1746,6 +1762,11 @@ return (
           setSelectedVariation(null);
         }}
         onRefreshPost={handleVariationResolvedChange}
+        onReplaceRequested={(v) => {
+          setUploadMode('replace');
+          setReplaceVariation(v);
+          setShowUploadModal(true);
+        }}
       />
 )}
 
@@ -1764,17 +1785,18 @@ return (
 )}
 
 {showUploadModal && (
- <UploadModal
-   postId={selectedPostId}
-   artistId={selectedArtistId}
-   defaultDate={postDetails?.post?.post_date}
-   onClose={() => setShowUploadModal(false)}
-   onSave={() => {
-     setShowUploadModal(false);
-     // Refresh variations after upload
-     openPostDetails(selectedPostId);
-   }}
- />
+  <UploadModal
+    postId={selectedPostId}
+    artistId={selectedArtistId}
+    defaultDate={postDetails?.post?.post_date}
+    mode={uploadMode}
+    variation={replaceVariation}
+    onClose={() => setShowUploadModal(false)}
+    onSave={() => {
+      setShowUploadModal(false);
+      openPostDetails(selectedPostId); // refresh list after add/replace
+    }}
+  />
 )}
   </div>
 )
