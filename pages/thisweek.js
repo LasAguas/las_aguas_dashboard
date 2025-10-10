@@ -53,6 +53,42 @@ const STATUS_OPTIONS = [
   "posted",
 ];
 
+// Feedback modal
+function FeedbackBlock({ variation, onRefreshPost }) {
+  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLocalResolved(!!variation?.feedback_resolved);
+  }, [variation?.feedback_resolved]);
+
+  const toggleResolve = async () => {
+    if (!variation || saving) return;
+    setSaving(true);
+    const next = !localResolved;
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ feedback_resolved: next })
+      .eq("id", variation.id);
+    setSaving(false);
+    if (error) {
+      console.error(error);
+      alert("Could not update feedback status.");
+      return;
+    }
+    setLocalResolved(next);
+    variation.feedback_resolved = next; // keep UI in sync
+    if (typeof onRefreshPost === "function") onRefreshPost();
+  };
+
+  return (
+    <>
+      <FeedbackBlock variation={variation} onRefreshPost={onRefreshPost} />
+    </>
+  );
+}
+
+
 // --- Captions Modal ---
 function CaptionsModal({ captions, onClose, onSave }) {
   const [tempCaptions, setTempCaptions] = useState(captions);
@@ -156,6 +192,34 @@ function CaptionsModal({ captions, onClose, onSave }) {
 
 // --- Media Player ---
 function MediaPlayer({ variation, onClose, onRefreshPost }) {
+  // local feedback resolve state (component scope, not inside useEffect)
+  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLocalResolved(!!variation?.feedback_resolved);
+  }, [variation]);
+
+  const toggleResolve = async () => {
+    if (!variation) return;
+    if (saving) return;
+    setSaving(true);
+    const next = !localResolved;
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ feedback_resolved: next })
+      .eq("id", variation.id);
+    setSaving(false);
+    if (error) {
+      console.error(error);
+      alert("Could not update feedback status.");
+      return;
+    }
+    setLocalResolved(next);
+    variation.feedback_resolved = next; // keep prop object visually in sync
+    if (typeof onRefreshPost === "function") onRefreshPost();
+  };
+
   const [mediaUrl, setMediaUrl] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -362,8 +426,27 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               >
                 ✕
               </button>
-              <h3 className="text-lg font-semibold mb-4">Feedback</h3>
-              <p className="whitespace-pre-wrap">{variation.feedback}</p>
+              <h3 className="text-lg font-semibold mb-2">
+                {localResolved ? "Feedback - resolved" : "Feedback"}
+              </h3>
+              <div className={`whitespace-pre-wrap rounded p-3 border ${localResolved ? "opacity-60 grayscale" : ""}`}>
+                {variation.feedback || "—"}
+              </div>
+              {variation.feedback && (
+                <button
+                  onClick={toggleResolve}
+                  disabled={saving}
+                  className={`mt-3 inline-flex items-center px-3 py-1 rounded text-sm border ${
+                    localResolved
+                      ? "bg-gray-200 hover:bg-gray-300"
+                      : "bg-green-600 hover:bg-green-700 text-white border-transparent"
+                  } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  {saving ? "Saving…" : localResolved ? "Mark as unresolved" : "Mark feedback resolved"}
+                </button>
+              )}
+
+
             </div>
           </div>
         )}
@@ -474,6 +557,52 @@ export default function ThisWeek() {
   const [showMediaPlayer, setShowMediaPlayer] = useState(false);
   const [selectedVariation, setSelectedVariation] = useState(null);
 
+  async function refreshWeekData() {
+    try {
+      // Current week
+      if (weekDays.length) {
+        const from = weekDays[0].ymd, to = weekDays[6].ymd;
+        const { data: postData } = await supabase
+          .from("posts").select("*").gte("post_date", from).lte("post_date", to).order("post_date", { ascending: true });
+        const postIds = (postData || []).map((p) => p.id);
+        let varData = [];
+        if (postIds.length) {
+          const { data: vData } = await supabase
+            .from("postvariations")
+            .select("*")
+            .in("post_id", postIds)
+            .gte("variation_post_date", from)
+            .lte("variation_post_date", to);
+          varData = vData || [];
+        }
+        setPosts(postData || []);
+        setVariations(varData);
+      }
+      // Next week
+      if (nextWeekDays.length) {
+        const from = nextWeekDays[0].ymd, to = nextWeekDays[6].ymd;
+        const { data: postData } = await supabase
+          .from("posts").select("*").gte("post_date", from).lte("post_date", to).order("post_date", { ascending: true });
+        const postIds = (postData || []).map((p) => p.id);
+        let varData = [];
+        if (postIds.length) {
+          const { data: vData } = await supabase
+            .from("postvariations")
+            .select("*")
+            .in("post_id", postIds)
+            .gte("variation_post_date", from)
+            .lte("variation_post_date", to);
+          varData = vData || [];
+        }
+        setNextWeekPosts(postData || []);
+        setNextWeekVariations(varData);
+      }
+    } catch (e) {
+      console.error("refreshWeekData failed", e);
+    }
+  }
+  
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -579,7 +708,7 @@ export default function ThisWeek() {
       // 2️⃣ Fetch all variations for that post
       const { data: variations, error: varErr } = await supabase
         .from("postvariations")
-        .select("id, platform, test_version, file_name, length_seconds, feedback")
+        .select("id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved")
         .eq("post_id", postId)
         .order("test_version", { ascending: true });
       if (varErr) throw varErr;
@@ -604,6 +733,7 @@ export default function ThisWeek() {
   function closeModal() {
     setSelectedPostId(null);
     setPostDetails(null);
+    refreshWeekData();
   }
   
 
@@ -703,7 +833,11 @@ export default function ThisWeek() {
                         
                           // 🔹 Count how many variations for this post have feedback
                           const feedbackCount = variations.filter(
-                            (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
+                            (v) =>
+                              v.post_id === post.id &&
+                              v.feedback &&
+                              v.feedback.trim() !== "" &&
+                              !v.feedback_resolved
                           ).length;
                         
                           return (
@@ -801,8 +935,12 @@ export default function ThisWeek() {
                           .filter((p) => toYMD(new Date(p.post_date)) === day.ymd)
                           .map((post, index) => {
                             const feedbackCount = nextWeekVariations.filter(
-                              (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
-                            ).length;
+                                (v) =>
+                                  v.post_id === post.id &&
+                                  v.feedback &&
+                                  v.feedback.trim() !== "" &&
+                                  !v.feedback_resolved
+                              ).length;
 
                             return (
                               <Draggable
@@ -1037,7 +1175,11 @@ export default function ThisWeek() {
       )}
 
       {showMediaPlayer && selectedVariation && (
-        <MediaPlayer variation={selectedVariation} onClose={() => setShowMediaPlayer(false)} />
+        <MediaPlayer
+          variation={selectedVariation}
+          onClose={() => setShowMediaPlayer(false)}
+          onRefreshPost={refreshWeekData}
+        />
       )}
 
       {showUploadModal && postDetails && (

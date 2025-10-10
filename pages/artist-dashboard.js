@@ -153,7 +153,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
             </div>
   
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Feedback
+              {variation.feedback_resolved ? "Feedback - resolved" : "Feedback"}
             </label>
             <textarea
               className="w-full border rounded p-2 text-sm flex-grow"
@@ -741,7 +741,7 @@ async function openPostDetails(postId) {
       // 2) Fetch variations for that post (✅ now includes feedback)
       const { data: variations, error: varErr } = await supabase
         .from('postvariations')
-        .select('id, platform, test_version, file_name, length_seconds, feedback')
+        .select('id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved')
         .eq('post_id', postId)
         .order('test_version', { ascending: true })
       if (varErr) throw varErr
