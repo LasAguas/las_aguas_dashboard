@@ -576,6 +576,12 @@ export default function ThisWeek() {
                       ].map((item, index) => {
                         if (item.type === "post") {
                           const post = item.data;
+                        
+                          // 🔹 Count how many variations for this post have feedback
+                          const feedbackCount = variations.filter(
+                            (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
+                          ).length;
+                        
                           return (
                             <Draggable
                               key={`post-${post.id}`}
@@ -587,19 +593,28 @@ export default function ThisWeek() {
                                   ref={dragProvided.innerRef}
                                   {...dragProvided.draggableProps}
                                   {...dragProvided.dragHandleProps}
-                                  className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                  className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
                                   style={{
                                     backgroundColor: statusColor(post.status),
                                     ...dragProvided.draggableProps.style,
                                   }}
                                   onClick={() => openPostDetails(post.id)}
                                 >
+                                  {/* Post name + artist */}
                                   {post.post_name} — {artistMap.get(post.artist_id)}
+                        
+                                  {/* 🔴 Notification bubble */}
+                                  {feedbackCount > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                      {feedbackCount}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </Draggable>
                           );
-                        } else {
+                        }
+                         else {
                           const v = item.data;
                           const parent = posts.find((p) => p.id === v.post_id);
                           return (
@@ -658,9 +673,14 @@ export default function ThisWeek() {
                           {day.date.getDate()}/{day.date.getMonth() + 1}
                         </div>
                         <div className="space-y-1">
-                          {nextWeekPosts
-                            .filter((p) => toYMD(new Date(p.post_date)) === day.ymd)
-                            .map((post, index) => (
+                        {nextWeekPosts
+                          .filter((p) => toYMD(new Date(p.post_date)) === day.ymd)
+                          .map((post, index) => {
+                            const feedbackCount = nextWeekVariations.filter(
+                              (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
+                            ).length;
+
+                            return (
                               <Draggable
                                 key={`post-${post.id}`}
                                 draggableId={`post-${post.id}`}
@@ -671,7 +691,7 @@ export default function ThisWeek() {
                                     ref={dragProvided.innerRef}
                                     {...dragProvided.draggableProps}
                                     {...dragProvided.dragHandleProps}
-                                    className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                    className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
                                     style={{
                                       backgroundColor: statusColor(post.status),
                                       ...dragProvided.draggableProps.style,
@@ -679,10 +699,18 @@ export default function ThisWeek() {
                                     onClick={() => openPostDetails(post.id)}
                                   >
                                     {post.post_name} — {artistMap.get(post.artist_id)}
+
+                                    {feedbackCount > 0 && (
+                                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                        {feedbackCount}
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                               </Draggable>
-                            ))}
+                            );
+                          })}
+
                           {nextWeekVariations
                             .filter((v) => toYMD(new Date(v.variation_post_date)) === day.ymd)
                             .map((v, vIndex) => {

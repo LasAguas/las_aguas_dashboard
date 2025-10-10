@@ -781,6 +781,7 @@ const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
 //const router = useRouter(); //for button links
 
+const [allVariations, setAllVariations] = useState([]);
 
 // View switching
 const [viewMode, setViewMode] = useState('4weeks') // '4weeks' (Current) | 'month'
@@ -952,11 +953,20 @@ useEffect(() => {
       .select(`
         id,
         variation_post_date,
-        post_id
+        post_id,
+        feedback
       `)
-      .in("post_id", postIds) // 👈 ReferenceError
+      .in("post_id", postIds)
       .gte("variation_post_date", from)
-      .lte("variation_post_date", to)
+      .lte("variation_post_date", to);
+
+    if (varError) {
+      console.error('Supabase error (variations):', varError);
+      // continue — we can still render posts without variations
+    }
+
+    // make variations available in render scope
+    setAllVariations(variations || []);
 
     // Build week rows across range
     const startDate = new Date(from)
@@ -1336,7 +1346,13 @@ return (
                       </div>
 
                       <div className="space-y-1">
-                        {day.posts.map((post, index) => (
+                      {day.posts.map((post, index) => {
+                        // ✅ Count all variations across the loaded range that belong to this post and have feedback
+                        const feedbackCount = allVariations.filter(
+                          (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
+                        ).length;
+
+                        return (
                           <Draggable
                             key={post.id}
                             draggableId={String(post.id)}
@@ -1347,7 +1363,7 @@ return (
                                 ref={dragProvided.innerRef}
                                 {...dragProvided.draggableProps}
                                 {...dragProvided.dragHandleProps}
-                                className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
                                 style={{
                                   backgroundColor: statusColor(post.status),
                                   ...dragProvided.draggableProps.style
@@ -1356,10 +1372,21 @@ return (
                                 onClick={() => openPostDetails(post.id)}
                               >
                                 {post.post_name}
+
+                                {/* 🔴 Feedback notification bubble */}
+                                {feedbackCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                    {feedbackCount}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </Draggable>
-                        ))}
+                        );
+                      })}
+
+
+
 
                         {/* Variations*/}
                         {day.variations.map((variation, vIndex) => (
