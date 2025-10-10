@@ -227,6 +227,33 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
+  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
+  const [saving, setSaving] = useState(false);
+  
+  useEffect(() => {
+    setLocalResolved(!!variation?.feedback_resolved);
+  }, [variation?.feedback_resolved]);
+  
+  async function toggleResolve() {
+    if (!variation || saving) return;
+    setSaving(true);
+    const next = !localResolved;
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ feedback_resolved: next })
+      .eq("id", variation.id);
+    setSaving(false);
+    if (error) {
+      console.error(error);
+      alert("Could not update feedback status.");
+      return;
+    }
+    setLocalResolved(next);
+    variation.feedback_resolved = next; // keep modal in sync
+    if (typeof onRefreshPost === "function") onRefreshPost(variation.id, next); // bubble update
+  }
+
+
   useEffect(() => {
     console.log("Variation received:", variation);
     if (!variation) return;
@@ -410,8 +437,26 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               >
                 ✕
               </button>
-              <h3 className="text-lg font-semibold mb-4">Feedback</h3>
-              <p className="whitespace-pre-wrap">{variation.feedback}</p>
+              <h3 className="text-lg font-semibold mb-2">
+                {localResolved ? "Feedback - resolved" : "Feedback"}
+              </h3>
+              <div className={`whitespace-pre-wrap rounded p-3 border ${localResolved ? "opacity-60 grayscale" : ""}`}>
+                {variation.feedback || "—"}
+              </div>
+              {variation.feedback && (
+                <button
+                  onClick={toggleResolve}
+                  disabled={saving}
+                  className={`mt-3 inline-flex items-center px-3 py-1 rounded text-sm border ${
+                    localResolved
+                      ? "bg-gray-200 hover:bg-gray-300"
+                      : "bg-green-600 hover:bg-green-700 text-white border-transparent"
+                  } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
+                >
+                  {saving ? "Saving…" : localResolved ? "Mark as unresolved" : "Mark feedback resolved"}
+                </button>
+              )}
+
             </div>
           </div>
         )}
@@ -811,6 +856,27 @@ const [tempDate, setTempDate] = useState( // For calendar date picker
   postDetails?.post?.post_date || new Date().toISOString().split('T')[0]
 );
 
+// notification bubbles
+function handleVariationResolvedChange(variationId, nextResolved) {
+  // Update the calendar’s variation source (used for bubbles)
+  setAllVariations(prev =>
+    prev.map(v => (v.id === variationId ? { ...v, feedback_resolved: nextResolved } : v))
+  );
+
+  // If Post Details is open, reflect the change there too
+  setPostDetails(prev =>
+    prev
+      ? {
+          ...prev,
+          variations: prev.variations.map(v =>
+            v.id === variationId ? { ...v, feedback_resolved: nextResolved } : v
+          ),
+        }
+      : prev
+  );
+}
+
+
 // For Captions Box
 const [showCaptions, setShowCaptions] = useState(false);
 const [editingCaptions, setEditingCaptions] = useState({
@@ -954,7 +1020,8 @@ useEffect(() => {
         id,
         variation_post_date,
         post_id,
-        feedback
+        feedback,
+        feedback_resolved
       `)
       .in("post_id", postIds)
       .gte("variation_post_date", from)
@@ -1204,7 +1271,7 @@ async function openPostDetails(postId) {
      // 2) Fetch variations for that post (removed caption_a and caption_b)
     const { data: variations, error: varErr } = await supabase
       .from('postvariations')
-      .select('id, platform, test_version, file_name, length_seconds, feedback')
+      .select('id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved')
       .eq('post_id', postId)
       .order('test_version', { ascending: true })
      if (varErr) throw varErr
@@ -1264,45 +1331,45 @@ return (
           </button>
         </Link>
       </div>
-    <h1 className="text-2xl font-bold mb-4">Las Aguas Dashboard</h1>
-    <div className="mb-4 flex items-center gap-3 flex-wrap">
-      <label className="font-medium">Artist:</label>
-      <select
-        className="border p-2 rounded"
-        value={selectedArtistId}
-        onChange={(e) => setSelectedArtistId(e.target.value)}
-      >
-        <option value="">Select an artist…</option>
-        {artists.map(a => (
-          <option key={a.id} value={a.id}>{a.name}</option>
-        ))}
-      </select>
-
-      <label className="font-medium ml-4">View:</label>
-      <select
-        className="border p-2 rounded"
-        value={viewMode}
-        onChange={(e) => setViewMode(e.target.value)}
-      >
-        <option value="4weeks">Current</option>
-        <option value="month">Specific month</option>
-      </select>
-
-      {viewMode === 'month' && (
+      <h1 className="text-2xl font-bold mb-4">Las Aguas Dashboard</h1>
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
+        <label className="font-medium">Artist:</label>
         <select
           className="border p-2 rounded"
-          value={selectedMonth}
-          onChange={(e) => setSelectedMonth(e.target.value)}
+          value={selectedArtistId}
+          onChange={(e) => setSelectedArtistId(e.target.value)}
         >
-          <option value="">Select month…</option>
-          {months.map(m => (
-            <option key={m.value} value={m.value}>{m.label}</option>
+          <option value="">Select an artist…</option>
+          {artists.map(a => (
+            <option key={a.id} value={a.id}>{a.name}</option>
           ))}
         </select>
-      )}
 
-      <span className="text-sm text-gray-500">Range: {rangeLabel}</span>
-    </div>
+        <label className="font-medium ml-4">View:</label>
+        <select
+          className="border p-2 rounded"
+          value={viewMode}
+          onChange={(e) => setViewMode(e.target.value)}
+        >
+          <option value="4weeks">Current</option>
+          <option value="month">Specific month</option>
+        </select>
+
+        {viewMode === 'month' && (
+          <select
+            className="border p-2 rounded"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+          >
+            <option value="">Select month…</option>
+            {months.map(m => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        )}
+
+        <span className="text-sm text-gray-500">Range: {rangeLabel}</span>
+      </div>
 
     {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
 
@@ -1349,7 +1416,11 @@ return (
                       {day.posts.map((post, index) => {
                         // ✅ Count all variations across the loaded range that belong to this post and have feedback
                         const feedbackCount = allVariations.filter(
-                          (v) => v.post_id === post.id && v.feedback && v.feedback.trim() !== ""
+                          (v) =>
+                            v.post_id === post.id &&
+                            v.feedback &&
+                            v.feedback.trim() !== "" &&
+                            !v.feedback_resolved
                         ).length;
 
                         return (
@@ -1668,13 +1739,14 @@ return (
 />
 )}
     {showMediaPlayer && selectedVariation && (
-<MediaPlayer
-  variation={selectedVariation}
-  onClose={() => {
-    setShowMediaPlayer(false)
-    setSelectedVariation(null)
-  }}
-/>
+      <MediaPlayer
+        variation={selectedVariation}
+        onClose={() => {
+          setShowMediaPlayer(false);
+          setSelectedVariation(null);
+        }}
+        onRefreshPost={handleVariationResolvedChange}
+      />
 )}
 
 {showAddPostModal && (
