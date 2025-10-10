@@ -637,8 +637,8 @@ const handleSave = () => {
 return (
   <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
     {/* Changed max-w-[85vw] and added mx-auto for centering */}
-    <div className="relative bg-white rounded-lg w-auto max-w-[85vw] p-4 mx-auto">
-      <div className="space-y-3 min-w-[28rem]">
+    <div className="relative bg-white rounded-lg w-full max-w-[90vw] max-h-[90vh] p-4 mx-auto overflow-hidden">
+      <div className="space-y-3 min-w-[20rem] max-h-[calc(90vh-7rem)] overflow-y-auto pr-2">
         <h4 className="font-medium">Caption A:</h4>
         {isEditing ? (
           <textarea
@@ -648,7 +648,7 @@ return (
             rows={3}
           />
         ) : (
-          <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap">
+          <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap break-words max-h-64 overflow-y-auto">
             {tempCaptions.a || <span className="text-gray-400">No caption</span>}
           </div>
         )}
@@ -674,7 +674,7 @@ return (
                 rows={3}
               />
             ) : (
-              <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap">
+              <div className="bg-gray-50 p-3 rounded text-sm min-h-[3rem] whitespace-pre-wrap break-words max-h-64 overflow-y-auto">
                 {tempCaptions.b}
               </div>
             )}
