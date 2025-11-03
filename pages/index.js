@@ -927,6 +927,61 @@ function handleVariationResolvedChange(variationId, nextResolved) {
   );
 }
 
+// Inline post-name editing
+const [editingName, setEditingName] = useState(false);
+const [nameDraft, setNameDraft] = useState('');
+const [savingName, setSavingName] = useState(false);
+
+function startEditingName() {
+  setNameDraft(postDetails?.post?.post_name || '');
+  setEditingName(true);
+}
+
+function cancelEditingName() {
+  setEditingName(false);
+  setNameDraft('');
+}
+
+async function savePostName() {
+  if (!selectedPostId) return;
+  const newName = nameDraft.trim();
+  if (!newName) return alert('Post name cannot be empty.');
+  setSavingName(true);
+  try {
+    const { error } = await supabase
+      .from('posts')
+      .update({ post_name: newName })
+      .eq('id', selectedPostId);
+    if (error) throw error;
+
+    // Update modal view
+    setPostDetails(prev => ({
+      ...prev,
+      post: { ...prev.post, post_name: newName }
+    }));
+
+    // Update calendar/list weeks
+    setWeeks(prevWeeks =>
+      prevWeeks.map(week => ({
+        ...week,
+        days: week.days.map(day => ({
+          ...day,
+          posts: day.posts.map(p =>
+            p.id === selectedPostId ? { ...p, post_name: newName } : p
+          )
+        }))
+      }))
+    );
+
+    setEditingName(false);
+  } catch (e) {
+    console.error('Failed to rename post:', e);
+    alert('Failed to rename post. See console for details.');
+  } finally {
+    setSavingName(false);
+  }
+}
+
 
 // For Captions Box
 const [showCaptions, setShowCaptions] = useState(false);
@@ -1651,11 +1706,51 @@ return (
             <>
             {/* Post Header Section */}
             <div className="mb-4">
-    <div className="flex items-start justify-between">
-      <div>
-        <div className="text-lg font-semibold">{postDetails.post.post_name}</div>
-      </div>
+  <div className="flex items-start justify-between">
+    <div className="w-full">
+      {!editingName ? (
+        <div className="flex items-center gap-2">
+          <div className="text-lg font-semibold">{postDetails.post.post_name}</div>
+          <button
+            onClick={startEditingName}
+            className="inline-flex items-center text-gray-500 hover:text-gray-700"
+            aria-label="Edit post name"
+            title="Edit name"
+          >
+            ✎
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') savePostName();
+              if (e.key === 'Escape') cancelEditingName();
+            }}
+            className="border rounded px-2 py-1 text-sm w-full max-w-xs"
+            autoFocus
+          />
+          <button
+            onClick={savePostName}
+            disabled={savingName}
+            className="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-70"
+          >
+            {savingName ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={cancelEditingName}
+            disabled={savingName}
+            className="px-2 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </div>
+  </div>
+
 
     {/* Stacked Controls */}
     <div className="space-y-3 mt-3">
@@ -1815,7 +1910,7 @@ return (
               </button>
               <button
                 onClick={() => setShowConfirmDelete(true)}
-                className="px-4 py-2 bg-gray-200 text-black rounded hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
               >
                 Delete Post
               </button>
