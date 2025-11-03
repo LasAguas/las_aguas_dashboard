@@ -557,6 +557,55 @@ export default function ThisWeek() {
   const [showMediaPlayer, setShowMediaPlayer] = useState(false);
   const [selectedVariation, setSelectedVariation] = useState(null);
 
+  // Inline post-name editing (ThisWeek)
+const [editingName, setEditingName] = useState(false);
+const [nameDraft, setNameDraft] = useState('');
+const [savingName, setSavingName] = useState(false);
+
+function startEditingName() {
+  setNameDraft(postDetails?.post?.post_name || '');
+  setEditingName(true);
+}
+
+function cancelEditingName() {
+  setEditingName(false);
+  setNameDraft('');
+}
+
+async function savePostName() {
+  if (!selectedPostId) return;
+  const newName = nameDraft.trim();
+  if (!newName) return alert('Post name cannot be empty.');
+  setSavingName(true);
+  try {
+    const { error } = await supabase
+      .from('posts')
+      .update({ post_name: newName })
+      .eq('id', selectedPostId);
+    if (error) throw error;
+
+    // Update the open modal
+    setPostDetails(prev => ({
+      ...prev,
+      post: { ...prev.post, post_name: newName }
+    }));
+
+    // Update This Week grid
+    setPosts(prev => prev.map(p => p.id === selectedPostId ? { ...p, post_name: newName } : p));
+
+    // Update Next Week grid (if the post appears there)
+    setNextWeekPosts(prev => prev.map(p => p.id === selectedPostId ? { ...p, post_name: newName } : p));
+
+    setEditingName(false);
+  } catch (e) {
+    console.error('Failed to rename post:', e);
+    alert('Failed to rename post. See console for details.');
+  } finally {
+    setSavingName(false);
+  }
+}
+
+
   async function refreshWeekData() {
     try {
       // Current week
@@ -1023,11 +1072,53 @@ export default function ThisWeek() {
             ) : (
                 <>
                 <div className="mb-3">
-                  <p className="font-semibold">{postDetails.post.post_name}</p>
-                  <p className="text-sm text-gray-600">
-                    {artistMap.get(postDetails.post.artist_id)}
-                  </p>
+                  {!editingName ? (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">{postDetails.post.post_name}</p>
+                        <button
+                          onClick={startEditingName}
+                          className="inline-flex items-center text-gray-500 hover:text-gray-700"
+                          aria-label="Edit post name"
+                          title="Edit name"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {artistMap.get(postDetails.post.artist_id)}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') savePostName();
+                          if (e.key === 'Escape') cancelEditingName();
+                        }}
+                        className="border rounded px-2 py-1 text-sm w-full max-w-xs"
+                        autoFocus
+                      />
+                      <button
+                        onClick={savePostName}
+                        disabled={savingName}
+                        className="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-70"
+                      >
+                        {savingName ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditingName}
+                        disabled={savingName}
+                        className="px-2 py-1 text-sm bg-gray-200 rounded hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
+
               
                 {/* Status dropdown */}
                 <label className="block text-sm font-medium mb-1">Status</label>
