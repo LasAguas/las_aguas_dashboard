@@ -411,7 +411,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested }) 
         <div className="mt-4 flex gap-2">
           <button
             onClick={handleDelete}
-            className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition-colors"
+            className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors"
           >
             Delete Variation
           </button>
@@ -828,6 +828,45 @@ switch ((status || '').toLowerCase()) {
 }
 }
 
+//Delete Post Modal
+function ConfirmDeleteModal({ open, onCancel, onConfirm, deleting }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md relative">
+        <button
+          onClick={onCancel}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+          aria-label="Close confirm deletion"
+        >
+          ✕
+        </button>
+        <h3 className="text-lg font-semibold mb-2">Confirm deletion</h3>
+        <p className="text-sm text-gray-600">
+          This will permanently delete the post and all its variations. This action cannot be undone.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-sm bg-gray-200 rounded hover:bg-gray-300"
+            disabled={deleting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-70"
+            disabled={deleting}
+          >
+            {deleting ? "Deleting…" : "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
 const [artists, setArtists] = useState([])
 const [selectedArtistId, setSelectedArtistId] = useState('')
@@ -935,8 +974,6 @@ const onDragEnd = async (result) => {
   }
 }
 
-
-
 //don't show calendar picker unless clicked
 const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -946,6 +983,77 @@ const [showMediaPlayer, setShowMediaPlayer] = useState(false);
 
 // For upload modal
 const [showUploadModal, setShowUploadModal] = useState(false);
+
+// Delete post modal state
+const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+const [deletingPost, setDeletingPost] = useState(false);
+
+// Remove a post from weeks state (UI update after delete)
+function removePostFromWeeks(weeksArr, postId) {
+  return weeksArr.map(w => ({
+    ...w,
+    days: w.days.map(d => ({
+      ...d,
+      posts: d.posts.filter(p => p.id !== postId)
+    }))
+  }));
+}
+
+// Confirm delete handler
+async function handleConfirmDeletePost() {
+  if (!postDetails?.post?.id) {
+    setShowConfirmDelete(false);
+    return;
+  }
+  setDeletingPost(true);
+  const postId = postDetails.post.id;
+
+  try {
+    // Collect storage file paths for variations
+    const paths = (postDetails.variations || [])
+      .map(v => v.file_name)
+      .filter(Boolean);
+
+    // Delete variation rows (skip if DB cascades)
+    if ((postDetails.variations || []).length > 0) {
+      const { error: varDelErr } = await supabase
+        .from("postvariations")
+        .delete()
+        .eq("post_id", postId);
+      if (varDelErr) throw varDelErr;
+    }
+
+    // Delete storage files (best-effort)
+    if (paths.length > 0) {
+      const { error: storageErr } = await supabase
+        .storage
+        .from("post-variations")
+        .remove(paths);
+      if (storageErr) {
+        console.warn("Storage delete warning:", storageErr.message);
+      }
+    }
+
+    // Delete the post
+    const { error: postDelErr } = await supabase
+      .from("posts")
+      .delete()
+      .eq("id", postId);
+    if (postDelErr) throw postDelErr;
+
+    // Update UI
+    setWeeks(prev => removePostFromWeeks(prev, postId));
+    setAllVariations(prev => prev.filter(v => v.post_id !== postId));
+    setShowConfirmDelete(false);
+    closeModal();
+  } catch (e) {
+    console.error("Delete post failed:", e);
+    alert("Failed to delete post. See console for details.");
+  } finally {
+    setDeletingPost(false);
+  }
+}
+
 
 // Load artists once
 useEffect(() => {
@@ -1385,9 +1493,6 @@ return (
 
     {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
 
-
-
-
     {/* Calendar: stacked weeks */}
     <DragDropContext onDragEnd={onDragEnd}>
       <div className="space-y-6">
@@ -1467,9 +1572,6 @@ return (
                           </Draggable>
                         );
                       })}
-
-
-
 
                         {/* Variations*/}
                         {day.variations.map((variation, vIndex) => (
@@ -1575,9 +1677,6 @@ return (
         )}
       </div>
 
-
-
-
       {/* Date Picker Trigger */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Post Date</label>
@@ -1614,23 +1713,14 @@ return (
       </div>
     </div>
 
-
-
-
     {updateError && (
       <div className="text-red-600 text-sm mt-2">{updateError}</div>
     )}
   </div>
 
-
-
-
   {updateError && (
     <div className="text-red-600 text-sm mb-2">{updateError}</div>
   )}
-
-
-
 
   <button
     onClick={() => setShowCaptions(true)}
@@ -1712,32 +1802,31 @@ return (
 )}
 
 </ul>
+            <div className="text-right mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setUploadMode('new');
+                  setReplaceVariation(null);
+                  setShowUploadModal(true);
+                }}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                New Variation
+              </button>
+              <button
+                onClick={() => setShowConfirmDelete(true)}
+                className="px-4 py-2 bg-gray-200 text-black rounded hover:bg-gray-300"
+              >
+                Delete Post
+              </button>
+              <button
+                onClick={closeModal}
+                className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Close
+              </button>
+            </div>
 
-
-
-
-
-
-
-
-              <div className="text-right mt-4">
-                 <button
-                   onClick={() => {
-                      setUploadMode('new');
-                      setReplaceVariation(null);
-                      setShowUploadModal(true);
-                    }}
-                   className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 mr-[10px]"
-                 >
-                   New Variation
-                 </button>
-                 <button
-                   onClick={closeModal}
-                   className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-                 >
-                   Close
-                 </button>
-              </div>
             </>
           )}
         </div>
@@ -1798,6 +1887,15 @@ return (
     }}
   />
 )}
+
+{/* Confirm Delete Post modal */}
+<ConfirmDeleteModal
+  open={showConfirmDelete}
+  onCancel={() => setShowConfirmDelete(false)}
+  onConfirm={handleConfirmDeletePost}
+  deleting={deletingPost}
+/>
+
   </div>
 )
 }
