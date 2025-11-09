@@ -694,40 +694,41 @@ async function savePostName() {
         setPosts(postData);
         setVariations(varData);
   
-        // --- Next Week ---
-        const nextStart = addDays(start, 7);
-        const nextEnd = addDays(nextStart, 6);
-        const nextFrom = toYMD(nextStart);
-        const nextTo = toYMD(nextEnd);
+          // --- Next 2 Weeks (after this week) ---
+          const nextStart = addDays(start, 7);
+          const nextEnd = addDays(nextStart, 13); // 14 days = 2 weeks
+          const nextFrom = toYMD(nextStart);
+          const nextTo = toYMD(nextEnd);
   
-        const nextDays = [];
-        for (let i = 0; i < 7; i++) {
-          const date = addDays(nextStart, i);
-          nextDays.push({ date, ymd: toYMD(date) });
-        }
-        setNextWeekDays(nextDays);
+          const nextDays = [];
+          for (let i = 0; i < 14; i++) {
+            const date = addDays(nextStart, i);
+            nextDays.push({ date, ymd: toYMD(date) });
+          }
+          setNextWeekDays(nextDays);
   
-        const { data: nextPostData } = await supabase
-          .from("posts")
-          .select("*")
-          .gte("post_date", nextFrom)
-          .lte("post_date", nextTo)
-          .order("post_date", { ascending: true });
-  
-        const nextPostIds = nextPostData.map((p) => p.id);
-        let nextVarData = [];
-        if (nextPostIds.length > 0) {
-          const { data: vData } = await supabase
-            .from("postvariations")
+          const { data: nextPostData } = await supabase
+            .from("posts")
             .select("*")
-            .in("post_id", nextPostIds)
-            .gte("variation_post_date", nextFrom)
-            .lte("variation_post_date", nextTo);
-          nextVarData = vData;
-        }
+            .gte("post_date", nextFrom)
+            .lte("post_date", nextTo)
+            .order("post_date", { ascending: true });
   
-        setNextWeekPosts(nextPostData);
-        setNextWeekVariations(nextVarData);
+          const nextPostIds = nextPostData.map((p) => p.id);
+          let nextVarData = [];
+          if (nextPostIds.length > 0) {
+            const { data: vData } = await supabase
+              .from("postvariations")
+              .select("*")
+              .in("post_id", nextPostIds)
+              .gte("variation_post_date", nextFrom)
+              .lte("variation_post_date", nextTo);
+            nextVarData = vData;
+          }
+  
+          setNextWeekPosts(nextPostData);
+          setNextWeekVariations(nextVarData);
+        
       } catch (err) {
         console.error(err);
         setError("Failed to load weekly posts");
@@ -836,7 +837,7 @@ async function savePostName() {
           onClick={() => setShowNextWeek(!showNextWeek)}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
         >
-          {showNextWeek ? "Hide Next Week" : "Show Next Week"}
+          {showNextWeek ? "Hide Coming Weeks" : "Show Coming Weeks"}
         </button>
       </div>
 
@@ -957,107 +958,238 @@ async function savePostName() {
         </div>
       
 
-      {showNextWeek && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-2">Next Week</h2>
-          {/* <DragDropContext onDragEnd={() => {}}> */}
-            <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-              <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-                  <div key={d} className="px-3 py-2">{d}</div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7">
-                {nextWeekDays.map((day) => (
-                  <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
-                    {(dropProvided) => (
-                      <div
-                        ref={dropProvided.innerRef}
-                        {...dropProvided.droppableProps}
-                        className="min-h-[140px] border-l first:border-l-0 p-2"
-                      >
-                        <div className="text-xs text-gray-500 mb-1">
-                          {day.date.getDate()}/{day.date.getMonth() + 1}
-                        </div>
-                        <div className="space-y-1">
-                        {nextWeekPosts
-                          .filter((p) => toYMD(new Date(p.post_date)) === day.ymd)
-                          .map((post, index) => {
-                            const feedbackCount = nextWeekVariations.filter(
-                                (v) =>
-                                  v.post_id === post.id &&
-                                  v.feedback &&
-                                  v.feedback.trim() !== "" &&
-                                  !v.feedback_resolved
-                              ).length;
+        {showNextWeek && nextWeekDays.length >= 14 && (
+  <div className="mt-10 space-y-8">
+    {/* Heading only */}
+    <h2 className="text-xl font-semibold">Next 2 Weeks</h2>
 
-                            return (
-                              <Draggable
-                                key={`post-${post.id}`}
-                                draggableId={`post-${post.id}`}
-                                index={index}
-                              >
-                                {(dragProvided) => (
-                                  <div
-                                    ref={dragProvided.innerRef}
-                                    {...dragProvided.draggableProps}
-                                    {...dragProvided.dragHandleProps}
-                                    className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
-                                    style={{
-                                      backgroundColor: statusColor(post.status),
-                                      ...dragProvided.draggableProps.style,
-                                    }}
-                                    onClick={() => openPostDetails(post.id)}
-                                  >
-                                    {post.post_name} — {artistMap.get(post.artist_id)}
-
-                                    {feedbackCount > 0 && (
-                                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                        {feedbackCount}
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </Draggable>
-                            );
-                          })}
-
-                          {nextWeekVariations
-                            .filter((v) => toYMD(new Date(v.variation_post_date)) === day.ymd)
-                            .map((v, vIndex) => {
-                              const parent = nextWeekPosts.find((p) => p.id === v.post_id);
-                              return (
-                                <Draggable
-                                  key={`var-${v.id}`}
-                                  draggableId={`var-${v.id}`}
-                                  index={nextWeekPosts.length + vIndex}
-                                >
-                                  {(dragProvided) => (
-                                    <div
-                                      ref={dragProvided.innerRef}
-                                      {...dragProvided.draggableProps}
-                                      {...dragProvided.dragHandleProps}
-                                      className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
-                                      style={dragProvided.draggableProps.style}
-                                      onClick={() => openPostDetails(v.post_id)}
-                                    >
-                                      {parent?.post_name} (var)
-                                    </div>
-                                  )}
-                                </Draggable>
-                              );
-                            })}
-                          {dropProvided.placeholder}
-                        </div>
-                      </div>
-                    )}
-                  </Droppable>
-                ))}
-              </div>
+    {/* Week 1 */}
+    <div>
+      <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
+        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            <div key={d} className="px-3 py-2">
+              {d}
             </div>
-          {/*</DragDropContext>*/}
+          ))}
         </div>
-      )}
+        <div className="grid grid-cols-7">
+          {nextWeekDays.slice(0, 7).map((day) => (
+            <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
+              {(dropProvided) => (
+                <div
+                  ref={dropProvided.innerRef}
+                  {...dropProvided.droppableProps}
+                  className="min-h-[140px] border-l first:border-l-0 p-2"
+                >
+                  {/* Date only: DD Mon */}
+                  <div className="text-xs text-gray-500 mb-1">
+                    {day.date.toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </div>
+                  <div className="space-y-1">
+                    {nextWeekPosts
+                      .filter(
+                        (p) => toYMD(new Date(p.post_date)) === day.ymd
+                      )
+                      .map((post, index) => {
+                        const feedbackCount = nextWeekVariations.filter(
+                          (v) =>
+                            v.post_id === post.id &&
+                            v.feedback &&
+                            v.feedback.trim() !== ""
+                        ).length;
+
+                        return (
+                          <Draggable
+                            key={`post-${post.id}`}
+                            draggableId={`post-${post.id}`}
+                            index={index}
+                          >
+                            {(dragProvided) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                style={{
+                                  backgroundColor: statusColor(post.status),
+                                  ...dragProvided.draggableProps.style,
+                                }}
+                                onClick={() => openPostDetails(post.id)}
+                              >
+                                {post.post_name} —{" "}
+                                {artistMap.get(post.artist_id)}
+                                {feedbackCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-600 text-[9px] leading-none text-white rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                    {feedbackCount}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+
+                    {nextWeekVariations
+                      .filter(
+                        (v) =>
+                          toYMD(new Date(v.variation_post_date)) === day.ymd
+                      )
+                      .map((v, vIndex) => {
+                        const parent = nextWeekPosts.find(
+                          (p) => p.id === v.post_id
+                        );
+                        return (
+                          <Draggable
+                            key={`var-${v.id}`}
+                            draggableId={`var-${v.id}`}
+                            index={nextWeekPosts.length + vIndex}
+                          >
+                            {(dragProvided) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
+                                style={dragProvided.draggableProps.style}
+                                onClick={() =>
+                                  openPostDetails(v.post_id)
+                                }
+                              >
+                                {parent?.post_name} (var)
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                    {dropProvided.placeholder}
+                  </div>
+                </div>
+              )}
+            </Droppable>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {/* Week 2 */}
+    <div>
+      <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
+        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            <div key={d} className="px-3 py-2">
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {nextWeekDays.slice(7, 14).map((day) => (
+            <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
+              {(dropProvided) => (
+                <div
+                  ref={dropProvided.innerRef}
+                  {...dropProvided.droppableProps}
+                  className="min-h-[140px] border-l first:border-l-0 p-2"
+                >
+                  {/* Date only: DD Mon */}
+                  <div className="text-xs text-gray-500 mb-1">
+                    {day.date.toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </div>
+                  <div className="space-y-1">
+                    {nextWeekPosts
+                      .filter(
+                        (p) => toYMD(new Date(p.post_date)) === day.ymd
+                      )
+                      .map((post, index) => {
+                        const feedbackCount = nextWeekVariations.filter(
+                          (v) =>
+                            v.post_id === post.id &&
+                            v.feedback &&
+                            v.feedback.trim() !== ""
+                        ).length;
+
+                        return (
+                          <Draggable
+                            key={`post-${post.id}`}
+                            draggableId={`post-${post.id}`}
+                            index={index}
+                          >
+                            {(dragProvided) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                style={{
+                                  backgroundColor: statusColor(post.status),
+                                  ...dragProvided.draggableProps.style,
+                                }}
+                                onClick={() => openPostDetails(post.id)}
+                              >
+                                {post.post_name} —{" "}
+                                {artistMap.get(post.artist_id)}
+                                {feedbackCount > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-600 text-[9px] leading-none text-white rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
+                                    {feedbackCount}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+
+                    {nextWeekVariations
+                      .filter(
+                        (v) =>
+                          toYMD(new Date(v.variation_post_date)) === day.ymd
+                      )
+                      .map((v, vIndex) => {
+                        const parent = nextWeekPosts.find(
+                          (p) => p.id === v.post_id
+                        );
+                        return (
+                          <Draggable
+                            key={`var-${v.id}`}
+                            draggableId={`var-${v.id}`}
+                            index={nextWeekPosts.length + vIndex}
+                          >
+                            {(dragProvided) => (
+                              <div
+                                ref={dragProvided.innerRef}
+                                {...dragProvided.draggableProps}
+                                {...dragProvided.dragHandleProps}
+                                className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
+                                style={dragProvided.draggableProps.style}
+                                onClick={() =>
+                                  openPostDetails(v.post_id)
+                                }
+                              >
+                                {parent?.post_name} (var)
+                              </div>
+                            )}
+                          </Draggable>
+                        );
+                      })}
+                    {dropProvided.placeholder}
+                  </div>
+                </div>
+              )}
+            </Droppable>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+
       </DragDropContext>
       {/* Post Detail Modal */}
       {selectedPostId && postDetails && (
