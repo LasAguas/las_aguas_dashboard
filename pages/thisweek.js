@@ -627,30 +627,30 @@ async function savePostName() {
         setPosts(postData || []);
         setVariations(varData);
       }
-      // Next week
-      if (nextWeekDays.length) {
-        const from = nextWeekDays[0].ymd, to = nextWeekDays[6].ymd;
-        const { data: postData } = await supabase
-          .from("posts").select("*").gte("post_date", from).lte("post_date", to).order("post_date", { ascending: true });
-        const postIds = (postData || []).map((p) => p.id);
-        let varData = [];
-        if (postIds.length) {
-          const { data: vData } = await supabase
-            .from("postvariations")
-            .select("*")
-            .in("post_id", postIds)
-            .gte("variation_post_date", from)
-            .lte("variation_post_date", to);
-          varData = vData || [];
+        // Next 2 weeks (reload full nextWeekDays range)
+        if (nextWeekDays.length) {
+          const from = nextWeekDays[0].ymd;
+          const to = nextWeekDays[nextWeekDays.length - 1].ymd; // <- use last day (index 13 for 14 days)
+          const { data: postData } = await supabase
+            .from("posts").select("*").gte("post_date", from).lte("post_date", to).order("post_date", { ascending: true });
+          const postIds = (postData || []).map((p) => p.id);
+          let varData = [];
+          if (postIds.length) {
+            const { data: vData } = await supabase
+              .from("postvariations")
+              .select("*")
+              .in("post_id", postIds)
+              .gte("variation_post_date", from)
+              .lte("variation_post_date", to);
+            varData = vData || [];
+          }
+          setNextWeekPosts(postData || []);
+          setNextWeekVariations(varData);
         }
-        setNextWeekPosts(postData || []);
-        setNextWeekVariations(varData);
-      }
     } catch (e) {
       console.error("refreshWeekData failed", e);
     }
   }
-  
 
   useEffect(() => {
     const load = async () => {
