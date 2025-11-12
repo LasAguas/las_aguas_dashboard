@@ -878,6 +878,7 @@ const [errorMsg, setErrorMsg] = useState('')
 const [uploadMode, setUploadMode] = useState('new'); // 'new' | 'replace'
 const [replaceVariation, setReplaceVariation] = useState(null);
 const [allVariations, setAllVariations] = useState([]);
+const [refreshCounter, setRefreshCounter] = useState(0);
 
 // View switching
 const [viewMode, setViewMode] = useState('4weeks') // '4weeks' (Current) | 'month'
@@ -1264,7 +1265,7 @@ useEffect(() => {
     setWeeks(weeksArr)
   }
   loadPosts()
-}, [selectedArtistId, viewMode, selectedMonth])
+}, [selectedArtistId, viewMode, selectedMonth, refreshCounter])
 
 //drag and drop post function
 async function updatePostDateById(postId, newDate) {
@@ -1964,6 +1965,7 @@ return (
       // Refresh posts so new one appears in calendar
       // You can either re-run loadPosts or just change viewMode to trigger useEffect
       setViewMode(v => v); 
+      setRefreshCounter(c => c + 1);
     }}
   />
 )}
