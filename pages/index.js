@@ -869,7 +869,7 @@ function ConfirmDeleteModal({ open, onCancel, onConfirm, deleting }) {
 
 export default function Home() {
 const [artists, setArtists] = useState([])
-const [selectedArtistId, setSelectedArtistId] = useState('6')
+const [selectedArtistId, setSelectedArtistId] = useState('6') // default artist id
 const [weeks, setWeeks] = useState([])
 const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
@@ -1114,7 +1114,7 @@ async function handleConfirmDeletePost() {
 // Load artists once
 useEffect(() => {
   const load = async () => {
-    const { data, error } = await supabase.from('artists').select('id,name').not('id', 'in', '(1, 2, 3)').order('name')
+    const { data, error } = await supabase.from('artists').select('id,name').not('id', 'in', '(1, 2, 3)').order('name') // artist ids removed from artist dropdown
     if (error) {
       console.error('Supabase error (artists):', error)
       setErrorMsg('Error loading artists. Check console.')
