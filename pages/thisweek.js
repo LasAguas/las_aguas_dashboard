@@ -32,7 +32,7 @@ function statusColor(status) {
     case "planned":
       return "#ED9C37";
     case "assets obtained":
-      return "#F1E68C";
+      return "#D4D46C";
     case "uploaded":
       return "#3b82f6";
     case "ready":

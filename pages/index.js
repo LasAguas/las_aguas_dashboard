@@ -820,7 +820,7 @@ function statusColor(status) {
 switch ((status || '').toLowerCase()) {
   case 'not planned': return '#ef4444' // red-500
   case 'planned': return '#ED9C37' // orange
-  case 'assets obtained': return '#F1E68C' // yellow
+  case 'assets obtained': return '#D4D46C' // yellow
   case 'uploaded': return '#3b82f6' // blue-500
   case 'ready': return '#10b981' // emerald-500
   case 'posted': return '#9ca3af' // gray-400
