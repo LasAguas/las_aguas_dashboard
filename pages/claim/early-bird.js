@@ -1,7 +1,7 @@
 // pages/claim/early-bird.js
 import { useState } from "react";
 import { jsPDF } from "jspdf";
-import "/Users/mistert/Desktop/las_aguas_dashboard/fonts/Springfield-LT-Std-normal.js"
+import "fonts/Springfield-LT-Std-normal.js"
 
 export default function EarlyBirdClaimPage() {
   const [email, setEmail] = useState("");
