@@ -3,7 +3,6 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/login": "pages/login.js",
-  "/api/claim-ticket": "pages/api/claim-ticket.js",
-  "/claim/early-bird": "pages/claim/early-bird.js",
-  "/claim/regular": "pages/claim/regular.js"
+  "/claim/regular": "pages/claim/regular.js",
+  "/claim/early-bird": "pages/claim/early-bird.js"
 }
