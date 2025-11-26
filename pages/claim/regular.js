@@ -64,6 +64,17 @@ export default function RegularClaimPage() {
 
     // 5) Save the PDF
     doc.save(`ticket-${code}.pdf`);
+
+    // 6) Tell Supabase this ticket was downloaded (fire-and-forget)
+try {
+  await fetch("/api/mark-ticket-downloaded", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+} catch (err) {
+  console.error("Failed to mark ticket as downloaded:", err);
+}
   }
 
   async function handleSubmit(e) {

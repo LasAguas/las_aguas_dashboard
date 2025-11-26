@@ -2,7 +2,7 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/login": "pages/login.js",
-  "/claim/regular": "pages/claim/regular.js",
-  "/claim/early-bird": "pages/claim/early-bird.js"
+  "/api/claim-ticket": "pages/api/claim-ticket.js",
+  "/claim/early-bird": "pages/claim/early-bird.js",
+  "/api/mark-ticket-downloaded": "pages/api/mark-ticket-downloaded.js"
 }

@@ -36,8 +36,6 @@ export default function EarlyBirdClaimPage() {
     // 3) Draw background
     doc.addImage(imgData, "PNG", 0, 0, 600, 300);
 
-    // 4) Use the custom font that was registered by Springfield-LT-Std-normal.js
-    //    IMPORTANT: if your addFont line uses a different name, replace "Springfield-LT-Std-normal"
     //    with the exact second argument from jsPDFAPI.addFont(...)
 
     // Set text color #d88142 -> RGB(216, 129, 66)
@@ -65,7 +63,27 @@ export default function EarlyBirdClaimPage() {
     doc.text(emailLine, x, yEmail, { align: "right" });
 
     // 5) Save the PDF
+    console.log("📄 PDF saved for code:", code);
     doc.save(`ticket-${code}.pdf`);
+
+    // 6) Mark as downloaded in Supabase
+    console.log("📤 Sending mark-ticket-downloaded request for:", code);
+
+    try {
+      const res = await fetch("/api/mark-ticket-downloaded", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      console.log("📬 mark-ticket-downloaded response status:", res.status);
+
+      const data = await res.json().catch(() => null);
+      console.log("📬 mark-ticket-downloaded response body:", data);
+
+    } catch (err) {
+      console.error("❌ Frontend error calling mark-ticket-downloaded:", err);
+    }
   }
 
   async function handleSubmit(e) {
