@@ -1,5 +1,7 @@
 // pages/claim/early-bird.js
 import { useState } from "react";
+import { jsPDF } from "jspdf";
+import "/Users/mistert/Desktop/las_aguas_dashboard/fonts/Springfield-LT-Std-normal.js"
 
 export default function EarlyBirdClaimPage() {
   const [email, setEmail] = useState("");
@@ -8,6 +10,65 @@ export default function EarlyBirdClaimPage() {
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Generate a PDF ticket for a single code
+  async function createTicketPdf({ code, email }) {
+    // 1) Create the PDF (landscape)
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "pt",
+      format: [600, 300], // width, height
+    });
+
+    // 2) Load the background image from /public/tickets/ticket-bg.png
+    const imgUrl = "/tickets/ticket-bg.png";
+
+    const imgData = await fetch(imgUrl)
+      .then((res) => res.blob())
+      .then(
+        (blob) =>
+          new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result); // base64 string
+            reader.readAsDataURL(blob);
+          })
+      );
+
+    // 3) Draw background
+    doc.addImage(imgData, "PNG", 0, 0, 600, 300);
+
+    // 4) Use the custom font that was registered by Springfield-LT-Std-normal.js
+    //    IMPORTANT: if your addFont line uses a different name, replace "Springfield-LT-Std-normal"
+    //    with the exact second argument from jsPDFAPI.addFont(...)
+    doc.setFont("Springfield-LT-Std-normal", "normal");
+
+    // Set text color #d88142 -> RGB(216, 129, 66)
+    doc.setTextColor(216, 129, 66);
+
+    // Font size
+    doc.setFontSize(14);
+
+    // Bottom-right anchor
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    const bottomMargin = 10;
+    const rightMargin = 30;
+
+    const codeLine = `Code: ${code}`;
+    const emailLine = `Email: ${email}`;
+
+    const yEmail = pageHeight - bottomMargin; // bottom line
+    const yCode = yEmail - 18;                // line above
+    const x = pageWidth - rightMargin;
+
+    // Right-aligned text
+    doc.text(codeLine, x, yCode, { align: "right" });
+    doc.text(emailLine, x, yEmail, { align: "right" });
+
+    // 5) Save the PDF
+    doc.save(`ticket-${code}.pdf`);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -28,12 +89,15 @@ export default function EarlyBirdClaimPage() {
       });
 
       const data = await res.json();
+      console.log("claim-ticket response (early bird):", data);
+
       if (!res.ok) {
         throw new Error(data.error || "Something went wrong");
       }
 
-      setCodes(data.codes || []);
+      setCodes(Array.isArray(data.codes) ? data.codes : []);
     } catch (err) {
+      console.error(err);
       setError(err.message || "Unknown error");
     } finally {
       setLoading(false);
@@ -84,14 +148,16 @@ export default function EarlyBirdClaimPage() {
               max={20}
               className="w-full border rounded px-3 py-2 text-sm"
               value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value) || 1)}
+              onChange={(e) =>
+                setQuantity(Math.max(1, Number(e.target.value) || 1))
+              }
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-black text-white rounded py-2 text-sm font-medium"
+            className="w-full bg-black text-white rounded py-2 text-sm font-medium disabled:opacity-50"
           >
             {loading ? "Generating..." : "Get ticket code(s)"}
           </button>
@@ -106,10 +172,20 @@ export default function EarlyBirdClaimPage() {
             <p className="font-medium mb-1">
               Your Early Bird ticket code(s):
             </p>
-            <ul className="space-y-1">
+            <ul className="space-y-2">
               {codes.map((c) => (
-                <li key={c} className="font-mono text-base">
-                  {c}
+                <li
+                  key={c}
+                  className="flex items-center justify-between gap-2 font-mono text-base"
+                >
+                  <span>{c}</span>
+                  <button
+                    type="button"
+                    onClick={() => createTicketPdf({ code: c, email })}
+                    className="text-xs font-sans px-2 py-1 border rounded bg-white hover:bg-slate-100"
+                  >
+                    Download PDF
+                  </button>
                 </li>
               ))}
             </ul>

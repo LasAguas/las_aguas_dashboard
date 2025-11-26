@@ -1,5 +1,6 @@
 // pages/claim/regular.js
 import { useState } from "react";
+import { jsPDF } from "jspdf";
 
 export default function RegularClaimPage() {
   const [email, setEmail] = useState("");
@@ -8,6 +9,22 @@ export default function RegularClaimPage() {
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  function downloadTicketPdf(code) {
+    const doc = new jsPDF();
+  
+    doc.setFontSize(22);
+    doc.text("Event Ticket", 20, 30);
+  
+    doc.setFontSize(14);
+    doc.text("Ticket Type: Regular", 20, 50);
+    doc.text(`Ticket Code: ${code}`, 20, 60);
+  
+    doc.setFontSize(10);
+    doc.text("Please present this ticket at the door.", 20, 120);
+  
+    doc.save(`ticket-${code}.pdf`);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
