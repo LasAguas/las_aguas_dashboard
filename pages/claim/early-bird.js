@@ -1,7 +1,6 @@
 // pages/claim/early-bird.js
 import { useState } from "react";
 import { jsPDF } from "jspdf";
-import "fonts/Springfield-LT-Std-normal.js"
 
 export default function EarlyBirdClaimPage() {
   const [email, setEmail] = useState("");
@@ -40,7 +39,6 @@ export default function EarlyBirdClaimPage() {
     // 4) Use the custom font that was registered by Springfield-LT-Std-normal.js
     //    IMPORTANT: if your addFont line uses a different name, replace "Springfield-LT-Std-normal"
     //    with the exact second argument from jsPDFAPI.addFont(...)
-    doc.setFont("Springfield-LT-Std-normal", "normal");
 
     // Set text color #d88142 -> RGB(216, 129, 66)
     doc.setTextColor(216, 129, 66);
