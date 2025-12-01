@@ -22,10 +22,15 @@
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/claim/early-bird": [
+    "/digital-strategy-form": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
-      "static/chunks/pages/claim/early-bird.js"
+      "static/chunks/pages/digital-strategy-form.js"
+    ],
+    "/las-aguas-mixing-form": [
+      "static/chunks/webpack.js",
+      "static/chunks/main.js",
+      "static/chunks/pages/las-aguas-mixing-form.js"
     ]
   },
   "ampFirstPages": []
