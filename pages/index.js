@@ -10,6 +10,13 @@ import Link from "next/link";
 const pad = (n) => String(n).padStart(2, '0')
 const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
+const PLATFORM_OPTIONS = [
+  { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
+  { value: 'TikTok',      label: 'TikTok',      short: 'TT' },
+  { value: 'YouTube',     label: 'YouTube',     short: 'YT' },
+  { value: 'Mailing List', label: 'Mailing List', short: 'ML' },
+];
+
 // Move a post from one day (sourceYMD) to another (destYMD) inside weeks[]
 function movePostInWeeks(weeksArr, itemId, sourceYMD, destYMD, destIndex = 0, isVariation = false) {
   // Clone weeks deeply enough to avoid mutating state
@@ -222,18 +229,48 @@ function AddPostModal({ artistId, defaultDate, onClose, onPostAdded }) {
 }
 
 // Media Player Function
-function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested }) {
+function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, onPlatformsUpdated }) {
   const [mediaUrl, setMediaUrl] = useState(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
   const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
   const [saving, setSaving] = useState(false);
-  
+
+  const [platforms, setPlatforms] = useState(variation?.platforms || []);
+  const [savingPlatforms, setSavingPlatforms] = useState(false);
+
+  useEffect(() => {
+    setPlatforms(variation?.platforms || []);
+  }, [variation?.platforms]);
+
   useEffect(() => {
     setLocalResolved(!!variation?.feedback_resolved);
   }, [variation?.feedback_resolved]);
   
+  async function handleSavePlatforms() {
+    if (!variation || savingPlatforms) return;
+    setSavingPlatforms(true);
+    try {
+      const nextPlatforms = platforms && platforms.length ? platforms : [];
+      const { error } = await supabase
+        .from('postvariations')
+        .update({ platforms: nextPlatforms })
+        .eq('id', variation.id);
+
+      if (error) throw error;
+
+      if (onPlatformsUpdated) {
+        onPlatformsUpdated(variation.id, nextPlatforms);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update platforms');
+    } finally {
+      setSavingPlatforms(false);
+    }
+  }
+
   async function toggleResolve() {
     if (!variation || saving) return;
     setSaving(true);
@@ -402,10 +439,47 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested }) 
           )}
         </div>
 
-        <div className="mt-4 text-sm">
-          <p><strong>Platform:</strong> {variation.platform}</p>
-          <p><strong>Version:</strong> {variation.test_version || 'N/A'}</p>
+        <div className="mt-4 text-sm space-y-2">
+          <div>
+            <div className="font-semibold mb-1">Platforms</div>
+            <div className="flex flex-wrap gap-2">
+              {PLATFORM_OPTIONS.map((p) => (
+                <label
+                  key={p.value}
+                  className="inline-flex items-center gap-1"
+                >
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={platforms.includes(p.value)}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setPlatforms((prev) =>
+                        checked
+                          ? [...prev, p.value]
+                          : prev.filter((v) => v !== p.value)
+                      );
+                    }}
+                  />
+                  <span>{p.label}</span>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handleSavePlatforms}
+              disabled={savingPlatforms}
+              className="mt-2 inline-flex items-center px-3 py-1 rounded text-xs border bg-white hover:bg-gray-50"
+            >
+              {savingPlatforms ? 'Saving…' : 'Save platforms'}
+            </button>
+          </div>
+
+          <p>
+            <strong>Version:</strong> {variation.test_version || 'N/A'}
+          </p>
         </div>
+
 
         {/* Buttons */}
         <div className="mt-4 flex gap-2">
@@ -472,7 +546,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested }) 
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, onClose, onSave }) {
  const [file, setFile] = useState(null);
- const [platform, setPlatform] = useState('');
+ const [platforms, setPlatforms] = useState([]); // multi-select
  const [notes, setNotes] = useState('');
  const [variationDate, setVariationDate] = useState(defaultDate);
  const [showDatePicker, setShowDatePicker] = useState(false);
@@ -487,7 +561,8 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
 
  const handleSave = async () => {
   // In replace mode we only need a file; in new mode keep your existing requirements
-  if (!file || (mode !== 'replace' && (!platform || !notes))) return;
+  if (!file) return;
+  if (mode !== 'replace' && (!platforms || platforms.length === 0)) return;
   setUploading(true);
 
   try {
@@ -523,7 +598,8 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
         .from('postvariations')
         .update({
           file_name: fullFilePath,
-          length_seconds: lengthSeconds
+          length_seconds: lengthSeconds,
+          ...(platforms && platforms.length ? { platforms } : {}),
         })
         .eq('id', variation.id);
       if (updateError) throw updateError;
@@ -544,17 +620,24 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
         nextVersion = String.fromCharCode(nextCharCode);
       }
 
+      if (!platforms || platforms.length === 0) {
+        alert('Please select at least one platform.');
+        setUploading(false);
+        return;
+      }
+
       const { error: insertError } = await supabase
         .from('postvariations')
         .insert([{
           post_id: postId,
-          platform,
+          platforms,
           file_name: fullFilePath,
           test_version: nextVersion,
           length_seconds: lengthSeconds,
           variation_post_date: variationDate,
           notes
         }]);
+
       if (insertError) throw insertError;
     }
 
@@ -589,20 +672,33 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
          {file && <p className="text-xs text-gray-500 mt-1">{file.name}</p>}
        </div>
 
-
-       {/* Platform select */}
+        {/* Platform multi-select */}
        <div className="mb-4">
-         <label className="block text-sm font-medium mb-1">Platform</label>
-         <select
-           value={platform}
-           onChange={(e) => setPlatform(e.target.value)}
-           className="w-full border rounded p-2 text-sm"
-         >
-           <option value="">Select platform…</option>
-           <option value="TikTok">TikTok</option>
-           <option value="Instagram">Instagram</option>
-           <option value="YouTube">YouTube</option>
-         </select>
+         <label className="block text-sm font-medium mb-1">Platforms</label>
+         <div className="flex flex-wrap gap-2">
+           {PLATFORM_OPTIONS.map((p) => (
+             <label
+               key={p.value}
+               className="inline-flex items-center gap-1 text-sm"
+             >
+               <input
+                 type="checkbox"
+                 className="rounded border-gray-300"
+                 disabled={uploading}
+                 checked={platforms.includes(p.value)}
+                 onChange={(e) => {
+                   const checked = e.target.checked;
+                   setPlatforms((prev) =>
+                     checked
+                       ? [...prev, p.value]
+                       : prev.filter((v) => v !== p.value)
+                   );
+                 }}
+               />
+               <span>{p.label}</span>
+             </label>
+           ))}
+         </div>
        </div>
 
 
@@ -659,12 +755,16 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
            Cancel
          </button>
          <button
-           onClick={handleSave}
-           disabled={uploading || !file || !platform || !notes}
-           className="px-3 py-1.5 text-sm bg-[#bbe1ac] rounded hover:opacity-90"
-         >
-           {uploading ? 'Uploading…' : 'Save'}
-         </button>
+          onClick={handleSave}
+          disabled={
+            uploading ||
+            !file ||
+            (mode !== 'replace' && (!platforms || platforms.length === 0 || !notes))
+          }
+          className="px-3 py-1.5 text-sm bg-[#bbe1ac] rounded hover:opacity-90"
+        >
+          {uploading ? 'Uploading…' : 'Save'}
+        </button>
        </div>
 
 
@@ -878,6 +978,8 @@ const [errorMsg, setErrorMsg] = useState('')
 const [uploadMode, setUploadMode] = useState('new'); // 'new' | 'replace'
 const [replaceVariation, setReplaceVariation] = useState(null);
 const [allVariations, setAllVariations] = useState([]);
+const [platformFilter, setPlatformFilter] = useState([]); // array of platform strings
+const [platformFilterOpen, setPlatformFilterOpen] = useState(false); // NEW: dropdown open/closed
 const [refreshCounter, setRefreshCounter] = useState(0);
 
 // View switching
@@ -927,6 +1029,24 @@ function handleVariationResolvedChange(variationId, nextResolved) {
       : prev
   );
 }
+
+function handleVariationPlatformsChange(variationId, nextPlatforms) {
+  setAllVariations((prev) =>
+    prev.map((v) => (v.id === variationId ? { ...v, platforms: nextPlatforms } : v))
+  );
+
+  setPostDetails((prev) =>
+    prev
+      ? {
+          ...prev,
+          variations: prev.variations.map((v) =>
+            v.id === variationId ? { ...v, platforms: nextPlatforms } : v
+          ),
+        }
+      : prev
+  );
+}
+
 
 // Inline post-name editing
 const [editingName, setEditingName] = useState(false);
@@ -1142,7 +1262,7 @@ useEffect(() => {
   setMonths(monthArr)
 }, [])
 
-// Load posts whenever artist / view mode / selected month changes
+// Load posts whenever artist / view mode / selected month / platform filter changes
 useEffect(() => {
   const loadPosts = async () => {
     if (!selectedArtistId) return
@@ -1196,6 +1316,7 @@ useEffect(() => {
         id,
         variation_post_date,
         post_id,
+        platforms,
         feedback,
         feedback_resolved
       `)
@@ -1208,37 +1329,38 @@ useEffect(() => {
       // continue — we can still render posts without variations
     }
 
-    // make variations available in render scope
-    setAllVariations(variations || []);
+    setAllVariations(variations || [])
 
-    // Build week rows across range
-    const startDate = new Date(from)
-    const endDate = new Date(to)
+    const endDate = new Date(to);                 // ✅ REQUIRED
     const weeksArr = []
-    let currentStart = startOfWeekMonday(startDate)
+    let currentStart = startOfWeekMonday(new Date(from))
 
-
-    while (currentStart <= endDate) {
+    while (currentStart <= endDate) { 
       const days = []
       for (let d = 0; d < 7; d++) {
         const dayDate = addDays(currentStart, d)
         const ymd = toYMD(dayDate)
         const postsForDay = (posts || [])
           .filter(p => toYMD(new Date(p.post_date)) === ymd)
+          .filter(p => {
+            if (!platformFilter.length) return true;
+            const postVars = (variations || []).filter(v => v.post_id === p.id);
+            // Keep posts that have *any* variation with *any* of the selected platforms
+            return postVars.some(v =>
+              (v.platforms || []).some(plat => platformFilter.includes(plat))
+            );
+          });
         
-          const varsForDay = (variations || [])
-          // only variations on this day
+        const varsForDay = (variations || [])
           .filter(v => toYMD(new Date(v.variation_post_date)) === ymd)
-          // exclude variations that fall on the same day as their parent post
           .filter(v => {
             const parent = posts.find(p => p.id === v.post_id)
-            if (!parent) return true // fallback if somehow orphaned
+            if (!parent) return true
             return toYMD(new Date(parent.post_date)) !== ymd
           })
-          // now format them for rendering
           .map(v => {
             const parentPost = posts.find(p => p.id === v.post_id)
-            if (!parentPost) return null // 👈 skip if not found (filters out Untitleds)
+            if (!parentPost) return null
             return {
               id: v.id,
               post_id: v.post_id,
@@ -1247,7 +1369,7 @@ useEffect(() => {
               isVariation: true
             }
           })
-          .filter(Boolean) // removes the nulls
+          .filter(Boolean)
         
         days.push({
           date: dayDate,
@@ -1255,8 +1377,6 @@ useEffect(() => {
           posts: postsForDay,
           variations: varsForDay
         })
-      
-
       }
       weeksArr.push({ weekStart: currentStart, days })
       currentStart = addDays(currentStart, 7)
@@ -1265,7 +1385,8 @@ useEffect(() => {
     setWeeks(weeksArr)
   }
   loadPosts()
-}, [selectedArtistId, viewMode, selectedMonth, refreshCounter])
+}, [selectedArtistId, viewMode, selectedMonth, refreshCounter, platformFilter])
+
 
 //drag and drop post function
 async function updatePostDateById(postId, newDate) {
@@ -1445,11 +1566,12 @@ async function openPostDetails(postId) {
       .single()
     if (postErr) throw postErr
      // 2) Fetch variations for that post (removed caption_a and caption_b)
-    const { data: variations, error: varErr } = await supabase
+     const { data: variations, error: varErr } = await supabase
       .from('postvariations')
-      .select('id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved')
+      .select('id, platforms, test_version, file_name, length_seconds, feedback, feedback_resolved')
       .eq('post_id', postId)
       .order('test_version', { ascending: true })
+
      if (varErr) throw varErr
      setPostDetails({
       post,
@@ -1530,6 +1652,52 @@ return (
           <option value="4weeks">Current</option>
           <option value="month">Specific month</option>
         </select>
+                {/* Platform filter button + dropdown */}
+                <div className="relative ml-4">
+                  <button
+                    type="button"
+                    onClick={() => setPlatformFilterOpen((prev) => !prev)}
+                    className="inline-flex items-center gap-1 rounded border px-2 py-1 text-sm bg-white hover:bg-gray-50"
+                  >
+                    <span>Platforms</span>
+                    <span aria-hidden="true">☰</span>
+                  </button>
+
+                  {platformFilterOpen && (
+                    <div className="absolute right-0 mt-1 w-44 rounded border bg-white shadow-lg z-20 p-2 text-sm">
+                      {PLATFORM_OPTIONS.map((p) => (
+                        <label
+                          key={p.value}
+                          className="flex items-center gap-2 mb-1 last:mb-0"
+                        >
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={platformFilter.includes(p.value)}
+                            onChange={() => {
+                              setPlatformFilter((prev) =>
+                                prev.includes(p.value)
+                                  ? prev.filter((v) => v !== p.value)
+                                  : [...prev, p.value]
+                              );
+                            }}
+                          />
+                          <span>{p.label}</span>
+                        </label>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => setPlatformFilter([])}
+                        className="mt-2 w-full text-xs text-gray-600 underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+
 
         {viewMode === 'month' && (
           <select
@@ -1596,6 +1764,15 @@ return (
                             !v.feedback_resolved
                         ).length;
 
+                        const postPlatforms = Array.from(
+                          new Set(
+                            allVariations
+                              .filter((v) => v.post_id === post.id)
+                              .flatMap((v) => v.platforms || [])
+                              .filter(Boolean)
+                          )
+                        );
+
                         return (
                           <Draggable
                             key={post.id}
@@ -1614,11 +1791,37 @@ return (
                                 }}
                                 title={post.status || ''}
                                 onClick={() => openPostDetails(post.id)}
-                              >
-                                {post.post_name}
+                                >
+                                <div className="flex items-start justify-between gap-2">
+                                  <span>{post.post_name}</span>
+
+                                  {postPlatforms.length > 0 && (
+                                    <div className="flex flex-col gap-1">
+                                      {postPlatforms
+                                        .sort((a, b) =>
+                                          PLATFORM_OPTIONS.findIndex(o => o.value === a) -
+                                          PLATFORM_OPTIONS.findIndex(o => o.value === b)
+                                        )
+                                        .map((plat) => {
+                                          const cfg = PLATFORM_OPTIONS.find(o => o.value === plat)
+                                          const short = cfg?.short || plat[0] || '?'
+                                          return (
+                                            <span
+                                              key={plat}
+                                              className="inline-flex items-center justify-center rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] leading-none"
+                                            >
+                                              {short}
+                                            </span>
+                                          )
+                                        })}
+                                    </div>
+                                  )}
+                                </div>
+
 
                                 {/* 🔴 Feedback notification bubble */}
                                 {feedbackCount > 0 && (
+
                                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
                                     {feedbackCount}
                                   </span>
@@ -1846,7 +2049,10 @@ return (
     >
       <div className="flex items-center justify-between text-sm">
         <div>
-          <span className="font-medium">{v.platform}</span> — {v.test_version || "—"}
+          <span className="font-medium">
+            {(v.platforms && v.platforms.length ? v.platforms : ['—']).join(', ')}
+          </span>{' '}
+          — {v.test_version || "—"}<span className="font-medium">{v.platform}</span> — {v.test_version || "—"}
         </div>
 
         {/* Download icon button */}
@@ -1952,6 +2158,7 @@ return (
           setReplaceVariation(v);
           setShowUploadModal(true);
         }}
+        onPlatformsUpdated={handleVariationPlatformsChange}  // NEW
       />
 )}
 
