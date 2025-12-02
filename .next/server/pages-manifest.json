@@ -2,6 +2,6 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/las-aguas-mixing-form": "pages/las-aguas-mixing-form.js",
-  "/digital-strategy-form": "pages/digital-strategy-form.js"
+  "/digital-strategy-form": "pages/digital-strategy-form.js",
+  "/las-aguas-mixing-form": "pages/las-aguas-mixing-form.js"
 }

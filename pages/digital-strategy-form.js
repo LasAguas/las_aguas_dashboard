@@ -47,7 +47,9 @@ export default function DigitalStrategyLeadPage() {
   const [phone, setPhone] = useState("");
   const [socialLinks, setSocialLinks] = useState([""]);
   const [budget, setBudget] = useState(0); // 0–1500
+  const [epkMode, setEpkMode] = useState("link"); // "link" | "upload"
   const [epkLink, setEpkLink] = useState("");
+  const [epkFile, setEpkFile] = useState(null);
   const [helpText, setHelpText] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
@@ -60,7 +62,9 @@ export default function DigitalStrategyLeadPage() {
     setPhone("");
     setSocialLinks([""]);
     setBudget(0);
+    setEpkMode("link");
     setEpkLink("");
+    setEpkFile(null);
     setHelpText("");
   };
 
@@ -98,8 +102,12 @@ export default function DigitalStrategyLeadPage() {
       }
     });
 
-    if (epkLink && !isValidUrl(epkLink)) {
-      errors.epkLink = "Please enter a valid URL (starting with http/https).";
+    if (epkMode === "link" && epkLink && !isValidUrl(epkLink)) {
+    errors.epkLink = "Please enter a valid URL (starting with http/https).";
+    }
+
+    if (epkMode === "upload" && epkFile && epkFile.type !== "application/pdf") {
+    errors.epkFile = "EPK upload must be a PDF file.";
     }
 
     setFieldErrors(errors);
@@ -126,26 +134,56 @@ export default function DigitalStrategyLeadPage() {
 
     setSubmitting(true);
     try {
-      const nonEmptySocialLinks = socialLinks
-        .map((s) => s.trim())
-        .filter(Boolean);
+            const nonEmptySocialLinks = socialLinks
+            .map((s) => s.trim())
+            .filter(Boolean);
 
-      const payload = {
-        lead_type: "digital_strategy",
-        email: email.trim() || null,
-        phone: phone.trim() || null,
-        about_project: null,
-        budget_per_song: null,
-        ideal_release_date: null,
-        music_link: null,
-        social_links: nonEmptySocialLinks.length ? nonEmptySocialLinks : null,
-        monthly_marketing_budget: budget,
-        budget_tier: getBudgetTier(budget),
-        epk_url: epkLink.trim() || null,
-        notes: helpText.trim() || null,
-      };
+        let epkUrlToSave = null;
 
-      const { error } = await supabase.from("ad_leads_en").insert([payload]);
+        if (epkMode === "link" && epkLink.trim()) {
+            epkUrlToSave = epkLink.trim();
+        } else if (epkMode === "upload" && epkFile) {
+            const fileExt = epkFile.name.split(".").pop();
+            const fileName = `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}.${fileExt}`;
+            const filePath = `epk/${fileName}`;
+
+            const { data: uploadData, error: uploadError } = await supabase.storage
+            .from("epk")
+            .upload(filePath, epkFile);
+
+            if (uploadError) {
+            console.error("Error uploading EPK:", uploadError);
+            setFormError("Could not upload EPK PDF. Please try again.");
+            setSubmitting(false);
+            return;
+            }
+
+            const {
+            data: { publicUrl },
+            } = supabase.storage.from("epk").getPublicUrl(uploadData.path);
+
+            epkUrlToSave = publicUrl;
+        }
+
+        const payload = {
+            lead_type: "digital_strategy",
+            email: email.trim() || null,
+            phone: phone.trim() || null,
+            about_project: null,
+            budget_per_song: null,
+            ideal_release_date: null,
+            music_link: null,
+            social_links: nonEmptySocialLinks.length ? nonEmptySocialLinks : null,
+            monthly_marketing_budget: budget,
+            budget_tier: getBudgetTier(budget),
+            epk_url: epkUrlToSave,
+            notes: helpText.trim() || null,
+        };
+
+        const { error } = await supabase.from("ad_leads_en").insert([payload]);
+
       if (error) {
         console.error("Error inserting digital strategy lead:", error);
         setFormError("Something went wrong saving your details. Please try again.");
@@ -169,7 +207,7 @@ export default function DigitalStrategyLeadPage() {
       <div className="w-full max-w-xl bg-[#bbe1ac] p-6 md:p-8 rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-[#33296b]">
-            Digital Strategy Lead Form
+            Digital Strategy Form
           </h1>
         </div>
 
@@ -263,63 +301,146 @@ export default function DigitalStrategyLeadPage() {
           </div>
 
           {/* Monthly marketing budget slider */}
-          <div>
+            <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Monthly marketing budget (EUR)<span className="text-red-600">*</span>
+                Monthly marketing budget (EUR)<span className="text-red-600">*</span>
             </label>
             <div className="mt-2">
-              <input
-                type="range"
-                min={0}
-                max={1500}
-                step={5}
-                value={budget}
-                onChange={(e) => setBudget(Number(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-[#33296b] mt-1">
-                <span>0€</span>
-                <span>195€</span>
-                <span>277€</span>
-                <span>750€</span>
-                <span>1500€</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-sm text-[#33296b]">
-                <span>
-                  Selected: <strong>€{budget}</strong>/month
-                </span>
-              </div>
-              {tierLabel && (
-                <div className="mt-2 text-xs bg-white/60 border border-[#33296b]/30 rounded px-3 py-2 text-[#33296b]">
-                  {tierLabel}
-                </div>
-              )}
-              {fieldErrors.budget && (
-                <p className="mt-1 text-xs text-red-700">
-                  {fieldErrors.budget}
-                </p>
-              )}
-            </div>
-          </div>
+                <div className="relative">
+                <input
+                    type="range"
+                    min={0}
+                    max={1200}
+                    step={5}
+                    value={budget}
+                    onChange={(e) => setBudget(Number(e.target.value))}
+                    className="w-full"
+                />
 
-          {/* EPK */}
-          <div>
+                {/* Tick labels aligned to actual values on 0–1200 scale */}
+                <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 text-xs text-[#33296b]">
+                    {/* 0€ at 0% */}
+                    <span className="absolute left-0 -translate-x-1/2">0€</span>
+
+                    {/* 195€ at 195 / 1200 ≈ 16.25% */}
+                    <span
+                    className="absolute -translate-x-1/2"
+                    style={{ left: "16.25%" }}
+                    >
+                    195€
+                    </span>
+
+                    {/* 280€ at 280 / 1200 ≈ 23.3% */}
+                    <span
+                    className="absolute -translate-x-1/2"
+                    style={{ left: "23.3%" }}
+                    >
+                    280€
+                    </span>
+
+                    {/* 750€ at 750 / 1200 = 62.5% */}
+                    <span
+                    className="absolute -translate-x-1/2"
+                    style={{ left: "62.5%" }}
+                    >
+                    750€
+                    </span>
+
+                    {/* 1200€ at 100% */}
+                    <span className="absolute right-0 translate-x-1/2">1200€</span>
+                </div>
+                </div>
+
+                <div className="mt-6 flex items-center justify-between text-sm text-[#33296b]">
+                <span>
+                    Selected: <strong>€{budget}</strong>/month
+                </span>
+                </div>
+
+                {tierLabel && (
+                <div className="mt-2 text-xs bg-white/60 border border-[#33296b]/30 rounded px-3 py-2 text-[#33296b]">
+                    {tierLabel}
+                </div>
+                )}
+
+                {fieldErrors.budget && (
+                <p className="mt-1 text-xs text-red-700">
+                    {fieldErrors.budget}
+                </p>
+                )}
+            </div>
+            </div>
+
+
+                    {/* EPK */}
+                    <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              EPK (optional – PDF link)
+              EPK (optional – PDF upload or link)
             </label>
-            <input
-              type="url"
-              value={epkLink}
-              onChange={(e) => setEpkLink(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2"
-              placeholder="https://your-epk.com/presskit.pdf"
-            />
-            {fieldErrors.epkLink && (
-              <p className="mt-1 text-xs text-red-700">
-                {fieldErrors.epkLink}
-              </p>
+
+            <div className="flex gap-4 text-xs text-[#33296b] mb-2">
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  className="mr-1"
+                  value="link"
+                  checked={epkMode === "link"}
+                  onChange={() => setEpkMode("link")}
+                />
+                <span>Use link</span>
+              </label>
+              <label className="inline-flex items-center">
+                <input
+                  type="radio"
+                  className="mr-1"
+                  value="upload"
+                  checked={epkMode === "upload"}
+                  onChange={() => setEpkMode("upload")}
+                />
+                <span>Upload PDF</span>
+              </label>
+            </div>
+
+            {epkMode === "link" && (
+              <>
+                <input
+                  type="url"
+                  value={epkLink}
+                  onChange={(e) => setEpkLink(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2"
+                  placeholder="https://your-epk.com/presskit.pdf"
+                />
+                {fieldErrors.epkLink && (
+                  <p className="mt-1 text-xs text-red-700">
+                    {fieldErrors.epkLink}
+                  </p>
+                )}
+              </>
+            )}
+
+            {epkMode === "upload" && (
+              <>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) =>
+                    setEpkFile(
+                      e.target.files && e.target.files[0]
+                        ? e.target.files[0]
+                        : null
+                    )
+                  }
+                  className="mt-1 block w-full text-sm text-[#33296b]"
+                />
+                {fieldErrors.epkFile && (
+                  <p className="mt-1 text-xs text-red-700">
+                    {fieldErrors.epkFile}
+                  </p>
+                )}
+              </>
             )}
           </div>
+
 
           {/* What would you like help with */}
           <div>
