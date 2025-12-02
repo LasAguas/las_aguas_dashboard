@@ -3,7 +3,5 @@
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
   "/login": "pages/login.js",
-  "/api/deleteVariation": "pages/api/deleteVariation.js",
-  "/artist-dashboard": "pages/artist-dashboard.js",
-  "/": "pages/index.js"
+  "/artist-dashboard": "pages/artist-dashboard.js"
 }
