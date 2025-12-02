@@ -2,7 +2,8 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/": "pages/index.js",
-  "/las-aguas-mixing-form": "pages/las-aguas-mixing-form.js",
-  "/digital-strategy-form": "pages/digital-strategy-form.js"
+  "/login": "pages/login.js",
+  "/api/deleteVariation": "pages/api/deleteVariation.js",
+  "/artist-dashboard": "pages/artist-dashboard.js",
+  "/": "pages/index.js"
 }

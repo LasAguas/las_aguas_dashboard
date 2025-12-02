@@ -145,7 +145,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
           <div className="flex-1 flex flex-col">
             <div className="mb-4 text-sm">
               <p>
-                <strong>Platform:</strong> {variation.platform}
+                <strong>Platforms:</strong>{" "}
+                {(variation.platforms && variation.platforms.length
+                  ? variation.platforms.join(", ")
+                  : "—")}
               </p>
               <p>
                 <strong>Version:</strong> {variation.test_version || "N/A"}
@@ -192,7 +195,7 @@ function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
 
 
  const handleSave = async () => {
-   if (!file || !platform || !notes) return;
+   if (!file || !platform) return;
    setUploading(true);
 
 
@@ -249,7 +252,7 @@ function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
        .from('postvariations')
        .insert([{
          post_id: postId,
-         platform,
+         platforms: [platform], // wrap single selection into array
          file_name: fullFilePath,
          test_version: nextVersion,
          length_seconds: lengthSeconds,
@@ -741,7 +744,7 @@ async function openPostDetails(postId) {
       // 2) Fetch variations for that post (✅ now includes feedback)
       const { data: variations, error: varErr } = await supabase
         .from('postvariations')
-        .select('id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved')
+        .select('id, platforms, test_version, file_name, length_seconds, feedback, feedback_resolved')
         .eq('post_id', postId)
         .order('test_version', { ascending: true })
       if (varErr) throw varErr
@@ -943,8 +946,11 @@ return (
         setShowMediaPlayer(true)
       }}
     >
-      <div className="text-sm">
-        <span className="font-medium">{v.platform}</span> — {v.test_version || '—'}
+    <div className="text-sm">
+        <span className="font-medium">
+          {(v.platforms && v.platforms.length ? v.platforms.join(", ") : "—")}
+        </span>{" "}
+        — {v.test_version || "—"}
       </div>
       <div className="text-xs text-gray-600">
         {v.file_name || 'no file'} • {v.length_seconds ? `${v.length_seconds}s` : 'length n/a'}
