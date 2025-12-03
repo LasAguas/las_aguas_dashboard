@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "postinstall": "node scripts/fix-fraction.js"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
