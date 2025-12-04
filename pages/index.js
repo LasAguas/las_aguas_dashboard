@@ -1757,10 +1757,21 @@ return (
                     >
                       <div className="text-xs text-gray-500 mb-1">
                         {isNarrow
-                          ? `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}`
-                          : `${day.date.getDate().toString().padStart(2, '0')}/${(day.date.getMonth()+1).toString().padStart(2,'0')}/${day.date.getFullYear()}`
+                          ? `${day.date.toLocaleDateString(undefined, { weekday: "short" })} - ${day.date
+                              .getDate()
+                              .toString()
+                              .padStart(2, "0")}/${(day.date.getMonth() + 1)
+                              .toString()
+                              .padStart(2, "0")}`
+                          : `${day.date
+                              .getDate()
+                              .toString()
+                              .padStart(2, "0")}/${(day.date.getMonth() + 1)
+                              .toString()
+                              .padStart(2, "0")}/${day.date.getFullYear()}`
                         }
                       </div>
+
 
                       <div className="space-y-1">
                       {day.posts.map((post, index) => {

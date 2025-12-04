@@ -868,7 +868,10 @@ async function savePostName() {
                     }}
                   >
                     <div className="text-xs text-gray-500 mb-1">
-                      {day.date.getDate()}/{day.date.getMonth() + 1}
+                      {day.date.toLocaleDateString(undefined, { weekday: "short" })}{" "}
+                      -{" "}
+                      {day.date.getDate().toString().padStart(2, "0")}/
+                      {(day.date.getMonth() + 1).toString().padStart(2, "0")}
                     </div>
                     <div className="space-y-1">
                     {[...posts

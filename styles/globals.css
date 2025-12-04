@@ -26,3 +26,63 @@ font-weight: 400; /* Normal weight */
 font-style: normal;
 font-display: swap; /* Prevents invisible text during load */
 }
+
+/* Mobile calendar layout overrides */
+@media (max-width: 768px) {
+  /* 1. Stack the *day cells* vertically (but keep week cards separated) */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7:not(.text-xs) {
+    /* body grid (not the weekday header row) */
+    grid-template-columns: 1fr;
+  }
+
+  /* 2. Make each day look like its own row, with clear separation */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7:not(.text-xs) > div {
+    /* remove left borders from desktop grid */
+    border-left-width: 0;
+    /* add a top border between stacked days */
+    border-top-width: 1px;
+    /* thinner vertical padding overall */
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+    /* let content decide height instead of fixed min-height */
+    min-height: auto;
+  }
+
+  /* (optional) tighten weekday labels on small screens too */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7.text-xs > div {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
+}
+/* MOBILE: stack days, hide header, thinner empty days */
+@media (max-width: 768px) {
+  /* Hide the weekday header row (Mon Tue Wed...) */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7.text-xs {
+    display: none !important;
+  }
+
+  /* Stack day cells vertically */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7:not(.text-xs) {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Day cells (all 7 days in the body grid) */
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7:not(.text-xs) > div {
+    min-height: auto;              /* let content define height */
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-left-width: 0;          /* no vertical separators */
+    border-top-width: 1px;         /* line between stacked days */
+  }
+
+  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
+    > .grid.grid-cols-7:not(.text-xs) > div:first-child {
+    border-top-width: 0;           /* no top line on first */
+  }
+}
