@@ -421,16 +421,25 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
             />        
           )}
           {isVideo && (
-            <video
-              controls
-              style={{
-                width: `${displayWidth}px`,
-                height: `${displayHeight}px`,
-                objectFit: "contain",
-              }}
-            >
-              <source src={mediaUrl} type="video/mp4" />
-            </video>
+            <div style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              width: "100%",
+            }}>
+              <video
+                controls
+                style={{
+                  maxHeight: "70vh",
+                  maxWidth: "70vw",
+                  width: "auto",
+                  height: "auto",
+                  objectFit: "contain",
+                }}
+              >
+                <source src={mediaUrl} type="video/mp4" />
+              </video>
+            </div>
           )}
           {!isImage && !isVideo && (
             <div className="text-white p-4">
@@ -969,7 +978,7 @@ function ConfirmDeleteModal({ open, onCancel, onConfirm, deleting }) {
 
 export default function Home() {
 const [artists, setArtists] = useState([])
-const [selectedArtistId, setSelectedArtistId] = useState('6') // default artist id
+const [selectedArtistId, setSelectedArtistId] = useState('8') // default artist id
 const [weeks, setWeeks] = useState([])
 const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
