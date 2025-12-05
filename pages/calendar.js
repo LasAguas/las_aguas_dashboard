@@ -519,7 +519,11 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
           <div className="md:w-2/3">
             <div
               className="bg-black rounded-md flex items-center justify-center relative overflow-hidden"
-              style={{ minHeight: "240px", maxHeight: "70vh" }}
+              style={
+                hasCarousel
+                  ? { height: "70vh", maxHeight: "70vh" }                  // fixed for carousels
+                  : { minHeight: "240px", maxHeight: "70vh" }              // flexible for single media
+              }
               onTouchStart={handleTouchStart}
               onTouchEnd={handleTouchEnd}
             >
@@ -780,6 +784,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, onClose, onSave }) {
   const [file, setFile] = useState(null);
+  const [extraFiles, setExtraFiles] = useState([]);   // for carousel images
   const [platforms, setPlatforms] = useState([]); // multi-select
   const [notes, setNotes] = useState('');
   const [variationDate, setVariationDate] = useState(defaultDate);
@@ -796,12 +801,38 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   );
   const [savingSnippet, setSavingSnippet] = useState(false);
   const audioRef = useRef(null);
+  const [snippetDuration, setSnippetDuration] = useState(15); // needed by handlePreviewSnippet
 
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (!files.length) {
+      setFile(null);
+      setExtraFiles([]);
+      return;
     }
-  };
+  
+    const first = files[0];
+    const baseType = first.type.split("/")[0]; // "image" or "video"
+  
+    // Disallow mixing images and videos
+    if (files.some((f) => f.type.split("/")[0] !== baseType)) {
+      alert("Please select only images OR only a single video.");
+      setFile(null);
+      setExtraFiles([]);
+      return;
+    }
+  
+    // Only one video allowed
+    if (baseType === "video" && files.length > 1) {
+      alert("Video variations support a single file only.");
+      setFile(first);
+      setExtraFiles([]);
+      return;
+    }
+  
+    setFile(first);
+    setExtraFiles(files.slice(1)); // remaining images become carousel frames
+  };  
 
   const handleAudioChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -836,16 +867,20 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
     if (mode !== 'replace' && (!platforms || platforms.length === 0)) return;
     setUploading(true);
 
+    const mediaFiles = [file, ...extraFiles];
+    const baseType = file.type.split("/")[0];
+    const isImage = baseType === "image";
+
     try {
       // 🔢 Determine which post to attach to (replace uses the variation's post)
       const targetPostId = mode === 'replace' && variation ? variation.post_id : postId;
 
-      // ⏱️ Compute length if video
+      // ⏱️ Compute length if video (based on first file)
       let lengthSeconds = null;
-      if (file.type.startsWith('video/')) {
+      if (file.type.startsWith("video/")) {
         lengthSeconds = await new Promise((resolve) => {
-          const video = document.createElement('video');
-          video.preload = 'metadata';
+          const video = document.createElement("video");
+          video.preload = "metadata";
           video.onloadedmetadata = function () {
             window.URL.revokeObjectURL(video.src);
             resolve(Math.round(video.duration));
@@ -854,14 +889,21 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
         });
       }
 
-      // ☁️ Upload main media (upsert so we can replace files cleanly)
-      const filePath = `${artistId}/${targetPostId}/${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('post-variations')
-        .upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
+      // ☁️ Upload main media (single or carousel)
+      const uploadedPaths = [];
+      for (const f of mediaFiles) {
+        const uniqueName = `${Date.now()}-${f.name}`;
+        const path = `${artistId}/${targetPostId}/${uniqueName}`;
+        const { error: uploadError } = await supabase.storage
+          .from("post-variations")
+          .upload(path, f, { upsert: true });
+        if (uploadError) throw uploadError;
+        uploadedPaths.push(path);
+      }
 
-      const fullFilePath = `${artistId}/${targetPostId}/${file.name}`;
+      const fullFilePath = uploadedPaths[0];
+      const carouselPaths = isImage && uploadedPaths.length > 1 ? uploadedPaths : null;
+
 
       // ☁️ Upload optional audio (mp3) for snippet
       let audioPath = null;
@@ -881,16 +923,17 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           .update({
             file_name: fullFilePath,
             length_seconds: lengthSeconds,
+            carousel_files: carouselPaths,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
-                  audio_snippet_start: Number(snippetStart) || 0,
-                  audio_snippet_duration: Number(snippetDuration) || null,
+                  audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),
+              : {}),      
             ...(platforms && platforms.length ? { platforms } : {}),
           })
           .eq('id', variation.id);
+      
         if (updateError) throw updateError;
       } else {
         // ➕ NEW variation (existing behavior + audio fields)
@@ -925,13 +968,13 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             length_seconds: lengthSeconds,
             variation_post_date: variationDate,
             notes,
+            carousel_files: carouselPaths,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
-                  audio_snippet_start: Number(snippetStart) || 0,
-                  audio_snippet_duration: Number(snippetDuration) || null,
+                  audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),
+              : {}),        
           }]);
 
         if (insertError) throw insertError;
@@ -958,12 +1001,19 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           <label className="block text-sm font-medium mb-1">Select Media File</label>
           <input
             type="file"
+            multiple
             accept="image/*,video/*"
             onChange={handleFileChange}
             className="w-full text-sm"
             disabled={uploading}
           />
-          {file && <p className="text-xs text-gray-500 mt-1">{file.name}</p>}
+          {file && (
+            <p className="text-xs text-gray-500 mt-1">
+              {file.name}
+              {extraFiles.length > 0 && ` + ${extraFiles.length} more`}
+            </p>
+          )}
+
         </div>
 
         {/* Audio upload + snippet controls (NEW) */}
@@ -1900,8 +1950,9 @@ async function openPostDetails(postId) {
         feedback,
         feedback_resolved,
         audio_file_name,
-        audio_start_seconds
-      `)
+        audio_start_seconds,
+        carousel_files
+      `)    
       .eq('post_id', postId)
       .order('test_version', { ascending: true })
       
