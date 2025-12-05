@@ -40,10 +40,10 @@ export default function LoginPage() {
             if (profile.role === "artist") {
               router.push("/artist-dashboard")
             } else if (profile.role === "las_aguas") {
-              router.push("/")
+              router.push("/calendar")
             } else {
               // fallback if role is missing/unexpected
-              router.push("/")
+              router.push("/calendar")
             }
           }
         }
