@@ -9,6 +9,16 @@ import Link from "next/link";
 const pad = (n) => String(n).padStart(2, '0')
 const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
+const PLATFORM_OPTIONS = [
+  { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
+  { value: 'TikTok',      label: 'TikTok',      short: 'TT' },
+  { value: 'YouTube',     label: 'YouTube',     short: 'YT' },
+  { value: 'Mailing List', label: 'Mailing List', short: 'ML' },
+];
+
+// Move a post from one day ...
+
+
 // Move a post from one day (sourceYMD) to another (destYMD) inside weeks[]
 function movePostInWeeks(weeksArr, postId, sourceYMD, destYMD, destIndex = 0) {
   const clone = weeksArr.map(w => ({
@@ -548,6 +558,7 @@ const [selectedArtistId, setSelectedArtistId] = useState('') //This one too
 const [weeks, setWeeks] = useState([])
 const [rangeLabel, setRangeLabel] = useState('')
 const [errorMsg, setErrorMsg] = useState('')
+const [allVariations, setAllVariations] = useState([])
 
 // Checking width for dates
 const [isNarrow, setIsNarrow] = useState(false);
@@ -696,6 +707,24 @@ useEffect(() => {
       return
     }
 
+    // 🔄 Fetch variations for these posts so we can show platform badges
+    const postIds = (posts || []).map((p) => p.id);
+    let variations = [];
+    if (postIds.length) {
+      const { data: varData, error: varError } = await supabase
+        .from('postvariations')
+        .select('id, post_id, platforms')
+        .in('post_id', postIds);
+
+      if (varError) {
+        console.error('Supabase error (variations):', varError);
+      } else {
+        variations = varData;
+      }
+    }
+
+    setAllVariations(variations || []);
+
     // Build week rows across range
     const startDate = new Date(from)
     const endDate = new Date(to)
@@ -840,18 +869,53 @@ return (
             </div>
 
             <div className="space-y-1">
-              {day.posts.map((post) => (
-                <div
-                  key={post.id}
-                  className="text-xs px-2 py-1 rounded text-white cursor-pointer"
-                  style={{ backgroundColor: statusColor(post.status) }}
-                  title={post.status || ''}
-                  onClick={() => openPostDetails(post.id)}
-                >
-                  {post.post_name}
-                </div>
-              ))}
+              {day.posts.map((post) => {
+                const postPlatforms = Array.from(
+                  new Set(
+                    allVariations
+                      .filter((v) => v.post_id === post.id)
+                      .flatMap((v) => v.platforms || [])
+                      .filter(Boolean)
+                  )
+                );
 
+                return (
+                  <div
+                    key={post.id}
+                    className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                    style={{ backgroundColor: statusColor(post.status) }}
+                    title={post.status || ''}
+                    onClick={() => openPostDetails(post.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span>{post.post_name}</span>
+
+                      {postPlatforms.length > 0 && (
+                        <div className="flex flex-col gap-1">
+                          {postPlatforms
+                            .sort(
+                              (a, b) =>
+                                PLATFORM_OPTIONS.findIndex((o) => o.value === a) -
+                                PLATFORM_OPTIONS.findIndex((o) => o.value === b)
+                            )
+                            .map((plat) => {
+                              const cfg = PLATFORM_OPTIONS.find((o) => o.value === plat);
+                              const short = cfg?.short || plat[0] || '?';
+                              return (
+                                <span
+                                  key={plat}
+                                  className="inline-flex items-center rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] leading-none"
+                                >
+                                  {short}
+                                </span>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
