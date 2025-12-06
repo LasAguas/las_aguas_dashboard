@@ -20,205 +20,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl || "", supabaseAnonKey || "");
 
-// Media Player Function
-function MediaPlayer({ variation, onClose, onRefreshPost }) {
-  const [mediaUrl, setMediaUrl] = useState(null);
-  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-
-  useEffect(() => {
-    console.log("Variation received:", variation);
-    if (!variation) return;
-
-    const fetchSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error) console.error("Error fetching session:", error);
-      else console.log("Supabase session:", session);
-    };
-    fetchSession();
-
-    if (!variation?.file_name) return;
-
-    const { data, error } = supabase.storage
-      .from("post-variations")
-      .getPublicUrl(variation.file_name);
-
-    if (error) {
-      console.error("Error fetching media URL:", error);
-    } else {
-      console.log("Media URL:", data.publicUrl);
-      setMediaUrl(data.publicUrl);
-
-      const media = variation.file_name.match(/\.(jpe?g|png|gif|webp)$/i)
-        ? new Image()
-        : document.createElement("video");
-
-      media.onloadedmetadata = function () {
-        setDimensions({
-          width: this.naturalWidth || this.videoWidth,
-          height: this.naturalHeight || this.videoHeight,
-        });
-        console.log("Media dimensions set:", this.naturalWidth || this.videoWidth, this.naturalHeight || this.videoHeight);
-      };
-      media.src = data.publicUrl;
-    }
-  }, [variation]);
-
-  if (!variation || !mediaUrl) return null;
-
-  const isImage = /\.(jpe?g|png|gif|webp)$/i.test(variation.file_name || "");
-  const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(variation.file_name || "");
-
-  const maxViewportWidth = window.innerWidth * 0.9;
-  const maxViewportHeight = window.innerHeight * 0.8;
-  let displayWidth = dimensions.width;
-  let displayHeight = dimensions.height;
-
-  if (displayWidth < 100) displayWidth = 100;
-  if (displayHeight < 100) displayHeight = 100;
-
-  if (dimensions.width > maxViewportWidth) {
-    const scale = maxViewportWidth / dimensions.width;
-    displayWidth = maxViewportWidth;
-    displayHeight = dimensions.height * scale;
-  }
-
-  if (displayHeight > maxViewportHeight) {
-    const scale = maxViewportHeight / displayHeight;
-    displayHeight = maxViewportHeight;
-    displayWidth = displayWidth * scale;
-  }
-
-  const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this variation?")) return;
-    try {
-      const payload = {
-        path: variation.file_name,
-        variationId: variation.id,
-      };
-
-      const res = await fetch("/api/deleteVariation", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await res.json();
-      if (!res.ok) {
-        console.error("Server delete failed:", result);
-        alert(result.error || "Failed to delete variation.");
-        return;
-      }
-
-      if (onClose) onClose();
-      if (onRefreshPost) onRefreshPost();
-    } catch (err) {
-      console.error("Error deleting variation:", err);
-      alert("Failed to delete variation. Check console for details.");
-    }
-  };
-
-  // DEBUG
-  console.log("Feedback value:", variation.feedback);
-  const hasFeedback = Boolean(variation.feedback && variation.feedback.trim() !== "");
-  console.log("Has feedback?", hasFeedback);
-
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div
-        className="relative bg-white rounded-lg p-6"
-        style={{
-          width: `${displayWidth}px`,
-          maxWidth: "90vw",
-          minWidth: "100px",
-          width: isImage ? "60vw" : `${displayWidth}px`,
-          maxWidth: isImage ? "60vw" : "90vw",
-          minWidth: "100px",
-        }}
-      >
-        <button
-          onClick={onClose}
-          className="absolute top-2 right-2 text-gray-500 hover:text-white bg-black/50 rounded-full p-1"
-        >
-          ✕
-        </button>
-
-        <div className="overflow-hidden rounded-lg">
-          {isImage && (
-            <img
-              src={mediaUrl}
-              alt={variation.file_name}
-              style={{
-                width: "100%",         // now fill the parent (60vw)
-                maxHeight: "70vh",     // keep it within viewport vertically
-                objectFit: "contain",
-              }}
-            />        
-          )}
-          {isVideo && (
-            <video
-              controls
-              style={{
-                width: `${displayWidth}px`,
-                height: `${displayHeight}px`,
-                objectFit: "contain",
-              }}
-            >
-              <source src={mediaUrl} type="video/mp4" />
-            </video>
-          )}
-          {!isImage && !isVideo && (
-            <div className="text-white p-4">
-              Unsupported file type: {variation.file_name}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4 text-sm">
-          <p><strong>Platform:</strong> {variation.platform}</p>
-          <p><strong>Version:</strong> {variation.test_version || 'N/A'}</p>
-        </div>
-
-        {/* Buttons */}
-        <div className="mt-4 flex gap-2">
-          <button
-            onClick={handleDelete}
-            className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition-colors"
-          >
-            Delete Variation
-          </button>
-
-          <button
-            onClick={() => setFeedbackModalOpen(true)}
-            className={`flex-1 py-2 rounded text-white transition-colors ${
-              hasFeedback ? "bg-green-600 hover:bg-green-700" : "bg-gray-400"
-            }`}
-            disabled={!hasFeedback}
-          >
-            Show Feedback
-          </button>
-        </div>
-
-        {/* Feedback Modal */}
-        {feedbackModalOpen && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60">
-            <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
-              <button
-                onClick={() => setFeedbackModalOpen(false)}
-                className="absolute top-2 right-2 text-gray-500 hover:text-black p-1 rounded-full"
-              >
-                ✕
-              </button>
-              <h3 className="text-lg font-semibold mb-4">Feedback</h3>
-              <p className="whitespace-pre-wrap">{variation.feedback}</p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // --- Platform labels/colors ---
 const PLATFORM_LABELS = {
   spotify: "Spotify",
@@ -241,6 +42,14 @@ const PLATFORM_COLORS = {
   Facebook: "#1877F2",
   Bandcamp: "#629AA9",
 };
+
+const navItems = [
+  { href: "/calendar", label: "Calendar" },
+  { href: "/edit-next", label: "Edit Next" },
+  { href: "/leads", label: "Leads" },
+  { href: "/stats-view", label: "Stats" },
+  { href: "/menu", label: "Home" },
+];
 
 // --- Helpers ---
 const toNum = (v) => (v === null || v === undefined ? null : Number(v));
@@ -452,17 +261,58 @@ export default function StatsView() {
     () => buildFollowerGrowthData(snapshots),
     [snapshots]
   );
+  
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="p-6 space-y-6">
-      <Link href="/">
-        <button className="absolute top-4 right-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
-          View Calendar
-        </button>
-      </Link>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Stats Dashboard</h1>
+    <div className="p-6 space-y-6 bg-[#a89ee4] min-h-screen">
+      {/* Header bar (same as audio-database) */}
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-[#33286a]">
+          Stats Dashboard
+        </h1>
+
+        {/* Menu bubble */}
+        <div className="relative">
+          <button
+            type="button"
+            className="rounded-full bg-[#bbe1ac] shadow-lg border border-white p-2 flex flex-col justify-center items-center"
+            onClick={() => setMenuOpen(prev => !prev)}
+          >
+            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+            <span className="block w-3 h-0.5 bg-[#33286a]" />
+          </button>
+
+          {menuOpen && (
+            <aside className="absolute right-0 top-10 z-40 w-56 bg-[#bbe1ac] rounded-2xl shadow-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold">Menu</h2>
+                <button
+                  type="button"
+                  className="text-xs text-[#33286a]"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <ul className="space-y-2">
+                {navItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="block w-full rounded-lg bg-[#eef8ea] px-3 py-2 text-sm font-medium hover:bg-white hover:shadow"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          )}
+        </div>
       </div>
+
 
       {/* Artist selector */}
       <div className="flex items-center gap-3">

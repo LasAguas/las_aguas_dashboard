@@ -389,12 +389,16 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
 
         <div className="mt-4 text-sm">
           <p>
-            <strong>Platform:</strong> {variation.platform}
+            <strong>Platforms:</strong>{" "}
+            {Array.isArray(variation.platforms) && variation.platforms.length
+              ? variation.platforms.join(", ")
+              : "—"}
           </p>
           <p>
             <strong>Version:</strong> {variation.test_version || "N/A"}
           </p>
         </div>
+
 
         {/* --- Buttons --- */}
         <div className="mt-4 flex gap-2">
@@ -557,10 +561,25 @@ export default function ThisWeek() {
   const [showMediaPlayer, setShowMediaPlayer] = useState(false);
   const [selectedVariation, setSelectedVariation] = useState(null);
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navItems = [
+    {
+      href: "https://supabase.com/dashboard/project/gtccctajvobfvhlonaot/editor/17407?schema=public",
+      label: "Supabase",
+    },
+    { href: "/calendar", label: "Calendar" },
+    { href: "/edit-next", label: "Edit Next" },
+    { href: "/leads", label: "Leads" },
+    { href: "/stats-view", label: "Stats" },
+    { href: "/audio-database", label: "Audio DB" },
+    { href: "/menu", label: "Home" },
+  ];
+  
+
   // Inline post-name editing (ThisWeek)
-const [editingName, setEditingName] = useState(false);
-const [nameDraft, setNameDraft] = useState('');
-const [savingName, setSavingName] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
 function startEditingName() {
   setNameDraft(postDetails?.post?.post_name || '');
@@ -758,10 +777,21 @@ async function savePostName() {
       // 2️⃣ Fetch all variations for that post
       const { data: variations, error: varErr } = await supabase
         .from("postvariations")
-        .select("id, platform, test_version, file_name, length_seconds, feedback, feedback_resolved")
+        .select(`
+          id,
+          platforms,
+          test_version,
+          file_name,
+          length_seconds,
+          feedback,
+          feedback_resolved,
+          audio_file_name,
+          audio_start_seconds,
+          carousel_files
+        `)
         .eq("post_id", postId)
         .order("test_version", { ascending: true });
-      if (varErr) throw varErr;
+      if (varErr) throw varErr; 
   
       // 3️⃣ Set all the fetched data into state
       setPostDetails({
@@ -827,19 +857,87 @@ async function savePostName() {
 
   return (
     <div className="p-6">
-      <div className="absolute top-4 right-4 flex space-x-2">
-        <Link href="/calendar">
-          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
-            Back to Calendar
+      <div className="absolute top-4 right-4 flex items-center space-x-2">
+          <Link href="/calendar">
+            <button className="px-4 py-2 bg-[#a89ee4] rounded hover:bg-[#bfb7f2] shadow-md">
+              Back to Calendar
+            </button>
+          </Link>
+
+          <button
+            onClick={() => setShowNextWeek(!showNextWeek)}
+            className="px-4 py-2 bg-[#a89ee4] rounded hover:bg-[#bfb7f2] shadow-md"
+          >
+            {showNextWeek ? "Hide Coming Weeks" : "Show Coming Weeks"}
           </button>
-        </Link>
-        <button
-          onClick={() => setShowNextWeek(!showNextWeek)}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
-        >
-          {showNextWeek ? "Hide Coming Weeks" : "Show Coming Weeks"}
-        </button>
-      </div>
+
+          {/* Menu bubble – same style as calendar, purple */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              aria-label="Open menu"
+              className="
+                rounded-full 
+                bg-[#a89ee4]
+                shadow-lg 
+                border border-white
+                p-3
+                flex flex-col justify-center items-center
+                hover:bg-[#bfb7f2]
+                transition
+              "
+            >
+              <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+              <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+              <span className="block w-3 h-0.5 bg-[#33286a]" />
+            </button>
+
+            {menuOpen && (
+              <aside
+                className="
+                  absolute right-0 top-14 z-40
+                  w-64
+                  bg-[#a89ee4]
+                  rounded-2xl 
+                  shadow-lg 
+                  p-4
+                "
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-[#33286a]">Menu</h2>
+                  <button
+                    type="button"
+                    className="text-sm text-[#33286a]"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <ul className="space-y-2">
+                  {navItems.map((item) => (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        className="
+                          block w-full rounded-lg 
+                          bg-[#dcd4fa]
+                          px-3 py-2 text-sm font-medium 
+                          text-[#33286a]
+                          hover:bg-white 
+                          hover:shadow
+                          transition
+                        "
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            )}
+          </div>
+        </div>
 
       <h1 className="text-2xl font-bold mb-4">This Week’s Posts</h1>
       {error && <div className="text-red-600 mb-4">{error}</div>}

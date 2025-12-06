@@ -2,56 +2,96 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/router";
-import { supabase } from "../lib/supabaseClient";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { useRouter } from "next/router";
+import { supabase } from "../lib/supabaseClient";
 
-// --- helpers ---
+// --- helpers (copied pattern from menu.js) ---
 const pad = (n) => String(n).padStart(2, "0");
 const toYMD = (d) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 const stripTime = (date) => {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  };
-
-const PLATFORM_OPTIONS = [
-  { value: "Instagram",   label: "Instagram",   short: "IG" },
-  { value: "TikTok",      label: "TikTok",      short: "TT" },
-  { value: "YouTube",     label: "YouTube",     short: "YT" },
-  { value: "Mailing List", label: "Mailing List", short: "ML" },
-];
-
-const STATUS_OPTIONS = [
-  "not planned",
-  "planned",
-  "assets obtained",
-  "uploaded",
-  "ready",
-  "posted",
-];
-
-// Higher number = more "ready"
-const STATUS_ORDER = {
-    idea: 0,
-    draft: 1,
-    "in progress": 2,
-    scheduled: 3,
-    ready: 4,
-  };
-
-function startOfWeekMonday(date) {
   const d = new Date(date);
-  const day = d.getDay() || 7; // Sunday -> 7
-  if (day !== 1) d.setDate(d.getDate() - (day - 1));
   d.setHours(0, 0, 0, 0);
   return d;
+};
+
+const PLATFORM_OPTIONS = [
+    { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
+    { value: 'TikTok',      label: 'TikTok',      short: 'TT' },
+    { value: 'YouTube',     label: 'YouTube',     short: 'YT' },
+    { value: 'Mailing List', label: 'Mailing List', short: 'ML' },
+  ];
+
+const STATUS_OPTIONS = [
+"not planned",
+"planned",
+"assets obtained",
+"uploaded",
+"ready",
+"posted",
+];
+
+// Spreadsheet-driven value table
+// Rows: status; Columns: days-from-now buckets
+// Only buckets with numbers in the sheet are included; "Not relevant" => ignored
+const STATUS_VALUE_TABLE = {
+  "not planned": {
+    "0-2": 1,
+    "3-4": 2,
+    "5-8": 4,
+    "9-14": 9,
+    "15-21": 12,
+  },
+  planned: {
+    "0-2": 2,
+    "3-4": 3,
+    "5-8": 5,
+    "9-14": 10,
+    "15-21": 13,
+  },
+  "assets obtained": {
+    "0-2": 6,
+    "3-4": 7,
+    "5-8": 8,
+    "9-14": 11,
+    "15-21": 14,
+  },
+  // uploaded / ready / posted => all "Not relevant" in the sheet
+};
+
+function getBucketKey(daysFromNow) {
+  // Treat overdue posts as 0 days away (0–2 bucket)
+  const d = daysFromNow < 0 ? 0 : daysFromNow;
+
+  if (d <= 2) return "0-2";
+  if (d <= 4) return "3-4";
+  if (d <= 8) return "5-8";
+  if (d <= 14) return "9-14";
+  if (d <= 21) return "15-21";
+  // "more than 21 days from now" is "Not relevant" for every status in your table
+  return null;
 }
 
-// Media Player Function
+function computeBaseValue(post, today) {
+  const statusKey = String(post.status || "").toLowerCase();
+  const row = STATUS_VALUE_TABLE[statusKey];
+  if (!row) return null;
+
+  const postDate = stripTime(post.post_date);
+  const msDiff = postDate.getTime() - today.getTime();
+  const daysFromNow = Math.round(msDiff / (1000 * 60 * 60 * 24));
+
+  const bucket = getBucketKey(daysFromNow);
+  if (!bucket) return null;
+
+  const v = row[bucket];
+  if (typeof v !== "number") return null;
+  return v;
+}
+
 function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, onPlatformsUpdated }) {
   const [mediaUrls, setMediaUrls] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -637,20 +677,18 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   );
 }
 
-// Make filenames safe for Supabase Storage keys
 function makeStorageSafeName(name) {
-  return name
-    // remove accents/diacritics (é, ç, etc.)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    // replace anything not letter/number/.-_ with a dash
-    .replace(/[^a-zA-Z0-9.\-_]+/g, "-")
-    // collapse multiple dashes
-    .replace(/-+/g, "-")
-    // trim leading/trailing dashes
-    .replace(/^-|-$/g, "");
-}
-
+    return name
+      // remove accents/diacritics (é, ç, etc.)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      // replace anything not letter/number/.-_ with a dash
+      .replace(/[^a-zA-Z0-9.\-_]+/g, "-")
+      // collapse multiple dashes
+      .replace(/-+/g, "-")
+      // trim leading/trailing dashes
+      .replace(/^-|-$/g, "");
+  }
 
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, onClose, onSave }) {
@@ -813,20 +851,19 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
       }
 
       // ☁️ Upload main media (single or carousel)
-      const uploadedPaths = [];
-      for (const f of mediaFiles) {
-        // sanitize the original filename before using it in the storage key
-        const safeBaseName = makeStorageSafeName(f.name);
-        const uniqueName = `${Date.now()}-${safeBaseName}`;
-        const path = `${artistId}/${targetPostId}/${uniqueName}`;
-        const { error: uploadError } = await supabase.storage
-          .from("post-variations")
-          .upload(path, f, { upsert: true });
-        if (uploadError) throw uploadError;
-        uploadedPaths.push(path);
-      }
-
-
+        const uploadedPaths = [];
+        for (const f of mediaFiles) {
+            // sanitize the original filename before using it in the storage key
+            const safeBaseName = makeStorageSafeName(f.name);
+            const uniqueName = `${Date.now()}-${safeBaseName}`;
+            const path = `${artistId}/${targetPostId}/${uniqueName}`;
+            const { error: uploadError } = await supabase.storage
+            .from("post-variations")
+            .upload(path, f, { upsert: true });
+            if (uploadError) throw uploadError;
+            uploadedPaths.push(path);
+        }
+      
       const fullFilePath = uploadedPaths[0];
       const carouselPaths = isImage && uploadedPaths.length > 1 ? uploadedPaths : null;
 
@@ -1105,106 +1142,42 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   );
 }
 
-export default function MenuPage() {
-  const [notifications, setNotifications] = useState([]);
-  const [artistsById, setArtistsById] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [selectedPost, setSelectedPost] = useState(null);
+export default function EditNextPage() {
+    const [posts, setPosts] = useState([]);
+    const [artistsById, setArtistsById] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState("");
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [selectedPost, setSelectedPost] = useState(null);
+    const [selectedPostId, setSelectedPostId] = useState(null);
+    const [selectedArtistId, setSelectedArtistId] = useState(null); 
 
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [updateError, setUpdateError] = useState("");
-  const [postDetails, setPostDetails] = useState(null);
-  const [postLoading, setPostLoading] = useState(false);
-  const [postError, setPostError] = useState("");
+    const router = useRouter();
+    const [updatingStatus, setUpdatingStatus] = useState(false);
+    const [updateError, setUpdateError] = useState("");
 
-  // NEW: media player + upload modal
-  const [showMediaPlayer, setShowMediaPlayer] = useState(false);
-  const [selectedVariation, setSelectedVariation] = useState(null);
+  // For post details + variations (like calendar Post Details modal)
+    const [postDetails, setPostDetails] = useState(null); // { post, variations, captions? }
+    const [postLoading, setPostLoading] = useState(false);
+    const [postError, setPostError] = useState("");
 
-  const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadMode, setUploadMode] = useState("new"); // 'new' | 'replace'
-  const [replaceVariation, setReplaceVariation] = useState(null);
+    // For media player + upload modal
+    const [showMediaPlayer, setShowMediaPlayer] = useState(false);
+    const [selectedVariation, setSelectedVariation] = useState(null);
 
-  const [selectedPostId, setSelectedPostId] = useState(null);
-  const [selectedArtistId, setSelectedArtistId] = useState(null);
+    const [showUploadModal, setShowUploadModal] = useState(false);
+    const [uploadMode, setUploadMode] = useState("new"); // 'new' | 'replace'
+    const [replaceVariation, setReplaceVariation] = useState(null);
 
-  const router = useRouter();
 
-  async function loadPostDetails(postId) {
-    if (!postId) return;
-    setPostLoading(true);
-    setPostError("");
-    try {
-      // 1) load post
-      const { data: post, error: postErr } = await supabase
-        .from("posts")
-        .select("*")
-        .eq("id", postId)
-        .single();
-  
-      if (postErr) throw postErr;
-  
-      // 2) load variations
-      const { data: variations, error: varErr } = await supabase
-        .from("postvariations")
-        .select("*")
-        .eq("post_id", postId)
-        .order("test_version", { ascending: true });
-  
-      if (varErr) throw varErr;
-  
-      setPostDetails({
-        post,
-        variations: variations || [],
-        captions: {
-          a: post.caption_a,
-          b: post.caption_b,
-        },
-      });
-    } catch (e) {
-      console.error("Error loading post details:", e);
-      setPostError("Could not load post details");
-    } finally {
-      setPostLoading(false);
-    }
-  }
-  
-  async function updatePostStatus(postId, newStatus) {
-    if (!postId) return;
-  
-    setUpdatingStatus(true);
-    setUpdateError("");
-  
-    try {
-      const { error } = await supabase
-        .from("posts")
-        .update({ status: newStatus })
-        .eq("id", postId);
-  
-      if (error) throw error;
-  
-      // Update the modal details
-      setPostDetails((prev) =>
-        prev && prev.post?.id === postId
-          ? { ...prev, post: { ...prev.post, status: newStatus } }
-          : prev
-      );
-  
-      // Update the notifications list shown in the menu cards
-      setNotifications((prev) =>
-        (prev || []).map((p) =>
-          p.id === postId ? { ...p, status: newStatus } : p
-        )
-      );
-    } catch (err) {
-      console.error("Error updating status:", err);
-      setUpdateError("Failed to update status. See console for details.");
-    } finally {
-      setUpdatingStatus(false);
-    }
-  }
+  const navItems = [
+    { href: "/calendar", label: "Calendar" },
+    { href: "/edit-next", label: "Edit Next" },
+    { href: "/leads", label: "Leads" },
+    { href: "/stats-view", label: "Stats" },
+    { href: "/audio-database", label: "Audio Database" },
+    { href: "/menu", label: "Home" },
+  ];
 
   useEffect(() => {
     async function loadData() {
@@ -1212,37 +1185,27 @@ export default function MenuPage() {
         setLoading(true);
         setErrorMsg("");
 
-        // --- date range: remaining days of this week + full next week (Mon-Sun) ---
-        const today = new Date();
-        const weekStart = startOfWeekMonday(today);
+        const today = stripTime(new Date());
+        const from = toYMD(today);
 
-        const thisWeekEnd = new Date(weekStart);
-        thisWeekEnd.setDate(weekStart.getDate() + 6); // Monday -> Sunday
-
-        const nextWeekEnd = new Date(weekStart);
-        nextWeekEnd.setDate(weekStart.getDate() + 13); // end of next week
-
-        const from = toYMD(today);        // remaining days of current week (today → end)
-        const to = toYMD(nextWeekEnd);    // end of next week
-
-        // --- load posts not marked as "ready" ---
-        const { data: posts, error } = await supabase
+        // All upcoming posts from today onwards
+        // (posted are ignored; "upcoming" = not posted)
+        const { data: postsData, error: postsError } = await supabase
           .from("posts")
           .select("id, post_name, post_date, status, artist_id")
           .gte("post_date", from)
-          .lte("post_date", to)
-          .neq("status", "ready")
+          .neq("status", "posted")
           .order("post_date", { ascending: true });
 
-        if (error) throw error;
+        if (postsError) throw postsError;
 
-        // --- load artists just for labels ---
-        const { data: artists, error: artistError } = await supabase
+        // Fetch artist names for labels
+        const { data: artists, error: artistsError } = await supabase
           .from("artists")
           .select("id, name");
 
-        if (artistError) {
-          console.error("Error loading artists:", artistError);
+        if (artistsError) {
+          console.error("Error loading artists:", artistsError);
         }
 
         const map = {};
@@ -1251,10 +1214,10 @@ export default function MenuPage() {
         });
 
         setArtistsById(map);
-        setNotifications(posts || []);
+        setPosts(postsData || []);
       } catch (err) {
-        console.error("Error loading notifications:", err);
-        setErrorMsg("Error loading notifications.");
+        console.error("Error loading queue:", err);
+        setErrorMsg("Error loading upcoming posts.");
       } finally {
         setLoading(false);
       }
@@ -1263,85 +1226,136 @@ export default function MenuPage() {
     loadData();
   }, []);
 
-  const limitedNotifications = useMemo(() => {
-    if (!notifications || notifications.length === 0) return [];
+  const scoredPosts = useMemo(() => {
+    if (!posts || posts.length === 0) return [];
 
-    const scoreStatus = (status) => {
-      if (!status) return 0;
-      const key = String(status).toLowerCase();
-      return STATUS_ORDER[key] ?? 0;
-    };
+    const today = stripTime(new Date());
 
-    const sorted = [...notifications].sort((a, b) => {
-      const da = stripTime(a.post_date);
-      const db = stripTime(b.post_date);
+    // 1) compute base values from the status/time table
+    const withBase = posts
+      .map((p) => {
+        const baseValue = computeBaseValue(p, today);
+        if (baseValue == null) return null;
+        return { ...p, baseValue };
+      })
+      .filter(Boolean);
 
-      // 1) closest date first
-      if (da.getTime() !== db.getTime()) {
-        return da - db;
+    if (withBase.length === 0) return [];
+
+    // 2) normalise by "one divided by all the artists' upcoming posts' values summed together"
+    const totalBase = withBase.reduce((sum, p) => sum + p.baseValue, 0);
+    const factor = totalBase > 0 ? 1 / totalBase : 1;
+
+    const withPriority = withBase.map((p) => ({
+      ...p,
+      priorityValue: p.baseValue * factor,
+    }));
+
+    // 3) smallest priorityValue = most important
+    withPriority.sort((a, b) => {
+      if (a.priorityValue !== b.priorityValue) {
+        return a.priorityValue - b.priorityValue;
       }
 
-      // 2) more "ready" status first (higher score)
-      const sa = scoreStatus(a.status);
-      const sb = scoreStatus(b.status);
-      if (sa !== sb) {
-        return sb - sa;
-      }
+      // tie-breaker 1: nearer date first
+      const da = stripTime(a.post_date).getTime();
+      const db = stripTime(b.post_date).getTime();
+      if (da !== db) return da - db;
 
-      // 3) alphabetical by post_name
+      // tie-breaker 2: alphabetical name
       const nameA = (a.post_name || "").toLowerCase();
       const nameB = (b.post_name || "").toLowerCase();
       if (nameA < nameB) return -1;
       if (nameA > nameB) return 1;
-      return 0;
+
+      // tie-breaker 3: id
+      return a.id - b.id;
     });
 
-    // Only keep the 7 closest posts
-    return sorted.slice(0, 7);
-  }, [notifications]);
+    return withPriority;
+  }, [posts]);
 
-  const grouped = useMemo(() => {
-    // Work with *dates only* (no time component) to avoid timezone issues
-    const today = stripTime(new Date());
-    const weekStart = startOfWeekMonday(today); // already strips time internally
-    const thisWeekEnd = new Date(weekStart);
-    thisWeekEnd.setDate(weekStart.getDate() + 6); // Monday → Sunday
-    thisWeekEnd.setHours(0, 0, 0, 0);
-  
-    const nextWeekStart = new Date(weekStart);
-    nextWeekStart.setDate(weekStart.getDate() + 7);
-    nextWeekStart.setHours(0, 0, 0, 0);
-  
-    const currentWeek = [];
-    const nextWeek = [];
-  
-    for (const post of limitedNotifications) {
-      const d = stripTime(post.post_date); // normalise post_date as well
-  
-      if (d >= today && d <= thisWeekEnd) {
-        currentWeek.push(post);
-      } else if (d >= nextWeekStart) {
-        nextWeek.push(post);
-      }
+    async function loadPostDetails(postId) {
+        if (!postId) return;
+        setPostLoading(true);
+        setPostError("");
+        try {
+        // 1) load post
+        const { data: post, error: postErr } = await supabase
+            .from("posts")
+            .select("*")
+            .eq("id", postId)
+            .single();
+    
+        if (postErr) throw postErr;
+    
+        // 2) load variations
+        const { data: variations, error: varErr } = await supabase
+            .from("postvariations")
+            .select("*")
+            .eq("post_id", postId)
+            .order("test_version", { ascending: true });
+    
+        if (varErr) throw varErr;
+    
+        setPostDetails({
+            post,
+            variations: variations || [],
+            captions: {
+            a: post.caption_a,
+            b: post.caption_b,
+            },
+        });
+        } catch (e) {
+        console.error("Error loading post details:", e);
+        setPostError("Could not load post details");
+        } finally {
+        setPostLoading(false);
+        }
     }
-  
-    return { currentWeek, nextWeek };
-  }, [limitedNotifications]);
-  
-  const navItems = [
-    { href: "/calendar", label: "Calendar" },
-    { href: "/edit-next", label: "Edit Next" },
-    { href: "/leads", label: "Leads" },
-    { href: "/stats-view", label: "Stats" },
-    { href: "/audio-database", label: "Audio Database" },
-  ];
 
-  const handleNotificationClick = (post) => {
-    setSelectedPost(post);
-    setSelectedPostId(post.id);
-    setSelectedArtistId(post.artist_id || null);
-    loadPostDetails(post.id);
-  };
+    async function updatePostStatus(postId, newStatus) {
+        if (!postId) return;
+      
+        setUpdatingStatus(true);
+        setUpdateError("");
+      
+        try {
+          const { error } = await supabase
+            .from("posts")
+            .update({ status: newStatus })
+            .eq("id", postId);
+      
+          if (error) throw error;
+      
+          // Update modal details
+          setPostDetails((prev) =>
+            prev && prev.post?.id === postId
+              ? { ...prev, post: { ...prev.post, status: newStatus } }
+              : prev
+          );
+      
+          // Update main table list
+          setPosts((prev) =>
+            (prev || []).map((p) =>
+              p.id === postId ? { ...p, status: newStatus } : p
+            )
+          );
+        } catch (err) {
+          console.error("Error updating status:", err);
+          setUpdateError("Failed to update status. See console for details.");
+        } finally {
+          setUpdatingStatus(false);
+        }
+      }
+      
+  
+    function handleRowClick(post) {
+        setSelectedPost(post);
+        setSelectedPostId(post.id);
+        setSelectedArtistId(post.artist_id || null);
+        loadPostDetails(post.id);
+      }
 
   const closeModal = () => {
     setSelectedPost(null);
@@ -1349,22 +1363,15 @@ export default function MenuPage() {
 
   const handleViewInCalendar = () => {
     if (!selectedPost) return;
-    if (!selectedPost.artist_id) {
-      router.push(`/calendar?date=${selectedPost.post_date}`);
-      return;
-    }
-  
-    router.push(
-      `/calendar?artist=${selectedPost.artist_id}&date=${selectedPost.post_date}`
-    );
+    router.push(`/calendar?date=${selectedPost.post_date}`);
   };
-  
+
   const statusPost = postDetails?.post || selectedPost;
 
   return (
     <div className="min-h-screen bg-[#a89ee4] flex justify-center">
       <div className="w-full max-w-6xl flex flex-col md:flex-row gap-4 p-4 md:p-8">
-        {/* Collapsible left menu */}
+        {/* Collapsible left menu (same style as menu.js) */}
         <div className="md:w-64 md:shrink-0">
           <button
             className="md:hidden mb-2 px-3 py-1.5 text-sm rounded-full bg-[#bbe1ac] shadow"
@@ -1373,7 +1380,9 @@ export default function MenuPage() {
             {menuOpen ? "Hide menu" : "Show menu"}
           </button>
           <aside
-            className={`${menuOpen ? "block" : "hidden"} md:block bg-[#bbe1ac] rounded-2xl shadow-lg p-4`}
+            className={`${
+              menuOpen ? "block" : "hidden"
+            } md:block bg-[#bbe1ac] rounded-2xl shadow-lg p-4`}
           >
             <h2 className="text-lg font-semibold mb-3">Menu</h2>
             <ul className="space-y-2">
@@ -1381,7 +1390,11 @@ export default function MenuPage() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
-                    className="block w-full rounded-lg bg-[#eef8ea] px-3 py-2 text-sm font-medium hover:bg-white hover:shadow"
+                    className={`block w-full rounded-lg px-3 py-2 text-sm font-medium hover:bg-white hover:shadow ${
+                      item.href === "/edit-next"
+                        ? "bg-white"
+                        : "bg-[#eef8ea]"
+                    }`}
                   >
                     {item.label}
                   </Link>
@@ -1391,11 +1404,12 @@ export default function MenuPage() {
           </aside>
         </div>
 
-        {/* Main content: notifications + bottom section */}
+        {/* Main content */}
         <div className="flex-1 flex flex-col gap-4">
-          {/* Notifications section (main content) */}
           <section className="bg-[#bbe1ac] rounded-2xl shadow-lg p-4 md:p-6 flex-1">
-            <h1 className="text-xl md:text-2xl font-bold mb-4">Notifications</h1>
+            <h1 className="text-xl md:text-2xl font-bold mb-4">
+              Edit Next Queue
+            </h1>
 
             {errorMsg && (
               <div className="text-red-600 text-sm mb-3 bg-white/60 rounded px-3 py-2">
@@ -1404,324 +1418,276 @@ export default function MenuPage() {
             )}
 
             {loading ? (
-              <div className="text-gray-700 text-sm">Loading notifications…</div>
+              <div className="text-gray-700 text-sm">
+                Calculating priorities…
+              </div>
+            ) : scoredPosts.length === 0 ? (
+              <div className="text-sm text-gray-800 bg-[#eef8ea] rounded px-3 py-2">
+                No upcoming posts that need editing based on your rules.
+              </div>
             ) : (
               <>
-                {/* Remaining days of this week */}
-                <div className="mb-6">
-                  <h2 className="font-semibold mb-2 text-sm uppercase tracking-wide text-gray-800">
-                    Remaining This Week
-                  </h2>
-                  {grouped.currentWeek.length === 0 ? (
-                    <div className="text-xs text-gray-700 bg-[#eef8ea] rounded px-3 py-2">
-                      No posts pending this week 🎉
-                    </div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {grouped.currentWeek.map((post) => (
-                        <li
-                          key={post.id}
-                          className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
-                          onClick={() => handleNotificationClick(post)}
-                        >
-                          <div>
-                            <div className="font-medium">
-                              {post.post_name || "(Untitled post)"}
-                            </div>
-                            <div className="text-xs text-gray-700">
-                              {new Date(post.post_date).toLocaleDateString(
-                                undefined,
-                                {
-                                  weekday: "short",
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                }
-                              )}
-                              {" • "}
-                              Status:{" "}
-                              <span className="font-semibold">
-                                {post.status || "unknown"}
-                              </span>
-                              {post.artist_id && artistsById[post.artist_id] && (
-                                <>
-                                  {" • "}
-                                  Artist: {artistsById[post.artist_id]}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <p className="text-xs text-gray-700 mb-3">
+                  Priority is calculated from the status + days-from-now table,
+                  then multiplied by{" "}
+                  <span className="font-semibold">
+                    1 / (sum of all upcoming posts&rsquo; values)
+                  </span>
+                  . The smallest value is the most important.
+                </p>
 
-                {/* Next week */}
-                <div>
-                  <h2 className="font-semibold mb-2 text-sm uppercase tracking-wide text-gray-800">
-                    Coming Next Week
-                  </h2>
-                  {grouped.nextWeek.length === 0 ? (
-                    <div className="text-xs text-gray-700 bg-[#eef8ea] rounded px-3 py-2">
-                      No posts pending next week yet.
-                    </div>
-                  ) : (
-                    <ul className="space-y-2">
-                      {grouped.nextWeek.map((post) => (
-                        <li
-                          key={post.id}
-                          className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
-                          onClick={() => handleNotificationClick(post)}
-                        >
-                          <div>
-                            <div className="font-medium">
-                              {post.post_name || "(Untitled post)"}
-                            </div>
-                            <div className="text-xs text-gray-700">
-                              {new Date(post.post_date).toLocaleDateString(
-                                undefined,
-                                {
-                                  weekday: "short",
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                }
-                              )}
-                              {" • "}
-                              Status:{" "}
-                              <span className="font-semibold">
-                                {post.status || "unknown"}
-                              </span>
-                              {post.artist_id && artistsById[post.artist_id] && (
-                                <>
-                                  {" • "}
-                                  Artist: {artistsById[post.artist_id]}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <ul className="space-y-2">
+                  {scoredPosts.map((post, idx) => (
+                    <li
+                      key={post.id}
+                      className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
+                      onClick={() => handleRowClick(post)}
+                    >
+                      <div>
+                        <div className="font-medium flex items-center gap-2">
+                          <span>
+                            {post.post_name || "(Untitled post)"}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-700">
+                          {new Date(post.post_date).toLocaleDateString(
+                            undefined,
+                            {
+                              weekday: "short",
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                            }
+                          )}
+                          {" • "}
+                          Status:{" "}
+                          <span className="font-semibold">
+                            {post.status || "unknown"}
+                          </span>
+                          {" • "}
+                          Artist:{" "}
+                          <span className="font-semibold">
+                            {artistsById[post.artist_id] || "unknown"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-gray-700 pl-3">
+                        <div className="font-semibold">
+                          #{idx + 1} in queue
+                        </div>
+                        <div>
+                          Base value:{" "}
+                          <span className="font-mono">
+                            {post.baseValue}
+                          </span>
+                        </div>
+                        <div>
+                          Priority:{" "}
+                          <span className="font-mono">
+                            {post.priorityValue.toFixed(4)}
+                          </span>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </>
             )}
           </section>
-
-          {/* Bottom placeholder section with empty graph */}
-          <section className="bg-[#bbe1ac] rounded-2xl shadow-lg p-4 md:p-6">
-            <h2 className="text-lg font-semibold mb-2">Upcoming Insights</h2>
-            <p className="text-sm text-gray-800 mb-4">
-              What do you guys think would be useful to have here?
-            </p>
-            <div className="bg-[#eef8ea] rounded-xl border border-dashed border-gray-400 h-48 md:h-56 flex items-center justify-center">
-              <span className="text-xs text-gray-600">
-                Graph placeholder – data coming soon.
-              </span>
-            </div>
-          </section>
         </div>
 
-    {/* Post modal */}
-      {selectedPost && (
-        <div
-          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-          onClick={closeModal}
-        >
-          <div
-            className="bg-white rounded-lg shadow-lg max-w-[90vw] w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header row matching calendar modal */}
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xl font-bold">Post Details</h2>
-              <button
+        {/* Modal for clicked post (same pattern as menu.js) */}
+        {selectedPost && (
+            <div
+                className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
                 onClick={closeModal}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
+            >
+                <div
+                className="bg-white rounded-lg shadow-lg max-w-[90vw] w-full p-6"
+                onClick={(e) => e.stopPropagation()}
+                >
+                {/* Header row matching calendar Post Details modal */}
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-xl font-bold">Post Details</h2>
+                    <button
+                    onClick={closeModal}
+                    className="text-gray-500 hover:text-gray-700"
+                    >
+                    ✕
+                    </button>
+                </div>
 
-            {/* Post title */}
-            <div className="text-lg font-semibold mb-2">
-              {selectedPost.post_name || "(Untitled post)"}
-            </div>
+                {/* Post title, same data you already showed */}
+                <div className="text-lg font-semibold mb-2">
+                    {selectedPost.post_name || "(Untitled post)"}
+                </div>
 
-            {/* Basic metadata */}
-            <p className="text-sm text-gray-700 mb-1">
-              <strong>Date:</strong>{" "}
-              {new Date(selectedPost.post_date).toLocaleDateString(undefined, {
-                weekday: "short",
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </p>
-            {selectedPost.artist_id && artistsById[selectedPost.artist_id] && (
-              <p className="text-sm text-gray-700 mb-2">
-                <strong>Artist:</strong> {artistsById[selectedPost.artist_id]}
-              </p>
-            )}
-            {statusPost && (
-            <div className="mt-3 mb-5">
-              <label className="block text-sm font-medium mb-1">Status</label>
-              <select
-                className="w-full border rounded px-2 py-1 text-sm"
-                disabled={updatingStatus}
-                value={statusPost.status || "not planned"}
-                onChange={(e) =>
-                  updatePostStatus(statusPost.id, e.target.value)
-                }
-              >
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+                {/* Existing body content from your original modal */}
+                <p className="text-sm text-gray-700 mb-1">
+                    <strong>Date:</strong>{" "}
+                    {new Date(selectedPost.post_date).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    })}
+                </p>
+                {selectedPost.artist_id && artistsById[selectedPost.artist_id] && (
+                    <p className="text-sm text-gray-700 mb-1">
+                    <strong>Artist:</strong>{" "}
+                    {artistsById[selectedPost.artist_id]}
+                    </p>
+                )}
+                {statusPost && (
+                <div className="mt-3 mb-5">
+                    <label className="block text-sm font-medium mb-1">Status</label>
+                    <select
+                    className="w-full border rounded px-2 py-1 text-sm"
+                    disabled={updatingStatus}
+                    value={statusPost.status || "not planned"}
+                    onChange={(e) =>
+                        updatePostStatus(statusPost.id, e.target.value)
+                    }
+                    >
+                    {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                        {s}
+                        </option>
+                    ))}
+                    </select>
 
-              {updatingStatus && (
-                <p className="mt-1 text-xs text-gray-500">Saving…</p>
-              )}
-              {updateError && (
-                <p className="mt-1 text-xs text-red-600">{updateError}</p>
-              )}
-            </div>
-          )}
-            {/* Post details loading / error */}
-            {postLoading && (
-              <div className="text-xs text-gray-500 mb-2">
-                Loading variations…
-              </div>
-            )}
-            {postError && (
-              <div className="text-xs text-red-600 mb-2">
-                {postError}
-              </div>
-            )}
-
-            {/* Notes + variations */}
-            {postDetails && (
-              <>
-                {postDetails.post?.notes && (
-                  <p className="mb-4 text-sm text-gray-700">
-                    <strong>Notes:</strong> {postDetails.post.notes}
-                  </p>
+                    {updatingStatus && (
+                    <p className="mt-1 text-xs text-gray-500">Saving…</p>
+                    )}
+                    {updateError && (
+                    <p className="mt-1 text-xs text-red-600">{updateError}</p>
+                    )}
+                </div>
+                )}
+                {/* Errors / loading for post details */}
+                {postLoading && (
+                <div className="text-xs text-gray-500 mb-2">Loading variations…</div>
+                )}
+                {postError && (
+                <div className="text-xs text-red-600 mb-2">{postError}</div>
                 )}
 
-                <h3 className="text-md font-semibold mb-2">Variations</h3>
+                {/* Variations list */}
+                {postDetails && (
+                <>
+                    {postDetails.post?.notes && (
+                    <p className="mb-4 text-sm text-gray-700">
+                        <strong>Notes:</strong> {postDetails.post.notes}
+                    </p>
+                    )}
 
-                <ul className="space-y-2 max-h-64 overflow-auto pr-1">
-                  {postDetails.variations.length > 0 ? (
-                    postDetails.variations.map((v) => (
-                      <li
-                        key={v.id}
-                        className="border rounded p-2 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center justify-between text-sm">
-                          <div>
-                            <span className="font-medium">
-                              {(v.platforms && v.platforms.length
-                                ? v.platforms
-                                : ["—"]
-                              ).join(", ")}
-                            </span>{" "}
-                            — {v.test_version || "—"}
-                          </div>
-
-                          {/* Optional: add calendar-style download button here if desired */}
-                          {/* e.g. same small icon/button block you use in calendar.js */}
-                        </div>
-
-                        {/* Clickable file info opens media player */}
-                        <div
-                          className="text-xs text-gray-600 cursor-pointer mt-1"
-                          onClick={() => {
-                            setSelectedVariation(v);
-                            setShowMediaPlayer(true);
-                          }}
+                    <h3 className="text-md font-semibold mb-2">Variations</h3>
+                    <ul className="space-y-2 max-h-64 overflow-auto pr-1">
+                    {postDetails.variations.length > 0 ? (
+                        postDetails.variations.map((v) => (
+                        <li
+                            key={v.id}
+                            className="border rounded p-2 hover:bg-gray-50 transition-colors"
                         >
-                          {v.file_name || "no file"} •{" "}
-                          {v.length_seconds
-                            ? `${v.length_seconds}s`
-                            : "length n/a"}
-                        </div>
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-sm text-gray-500">
-                      No variations yet. Use “New Variation” to upload one.
-                    </li>
-                  )}
-                </ul>
+                            <div className="flex items-center justify-between text-sm">
+                            <div>
+                                <span className="font-medium">
+                                {(v.platforms && v.platforms.length
+                                    ? v.platforms
+                                    : ["—"]
+                                ).join(", ")}
+                                </span>{" "}
+                                — {v.test_version || "—"}
+                            </div>
 
-                {/* Footer buttons */}
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    onClick={() => {
-                      setUploadMode("new");
-                      setReplaceVariation(null);
-                      setShowUploadModal(true);
-                    }}
-                    className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                  >
-                    New Variation
-                  </button>
-                  <button
-                    className="px-4 py-2 text-sm bg-gray-200 rounded hover:bg-gray-300"
-                    onClick={closeModal}
-                  >
-                    Close
-                  </button>
-                  <button
-                    className="px-4 py-2 text-sm bg-[#bbe1ac] rounded hover:bg-[#a5d296]"
-                    onClick={handleViewInCalendar}
-                  >
-                    View in calendar
-                  </button>
+                            {/* Download button from calendar.js */}
+                            {/* copy the same download button block from calendar here */}
+                            </div>
+
+                            {/* Clickable file info that opens the media player */}
+                            <div
+                            className="text-xs text-gray-600 cursor-pointer mt-1"
+                            onClick={() => {
+                                setSelectedVariation(v);
+                                setShowMediaPlayer(true);
+                            }}
+                            >
+                            {v.file_name || "no file"} •{" "}
+                            {v.length_seconds ? `${v.length_seconds}s` : "length n/a"}
+                            </div>
+                        </li>
+                        ))
+                    ) : (
+                        <li className="text-sm text-gray-500">
+                        No variations yet. Use “New Variation” to upload one.
+                        </li>
+                    )}
+                    </ul>
+
+                    <div className="text-right mt-4 flex justify-end gap-2">
+                    <button
+                        onClick={() => {
+                        setUploadMode("new");
+                        setReplaceVariation(null);
+                        setShowUploadModal(true);
+                        }}
+                        className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                    >
+                        New Variation
+                    </button>
+                    <button
+                        onClick={closeModal}
+                        className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm"
+                    >
+                        Close
+                    </button>
+                    <button
+                        onClick={handleViewInCalendar}
+                        className="px-3 py-1.5 text-sm bg-[#bbe1ac] rounded hover:opacity-90"
+                    >
+                        View in Calendar
+                    </button>
+                    </div>
+                </>
+                )}
+
                 </div>
-              </>
+            </div>
             )}
-          </div>
-        </div>
-      )}
 
-
+      </div>
         {/* Media player modal */}
         {showMediaPlayer && selectedVariation && (
-          <MediaPlayer
+        <MediaPlayer
             variation={selectedVariation}
             onClose={() => setShowMediaPlayer(false)}
             onRefreshPost={() => {
-              if (selectedPostId) loadPostDetails(selectedPostId);
+            if (selectedPostId) loadPostDetails(selectedPostId);
             }}
             onReplaceRequested={(variation) => {
-              setUploadMode("replace");
-              setReplaceVariation(variation);
-              setShowMediaPlayer(false);
-              setShowUploadModal(true);
+            setUploadMode("replace");
+            setReplaceVariation(variation);
+            setShowMediaPlayer(false);
+            setShowUploadModal(true);
             }}
             onPlatformsUpdated={(variationId, nextPlatforms) => {
-              setPostDetails((prev) =>
+            setPostDetails((prev) =>
                 prev
-                  ? {
-                      ...prev,
-                      variations: prev.variations.map((v) =>
-                        v.id === variationId
-                          ? { ...v, platforms: nextPlatforms }
-                          : v
-                      ),
+                ? {
+                    ...prev,
+                    variations: prev.variations.map((v) =>
+                        v.id === variationId ? { ...v, platforms: nextPlatforms } : v
+                    ),
                     }
-                  : prev
-              );
+                : prev
+            );
             }}
-          />
+        />
         )}
 
         {/* Upload modal */}
         {showUploadModal && selectedPost && (
-          <UploadModal
+        <UploadModal
             postId={selectedPost.id}
             artistId={selectedPost.artist_id}
             defaultDate={selectedPost.post_date}
@@ -1729,13 +1695,13 @@ export default function MenuPage() {
             variation={replaceVariation}
             onClose={() => setShowUploadModal(false)}
             onSave={() => {
-              setShowUploadModal(false);
-              if (selectedPostId) loadPostDetails(selectedPostId);
+            setShowUploadModal(false);
+            if (selectedPostId) loadPostDetails(selectedPostId);
             }}
-          />
+        />
         )}
 
-      </div>
+
     </div>
   );
 }

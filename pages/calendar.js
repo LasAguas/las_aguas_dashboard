@@ -5,6 +5,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import Link from "next/link";
+import { useRouter } from "next/router";
 
 // Helpers
 const pad = (n) => String(n).padStart(2, '0')
@@ -254,6 +255,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
       : 0
   );
   const [savingSnippet, setSavingSnippet] = useState(false);
+  const [snippetDuration, setSnippetDuration] = useState(15); // seconds, for preview only
 
   useEffect(() => {
     setSnippetStart(
@@ -467,14 +469,23 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   const handlePlaySnippet = () => {
     if (!audioRef.current) return;
     const audio = audioRef.current;
-    const start = typeof snippetStart === "number" ? snippetStart : 0;
+    const start = Number(snippetStart) || 0;
+    const dur = Number(snippetDuration) || 0;
   
     audio.currentTime = start;
     audio.muted = false;
-    audio
-      .play()
-      .catch((e) => console.error("Audio play error:", e));
+  
+    audio.play().catch((e) => console.error("Audio play error:", e));
+  
+    if (dur > 0) {
+      setTimeout(() => {
+        if (!audio.paused) {
+          audio.pause();
+        }
+      }, dur * 1000);
+    }
   };
+  
   
 
   const variationDateLabel = variation.variation_post_date
@@ -660,29 +671,53 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                   className="w-full"
                 />
 
-                <div className="mt-2 text-xs">
-                  <label className="block mb-1">
-                    Snippet start (seconds): <strong>{snippetStart}</strong>
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={120} // or a safe upper bound, or compute from duration
-                    value={snippetStart}
-                    onChange={(e) => setSnippetStart(Number(e.target.value))}
-                    className="w-full"
-                  />
+                <div className="mt-2 text-xs space-y-2">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label className="block mb-1">Snippet start (seconds)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={snippetStart}
+                        onChange={(e) =>
+                          setSnippetStart(Number(e.target.value) || 0)
+                        }
+                        className="w-full border rounded p-1"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block mb-1">Snippet length (seconds)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={snippetDuration}
+                        onChange={(e) =>
+                          setSnippetDuration(Number(e.target.value) || 0)
+                        }
+                        className="w-full border rounded p-1"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handlePlaySnippet}
+                      className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                    >
+                      Preview snippet
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={handleSaveSnippetStart}
                     disabled={savingSnippet}
-                    className="mt-2 px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-xs"
+                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-xs"
                   >
                     {savingSnippet ? "Saving…" : "Save snippet start"}
                   </button>
                 </div>
               </div>
             )}
+
 
             {/* Feedback summary */}
             {hasFeedback && (
@@ -780,6 +815,18 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   );
 }
 
+function makeStorageSafeName(name) {
+  return name
+    // remove accents/diacritics (é, ç, etc.)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // replace anything not letter/number/.-_ with a dash
+    .replace(/[^a-zA-Z0-9.\-_]+/g, "-")
+    // collapse multiple dashes
+    .replace(/-+/g, "-")
+    // trim leading/trailing dashes
+    .replace(/^-|-$/g, "");
+}
 
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, onClose, onSave }) {
@@ -790,6 +837,11 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   const [variationDate, setVariationDate] = useState(defaultDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Audio library
+  const [audioOptions, setAudioOptions] = useState([]);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [selectedAudioId, setSelectedAudioId] = useState(null);
 
   // NEW: audio + snippet state
   const [audioFile, setAudioFile] = useState(null);
@@ -833,6 +885,53 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
     setFile(first);
     setExtraFiles(files.slice(1)); // remaining images become carousel frames
   };  
+
+
+      // Load audio library songs for this artist
+  useEffect(() => {
+    if (!artistId) return;
+
+    const loadSongs = async () => {
+      setAudioLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("audio_library")
+          .select("id, title, file_path, duration_seconds")
+          .eq("artist_id", Number(artistId))
+          .order("title", { ascending: true });
+
+        if (error) throw error;
+
+        setAudioOptions(data || []);
+
+        // If we're replacing and there is existing audio, preselect the matching song
+        if (mode === "replace" && variation?.audio_file_name && data?.length) {
+          const match = data.find(
+            (row) => row.file_path === variation.audio_file_name
+          );
+          if (match) {
+            setSelectedAudioId(match.id);
+            const { data: urlData } = supabase.storage
+              .from("post-variations")
+              .getPublicUrl(match.file_path);
+            setAudioPreviewUrl(urlData?.publicUrl || null);
+          } else {
+            // Fallback: still preview existing audio_file_name directly
+            const { data: urlData } = supabase.storage
+              .from("post-variations")
+              .getPublicUrl(variation.audio_file_name);
+            setAudioPreviewUrl(urlData?.publicUrl || null);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading audio library:", err);
+      } finally {
+        setAudioLoading(false);
+      }
+    };
+
+    loadSongs();
+  }, [artistId, mode, variation?.audio_file_name]);
 
   const handleAudioChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -892,7 +991,9 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
       // ☁️ Upload main media (single or carousel)
       const uploadedPaths = [];
       for (const f of mediaFiles) {
-        const uniqueName = `${Date.now()}-${f.name}`;
+        // sanitize the original filename before using it in the storage key
+        const safeBaseName = makeStorageSafeName(f.name);
+        const uniqueName = `${Date.now()}-${safeBaseName}`;
         const path = `${artistId}/${targetPostId}/${uniqueName}`;
         const { error: uploadError } = await supabase.storage
           .from("post-variations")
@@ -904,16 +1005,14 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
       const fullFilePath = uploadedPaths[0];
       const carouselPaths = isImage && uploadedPaths.length > 1 ? uploadedPaths : null;
 
-
-      // ☁️ Upload optional audio (mp3) for snippet
+      // Pick audio from library selection (no upload here)
       let audioPath = null;
-      if (audioFile) {
-        const audioStoragePath = `${artistId}/${targetPostId}/audio-${Date.now()}-${audioFile.name}`;
-        const { error: audioUploadError } = await supabase.storage
-          .from('post-variations')
-          .upload(audioStoragePath, audioFile, { upsert: true });
-        if (audioUploadError) throw audioUploadError;
-        audioPath = audioStoragePath;
+      if (selectedAudioId) {
+        const song = audioOptions.find((s) => s.id === selectedAudioId);
+        audioPath = song ? song.file_path : null;
+      } else if (mode === "replace" && variation?.audio_file_name) {
+        // keep existing audio if no new song chosen
+        audioPath = variation.audio_file_name;
       }
 
       if (mode === 'replace' && variation) {
@@ -1016,16 +1115,46 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
 
         </div>
 
-        {/* Audio upload + snippet controls (NEW) */}
+        {/* Audio library selection + snippet controls */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Audio (mp3) for snippet (optional)</label>
-          <input
-            type="file"
-            accept="audio/*"
-            onChange={handleAudioChange}
-            className="w-full text-sm"
-            disabled={uploading}
-          />
+          <label className="block text-sm font-medium mb-1">
+            Song (from audio library)
+          </label>
+
+          <select
+            className="w-full border rounded p-2 text-sm"
+            value={selectedAudioId || ""}
+            disabled={uploading || audioLoading || audioOptions.length === 0}
+            onChange={(e) => {
+              const id = e.target.value ? Number(e.target.value) : null;
+              setSelectedAudioId(id);
+
+              if (!id) {
+                setAudioPreviewUrl(null);
+                return;
+              }
+              const song = audioOptions.find((o) => o.id === id);
+              if (!song) return;
+              const { data } = supabase.storage
+                .from("post-variations")
+                .getPublicUrl(song.file_path);
+              setAudioPreviewUrl(data?.publicUrl || null);
+            }}
+          >
+            <option value="">
+              {audioLoading
+                ? "Loading songs…"
+                : audioOptions.length
+                ? "Select a song…"
+                : "No songs in audio library for this artist"}
+            </option>
+            {audioOptions.map((song) => (
+              <option key={song.id} value={song.id}>
+                {song.title}
+              </option>
+            ))}
+          </select>
+
           {audioPreviewUrl && (
             <div className="mt-2 space-y-2">
               <audio
@@ -1067,6 +1196,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             </div>
           )}
         </div>
+
 
         {/* Platform multi-select */}
         <div className="mb-4">
@@ -1149,8 +1279,6 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
     </div>
   );
 }
-
-
 
 //captions function
 function CaptionsModal({ captions, onClose, onSave }) {
@@ -1341,6 +1469,7 @@ function ConfirmDeleteModal({ open, onCancel, onConfirm, deleting }) {
 }
 
 export default function Home() {
+const router = useRouter();
 const [artists, setArtists] = useState([])
 const [selectedArtistId, setSelectedArtistId] = useState('8') // default artist id
 const [weeks, setWeeks] = useState([])
@@ -1362,6 +1491,25 @@ const [selectedMonth, setSelectedMonth] = useState('')
 
 // Checking width for dates
 const [isNarrow, setIsNarrow] = useState(false);
+
+const [menuOpen, setMenuOpen] = useState(false);
+
+const navItems = [
+  { href: "https://supabase.com/dashboard/project/gtccctajvobfvhlonaot/editor/17407?schema=public", label: "Supabase" },
+  { href: "/edit-next", label: "Edit Next" },
+  { href: "/leads", label: "Leads" },
+  { href: "/stats-view", label: "Stats" },
+  { href: "/audio-database", label: "Audio DB" },
+  { href: "/menu", label: "Home" },
+];
+
+useEffect(() => {
+  if (!router.isReady) return;
+  const qArtist = router.query.artist;
+  if (qArtist) {
+    setSelectedArtistId(String(qArtist));
+  }
+}, [router.isReady, router.query.artist]);
 
 useEffect(() => {
   const handleResize = () => setIsNarrow(window.innerWidth < 800);
@@ -1988,30 +2136,82 @@ function goToStats() {
 
 return (
   <div className="p-6">
-      <div className="absolute top-4 right-4 flex space-x-2">
-        <Link
-          href="https://supabase.com/dashboard/project/gtccctajvobfvhlonaot/editor/17407?schema=public"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <button className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 shadow-md">
-            Supabase Tables
-          </button>
-        </Link>
-
+      <div className="absolute top-4 right-4 flex items-center space-x-2">
         <Link
           href="/thisweek"
         >
-          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
+          <button className="px-4 py-2 bg-[#a89ee4] rounded over:bg-[#bfb7f2] shadow-md">
             This Week's Posts
           </button>
         </Link>
         
-        <Link href="/stats-view">
-          <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md">
-            View Stats
+        {/* Menu bubble */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((prev) => !prev)}
+            aria-label="Open menu"
+            className="
+              rounded-full 
+              bg-[#a89ee4]
+              shadow-lg 
+              border border-white
+              p-3                             /* ← updated padding */
+              flex flex-col justify-center items-center
+              hover:bg-[#bfb7f2]
+              transition
+            "
+          >
+            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
+            <span className="block w-3 h-0.5 bg-[#33286a]" />
           </button>
-        </Link>
+
+          {menuOpen && (
+            <aside
+              className="
+                absolute right-0 top-14 z-40
+                w-64
+                bg-[#a89ee4]           /* same purple */
+                rounded-2xl 
+                shadow-lg 
+                p-4
+              "
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold text-[#33286a]">Menu</h2>
+                <button
+                  type="button"
+                  className="text-sm text-[#33286a]"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <ul className="space-y-2">
+                {navItems.map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="
+                        block w-full rounded-lg 
+                        bg-[#dcd4fa]              /* lighter purple content area */
+                        px-3 py-2 text-sm font-medium 
+                        text-[#33286a]
+                        hover:bg-white 
+                        hover:shadow
+                        transition
+                      "
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </aside>
+          )}
+        </div>
+
       </div>
       <h1 className="text-2xl font-bold mb-4">Las Aguas Dashboard</h1>
       <div className="mb-4 flex items-center gap-3 flex-wrap">

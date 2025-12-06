@@ -2,6 +2,15 @@ import { useState } from "react"
 import { supabase } from "../lib/supabaseClient"
 import { useRouter } from "next/router"
 
+const STATUS_OPTIONS = [
+  "not planned",
+  "planned",
+  "assets obtained",
+  "uploaded",
+  "ready",
+  "posted",
+];
+
 export default function LoginPage() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -40,10 +49,10 @@ export default function LoginPage() {
             if (profile.role === "artist") {
               router.push("/artist-dashboard")
             } else if (profile.role === "las_aguas") {
-              router.push("/calendar")
+              router.push("/menu")
             } else {
               // fallback if role is missing/unexpected
-              router.push("/calendar")
+              router.push("/login-error")
             }
           }
         }
