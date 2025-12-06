@@ -1231,6 +1231,7 @@ export default function MenuPage() {
           .select("id, post_name, post_date, status, artist_id")
           .gte("post_date", from)
           .lte("post_date", to)
+          .neq("status", "posted")
           .neq("status", "ready")
           .order("post_date", { ascending: true });
 
