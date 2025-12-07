@@ -7,7 +7,7 @@ export default function IndexPage() {
 
   useEffect(() => {
     // Change this path if you prefer a different landing page, e.g. "/login"
-    router.replace("/artist-dashboard");
+    router.replace("/calendar");
   }, [router]);
 
   // Nothing to render – user will be redirected immediately
