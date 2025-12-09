@@ -46,16 +46,16 @@ const STATUS_VALUE_TABLE = {
     "15-21": 12,
   },
   planned: {
-    "0-2": 2,
-    "3-4": 3,
+    "0-2": 1,
+    "3-4": 2,
     "5-8": 5,
     "9-14": 10,
     "15-21": 13,
   },
   "assets obtained": {
-    "0-2": 6,
-    "3-4": 7,
-    "5-8": 8,
+    "0-2": 2,
+    "3-4": 3,
+    "5-8": 5,
     "9-14": 11,
     "15-21": 14,
   },
@@ -70,7 +70,7 @@ function getBucketKey(daysFromNow) {
   if (d <= 4) return "3-4";
   if (d <= 8) return "5-8";
   if (d <= 14) return "9-14";
-  if (d <= 21) return "15-21";
+  if (d <= 17) return "15-17";
   // "more than 21 days from now" is "Not relevant" for every status in your table
   return null;
 }
@@ -1192,9 +1192,11 @@ export default function EditNextPage() {
         // (posted are ignored; "upcoming" = not posted)
         const { data: postsData, error: postsError } = await supabase
           .from("posts")
-          .select("id, post_name, post_date, status, artist_id")
+          .select("id, post_name, post_date, status, artist_id, post_type")
           .gte("post_date", from)
           .neq("status", "posted")
+          .neq("post_type", "Carousel")   // 🚫 filter out carousels
+          .neq("post_type", "Mailing List")
           .order("post_date", { ascending: true });
 
         if (postsError) throw postsError;
@@ -1251,16 +1253,17 @@ export default function EditNextPage() {
       priorityValue: p.baseValue * factor,
     }));
 
-    // 3) smallest priorityValue = most important
+    // 3) order primarily by date (nearest first), then by priorityValue
     withPriority.sort((a, b) => {
-      if (a.priorityValue !== b.priorityValue) {
-        return a.priorityValue - b.priorityValue;
-      }
-
-      // tie-breaker 1: nearer date first
+      // primary: nearer date first
       const da = stripTime(a.post_date).getTime();
       const db = stripTime(b.post_date).getTime();
       if (da !== db) return da - db;
+
+      // secondary: priorityValue (includes artist importance etc.)
+      if (a.priorityValue !== b.priorityValue) {
+        return a.priorityValue - b.priorityValue;
+      }
 
       // tie-breaker 2: alphabetical name
       const nameA = (a.post_name || "").toLowerCase();
@@ -1371,18 +1374,24 @@ export default function EditNextPage() {
   return (
     <div className="min-h-screen bg-[#a89ee4] flex justify-center">
       <div className="w-full max-w-6xl flex flex-col md:flex-row gap-4 p-4 md:p-8">
-        {/* Collapsible left menu (same style as menu.js) */}
         <div className="md:w-64 md:shrink-0">
-          <button
-            className="md:hidden mb-2 px-3 py-1.5 text-sm rounded-full bg-[#bbe1ac] shadow"
-            onClick={() => setMenuOpen((prev) => !prev)}
-          >
-            {menuOpen ? "Hide menu" : "Show menu"}
-          </button>
+          {/* Mobile menu toggle, right-aligned */}
+          <div className="md:hidden flex justify-end mb-2">
+            <button
+              className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#bbe1ac] shadow"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              aria-label={menuOpen ? "Hide menu" : "Show menu"}
+            >
+              <span className="text-xl leading-none">
+                {menuOpen ? "×" : "☰"}
+              </span>
+            </button>
+          </div>
+
           <aside
             className={`${
               menuOpen ? "block" : "hidden"
-            } md:block bg-[#bbe1ac] rounded-2xl shadow-lg p-4`}
+            } md:block w-full bg-[#bbe1ac] rounded-2xl shadow-lg p-4`}
           >
             <h2 className="text-lg font-semibold mb-3">Menu</h2>
             <ul className="space-y-2">
@@ -1403,6 +1412,7 @@ export default function EditNextPage() {
             </ul>
           </aside>
         </div>
+
 
         {/* Main content */}
         <div className="flex-1 flex flex-col gap-4">

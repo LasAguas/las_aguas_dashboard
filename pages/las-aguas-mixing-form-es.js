@@ -1,4 +1,4 @@
-// pages/las-aguas-mixing-lead.js
+// pages/las-aguas-mixing-lead-es.js
 "use client";
 
 import { useState } from "react";
@@ -15,7 +15,7 @@ const isValidEmail = (value) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
 const isValidUrl = (value) => {
-  if (!value) return true; // optional
+  if (!value) return true; // opcional
   try {
     const url = new URL(value.trim());
     return url.protocol === "http:" || url.protocol === "https:";
@@ -24,7 +24,7 @@ const isValidUrl = (value) => {
   }
 };
 
-export default function LasAguasMixingLeadPage() {
+export default function LasAguasMixingLeadEsPage() {
   const [email, setEmail] = useState("");
   const [aboutProject, setAboutProject] = useState("");
   const [budgetPerSong, setBudgetPerSong] = useState(""); // "<180" | ">180"
@@ -50,28 +50,29 @@ export default function LasAguasMixingLeadPage() {
     const errors = {};
 
     if (!email.trim()) {
-      errors.email = "Email is required.";
+      errors.email = "El correo electrónico es obligatorio.";
     } else if (!isValidEmail(email)) {
-      errors.email = "Please enter a valid email address.";
+      errors.email = "Por favor introduce un correo electrónico válido.";
     }
 
     if (!aboutProject.trim()) {
-      errors.aboutProject = "Please tell us about the project.";
+      errors.aboutProject = "Por favor cuéntanos sobre el proyecto.";
     } else if (aboutProject.trim().length > 600) {
-      errors.aboutProject = "Maximum 600 characters.";
+      errors.aboutProject = "Máximo 600 caracteres.";
     }
 
     if (!budgetPerSong) {
-      errors.budgetPerSong = "Please select a budget per song.";
+      errors.budgetPerSong = "Por favor selecciona un presupuesto por canción.";
     }
 
     if (musicLink && !isValidUrl(musicLink)) {
-      errors.musicLink = "Please enter a valid URL (starting with http/https).";
+      errors.musicLink =
+        "Por favor introduce una URL válida (que empiece por http/https).";
     }
 
     if (socialMediaLink && !isValidUrl(socialMediaLink)) {
       errors.socialMediaLink =
-        "Please enter a valid URL (starting with http/https).";
+        "Por favor introduce una URL válida (que empiece por http/https).";
     }
 
     setFieldErrors(errors);
@@ -104,18 +105,22 @@ export default function LasAguasMixingLeadPage() {
         notes: null,
       };
 
-      const { error } = await supabase.from("ad_leads_en").insert([payload]);
+      const { error } = await supabase.from("ad_leads_es").insert([payload]);
       if (error) {
-        console.error("Error inserting mixing lead:", error);
-        setFormError("Something went wrong saving your details. Please try again.");
+        console.error("Error inserting mixing lead (ES):", error);
+        setFormError(
+          "Ha ocurrido un error al guardar tus datos. Por favor inténtalo de nuevo."
+        );
       } else {
-        setSuccessMessage("Thanks! We’ve received your info and will be in touch.");
+        setSuccessMessage(
+          "¡Gracias! Hemos recibido tu información y nos pondremos en contacto contigo."
+        );
         resetForm();
         setFieldErrors({});
       }
     } catch (err) {
-      console.error("Unexpected error inserting mixing lead:", err);
-      setFormError("Unexpected error. Please try again.");
+      console.error("Unexpected error inserting mixing lead (ES):", err);
+      setFormError("Error inesperado. Por favor inténtalo de nuevo.");
     } finally {
       setSubmitting(false);
     }
@@ -126,18 +131,12 @@ export default function LasAguasMixingLeadPage() {
       <div className="w-full max-w-xl bg-[#bbe1ac] p-6 md:p-8 rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-[#33296b]">
-            Las Aguas – Mixing Lead Form
+            Las Aguas – Formulario de Mezcla
           </h1>
-          <Link
-            href="/"
-            className="text-sm text-[#33296b] underline hover:opacity-80"
-          >
-            Back to dashboard
-          </Link>
         </div>
 
         <p className="text-sm text-[#33296b] mb-4">
-          Tell us a bit about your project so we can see if we’re a good fit.
+          Cuéntanos un poco sobre tu proyecto para ver si encajamos bien.
         </p>
 
         {formError && (
@@ -155,14 +154,14 @@ export default function LasAguasMixingLeadPage() {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Email<span className="text-red-600">*</span>
+              Correo electrónico<span className="text-red-600">*</span>
             </label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2"
-              placeholder="you@example.com"
+              placeholder="tu@ejemplo.com"
             />
             {fieldErrors.email && (
               <p className="mt-1 text-xs text-red-700">{fieldErrors.email}</p>
@@ -172,7 +171,7 @@ export default function LasAguasMixingLeadPage() {
           {/* About the project */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              About the project<span className="text-red-600">*</span>
+              Sobre el proyecto<span className="text-red-600">*</span>
             </label>
             <textarea
               value={aboutProject}
@@ -180,7 +179,7 @@ export default function LasAguasMixingLeadPage() {
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2"
               rows={4}
               maxLength={600}
-              placeholder="Tell us about your music, number of songs, references, etc."
+              placeholder="Cuéntanos sobre tu música, número de canciones, referencias, etc."
             />
             <div className="flex justify-between items-center mt-1">
               {fieldErrors.aboutProject && (
@@ -197,7 +196,8 @@ export default function LasAguasMixingLeadPage() {
           {/* Budget per song */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Budget per song (EUR)<span className="text-red-600">*</span>
+              Presupuesto por canción (EUR)
+              <span className="text-red-600">*</span>
             </label>
             <div className="flex gap-4 mt-1">
               <label className="inline-flex items-center text-sm text-[#33296b]">
@@ -237,20 +237,20 @@ export default function LasAguasMixingLeadPage() {
           {/* Ideal release date (optional) */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Ideal release date (optional)
+              Fecha de lanzamiento ideal (opcional)
             </label>
             <DatePicker
               selected={idealReleaseDate}
               onChange={(date) => setIdealReleaseDate(date)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2 bg-white"
-              placeholderText="Select a date"
+              placeholderText="Selecciona una fecha"
             />
           </div>
 
           {/* Link to music */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Link to music (optional)
+              Enlace a la música (opcional)
             </label>
             <input
               type="url"
@@ -269,14 +269,14 @@ export default function LasAguasMixingLeadPage() {
           {/* Social media link */}
           <div>
             <label className="block text-sm font-medium text-[#33296b] mb-1">
-              Social media link (optional)
+              Enlace a redes sociales (opcional)
             </label>
             <input
               type="url"
               value={socialMediaLink}
               onChange={(e) => setSocialMediaLink(e.target.value)}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#33286a] focus:ring-[#33286a] text-sm px-3 py-2"
-              placeholder="https://instagram.com/yourartist"
+              placeholder="https://instagram.com/tuartista"
             />
             {fieldErrors.socialMediaLink && (
               <p className="mt-1 text-xs text-red-700">
@@ -291,7 +291,7 @@ export default function LasAguasMixingLeadPage() {
             disabled={submitting}
             className="w-full bg-[#599b40] text-[#33296b] py-2 px-4 rounded-md hover:bg-[#a89ee4] focus:outline-none focus:ring-2 focus:ring-[#33296b] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {submitting ? "Submitting..." : "Submit"}
+            {submitting ? "Enviando..." : "Enviar"}
           </button>
         </form>
       </div>

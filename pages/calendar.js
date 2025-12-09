@@ -82,7 +82,7 @@ function AddPostModal({ artistId, defaultDate, onClose, onPostAdded }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const POST_TYPES = ['H+LS', 'Storytelling', 'Performance', 'Smash Cut', 'Visualiser', 'Long Form', 'Carousel', 'Education', 'Other'];
+  const POST_TYPES = ['H+LS', 'Storytelling', 'Performance', 'Smash Cut', 'Visualiser', 'Long Form', 'Carousel', 'Education', 'Other', 'Mailing List'];
   const TEST_TYPES = ['Hook', 'Caption', 'Hashtags', 'Colours', 'Song Snippets', 'Captions', 'Clip Length', 'Subtitles', 'Other', 'No Test'];
   const STATUS_OPTIONS = ['not planned', 'planned', 'assets obtained', 'uploaded', 'ready', 'posted'];
 
