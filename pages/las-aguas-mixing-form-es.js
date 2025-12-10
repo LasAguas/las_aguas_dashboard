@@ -131,7 +131,7 @@ export default function LasAguasMixingLeadEsPage() {
       <div className="w-full max-w-xl bg-[#bbe1ac] p-6 md:p-8 rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-[#33296b]">
-            Las Aguas – Formulario de Mezcla
+            Las Aguas – Mezcla
           </h1>
         </div>
 
