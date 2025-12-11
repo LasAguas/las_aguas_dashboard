@@ -1,0 +1,400 @@
+/* styles/site.css */
+/* Only used on public site pages – does NOT touch dashboard unless classes are used */
+
+:root {
+    --la-light-purple: #a89fe4;
+    --la-dark-purple: #33296b;
+    --la-light-green: #bbe1ac;
+    --la-dark-green: #599b40;
+  }
+  
+  /* Generic page wrapper for public site */
+  .site-page {
+    min-height: 100vh;
+    background-color: var(--la-dark-purple);
+    color: var(--la-light-green);
+    font-family: "League Spartan", system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+  }
+  
+  .site-page__inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 3.5rem;
+  }
+  
+  /* Top padding for mobile header space */
+  @media (min-width: 768px) {
+    .site-page__inner {
+      padding-top: 3.5rem;
+    }
+  }
+  
+  /* Hero */
+  .site-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr);
+    gap: 2rem;
+  }
+  
+  @media (min-width: 900px) {
+    .site-hero {
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      align-items: center;
+    }
+  }
+  
+  .site-hero__eyebrow {
+    font-size: 0.85rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--la-light-green);
+    margin-bottom: 0.75rem;
+    max-width: 80vw;
+  }
+  
+  .site-hero__title {
+    font-size: clamp(2.7rem, 6vw, 4.3rem);
+    line-height: 1.05;
+    font-weight: 700;
+  }
+  
+  .site-hero__title-accent {
+    color: var(--la-light-green);
+  }
+  
+  .site-hero__body {
+    margin-top: 1.5rem;
+    max-width: 34rem;
+    font-size: 1rem;
+    line-height: 1.35;
+    color: var(--la-dark-green);
+  }
+  
+  .site-hero__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1.75rem;
+  }
+
+    /* ------------------------------------------------------ */
+    /* HERO IMAGE — FULL VERTICAL FILL                        */
+    /* ------------------------------------------------------ */
+
+    .site-hero__image {
+    position: relative;
+    width: 100%;
+    height: 60vh;              /* adjust to your taste (50–80vh typical) */
+    min-height: 260px;
+    overflow: hidden;
+    max-width: 400px;
+    border-radius: 1.25rem;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    }
+
+    .site-hero__img {
+        width: 100%;
+        height: 100%;
+        object-fit: fill;    /* stretches image to fill container exactly */
+        display: block;
+      }
+
+    .site-hero__image-tag {
+    position: absolute;
+    bottom: 1.25rem;
+    left: 1.5rem;
+    background: rgba(39, 31, 90, 0.65);
+    padding: 0.6rem 1rem;
+    border-radius: 0.8rem;
+    font-size: 0.9rem;
+    color: #bbe1ac;
+    border: 1px solid rgba(168, 159, 228, 0.3);
+    backdrop-filter: blur(6px);
+    }
+  
+  
+  /* Buttons (match dashboard-ish style) */
+  .site-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    padding: 0.7rem 1.5rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: 2px solid transparent;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease,
+      border-color 0.15s ease, transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  
+  .site-btn--primary {
+    background-color: var(--la-light-green);
+    color: var(--la-dark-purple);
+    border-color: var(--la-light-green);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  }
+  
+  .site-btn--primary:hover {
+    background-color: #d2f0c9;
+    border-color: #d2f0c9;
+    transform: translateY(-1px);
+  }
+  
+  .site-btn--ghost {
+    background-color: transparent;
+    color: var(--la-light-purple);
+    border-color: var(--la-light-purple);
+  }
+  
+  .site-btn--ghost:hover {
+    background-color: rgba(168, 159, 228, 0.12);
+  }
+  
+  /* Fake image block on hero (you can replace with real image later) */
+  .site-hero__image {
+    width: 100%;
+    height: 260px;
+    border-radius: 1.5rem;
+    background: radial-gradient(
+        circle at 20% 20%,
+        rgba(187, 225, 172, 0.25),
+        transparent 55%
+      ),
+      radial-gradient(
+        circle at 80% 80%,
+        rgba(168, 159, 228, 0.3),
+        transparent 55%
+      ),
+      #120b33;
+    border: 1px solid rgba(187, 225, 172, 0.2);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .site-hero__image-tag {
+    position: absolute;
+    inset: auto 1rem 1rem auto;
+    padding: 0.3rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: rgba(51, 41, 107, 0.9);
+    color: var(--la-light-green);
+    border: 1px solid rgba(187, 225, 172, 0.5);
+  }
+  
+  /* Carousel */
+  .site-strip {
+    margin-top: 3.5rem;
+    margin-bottom: 2.75rem;
+  }
+  
+  .site-strip__label {
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--la-light-purple);
+    margin-bottom: 0.75rem;
+  }
+  
+/* ------------------------------------------------------ */
+/* HOMEPAGE CAROUSEL — SCROLLABLE, NATURAL-WIDTH IMAGES    */
+/* ------------------------------------------------------ */
+
+.site-carousel {
+    height: 20vh;
+    min-height: 160px;
+    width: 100vw;
+    margin-left: 50%;
+    transform: translateX(-50%);
+    background-color: #271f5a;
+    border-top: 1px solid rgba(168, 159, 228, 0.4);
+    border-bottom: 1px solid rgba(168, 159, 228, 0.4);
+    overflow: hidden;
+    position: relative;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .site-carousel__inner {
+    display: flex;
+    gap: 2rem;
+    padding: 0.75rem 1.5rem;
+    height: 100%;
+    overflow-x: auto;              /* ← makes it scrollable */
+    overflow-y: hidden;
+    scroll-snap-type: x proximity; /* optional, smooth snapping */
+    scrollbar-width: none;         /* hide scrollbar on Firefox */
+  }
+  
+  .site-carousel__inner::-webkit-scrollbar {
+    display: none;                 /* hide scrollbar on WebKit */
+  }
+  
+  .site-carousel__item {
+    flex: 0 0 auto;
+    height: 100%;
+    border-radius: 1.25rem;
+    overflow: hidden;
+    background: #000;
+  
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    scroll-snap-align: center;     /* nice scrolling behavior */
+  }
+  
+  .site-carousel__img {
+    height: 100%;   /* Always fill height */
+    width: auto;    /* Natural width → no bars, no crop */
+    display: block;
+  }  
+  
+  /* Remove conflicting rule that forced cropping */
+  .site-carousel__item img {
+    height: 100%;
+    width: auto;
+    object-fit: contain;   /* match desired scaling */
+    display: block;
+  }  
+  
+  /* “I need help with…” CTA section */
+  .site-help {
+    margin-top: 2.75rem;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(168, 159, 228, 0.35);
+  }
+  
+  .site-help__label {
+    font-size: 0.92rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .site-help__controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  @media (min-width: 640px) {
+    .site-help__controls {
+      flex-direction: row;
+      align-items: center;
+    }
+  }
+  
+  .site-select {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 9999px;
+    padding: 0.55rem 1rem;
+    border: 2px solid var(--la-light-purple);
+    background-color: #201845;
+    color: var(--la-light-green);
+    font-size: 0.9rem;
+    outline: none;
+  }
+  
+  .site-select:focus {
+    border-color: var(--la-light-green);
+  }
+  
+  .site-footer-note {
+    margin-top: 1.75rem;
+    font-size: 0.78rem;
+    color: rgba(187, 225, 172, 0.85);
+  }
+  
+  /* A simple site-wide heading style you can reuse on other pages */
+  .site-heading {
+    font-size: clamp(1.9rem, 3.2vw, 2.4rem);
+    color: var(--la-light-green);
+    margin-bottom: 1.5rem;
+  }
+  
+  .site-bodycopy {
+    max-width: 46rem;
+    font-size: 0.98rem;
+    line-height: 1.5;
+    color: var(--la-dark-green);
+  }
+
+  /* DIGITAL STRATEGY — INTRO GRID */
+    .ds-intro-grid {
+        display: grid;
+        gap: 1.75rem;
+        grid-template-columns: minmax(0, 1fr);
+    }
+    
+    @media (min-width: 900px) {
+        .ds-intro-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: start;
+        }
+    }
+
+    /* DIGITAL STRATEGY — ROSTER GRID */
+    .ds-roster-grid {
+        display: grid;
+        gap: 1.75rem;
+        grid-template-columns: minmax(0, 1fr);
+    }
+    
+    @media (min-width: 900px) {
+        .ds-roster-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    /* MUSIC PORTFOLIO – 3 COLUMN GRID */
+    .music-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.75rem;
+    }
+    
+    @media (min-width: 900px) {
+        .music-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+  
+    /* VIDEO PORTFOLIO — 4 COLUMN GRID FOR LIVE SESSIONS */
+.video-grid-4 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.75rem;
+  }
+  
+  @media (min-width: 900px) {
+    .video-grid-4 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+/* ------------------------------------------------------ */
+/* ABOUT PAGE IMAGES — PROPORTIONAL, ALWAYS FILL SPACE    */
+/* ------------------------------------------------------ */
+
+.About-Image {
+    width: 100%;
+    height: 350px;            /* or 380px for the last one — consistent is better */
+    object-fit: cover;        /* fill container, keep proportions */
+    object-position: center;  /* crop evenly */
+    border-radius: 1rem;
+    display: block;
+    background-color: #000;   /* fallback */
+  }
+  
+  @media (min-width: 900px) {
+    .About-Image {
+      height: 420px;          /* optional: taller images on desktop */
+    }
+  }
+  

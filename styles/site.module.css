@@ -1,0 +1,235 @@
+/* styles/site.module.css */
+/* Only used by public/marketing pages – dashboard is unchanged */
+
+.sitePage {
+    min-height: 100vh;
+    background: #0e071f; /* dark purple similar to Cargo */
+    color: #f4f1ff;
+    font-family: "League Spartan", system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .siteInner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+  }
+  
+  .siteMain {
+    flex: 1;
+  }
+  
+  .siteHero {
+    padding: 4rem 0 2.5rem;
+  }
+  
+  .siteHeroKicker {
+    font-size: 0.85rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #a391ff;
+    margin-bottom: 0.75rem;
+  }
+  
+  .siteHeroTitle {
+    font-size: clamp(2.1rem, 4vw, 2.8rem);
+    line-height: 1.05;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  
+  .siteHeroSubtitle {
+    max-width: 36rem;
+    font-size: 0.98rem;
+    line-height: 1.6;
+    color: #d2c9ff;
+  }
+  
+  .siteHeroActions {
+    margin-top: 1.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  
+  /* Dashboard-style primary button */
+  .siteButtonPrimary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 1.25rem;
+    border-radius: 999px;
+    background: #42f5b0;
+    color: #151028;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.08s ease;
+    box-shadow: 0 0 0 1px rgba(10, 9, 23, 0.4), 0 10px 24px rgba(0, 0, 0, 0.45);
+  }
+  
+  .siteButtonPrimary:hover {
+    transform: translateY(-1px);
+    opacity: 0.95;
+  }
+  
+  .siteButtonPrimary:active {
+    transform: translateY(1px);
+    box-shadow: 0 0 0 1px rgba(10, 9, 23, 0.6), 0 4px 12px rgba(0, 0, 0, 0.6);
+  }
+  
+  /* Ghost button */
+  .siteButtonGhost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 1.05rem;
+    border-radius: 999px;
+    border: 1px solid rgba(132, 115, 255, 0.65);
+    color: #e4deff;
+    font-size: 0.85rem;
+    background: transparent;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  
+  .siteButtonGhost:hover {
+    background: rgba(83, 67, 179, 0.8);
+  }
+  
+  /* Carousel strip */
+  .carouselStrip {
+    margin-top: 3rem;
+    margin-bottom: 2rem;
+    height: 20vh;
+    min-height: 140px;
+    border-radius: 1.25rem;
+    overflow: hidden;
+    position: relative;
+    background: radial-gradient(circle at top left, #2a1b5f, #0e071f);
+  }
+  
+  .carouselTrack {
+    display: flex;
+    gap: 0.75rem;
+    position: absolute;
+    inset: 0;
+    padding: 0.75rem;
+    animation: carousel-scroll 30s linear infinite;
+  }
+  
+  .carouselImage {
+    flex: 0 0 auto;
+    height: 100%;
+    width: auto;
+    border-radius: 0.9rem;
+    object-fit: cover; /* ensures equal height, varying widths */
+  }
+  
+  /* Pause on hover */
+  .carouselStrip:hover .carouselTrack {
+    animation-play-state: paused;
+  }
+  
+  @keyframes carousel-scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+  
+  .helpRow {
+    margin: 2.5rem 0 2rem;
+    padding: 1rem 1.1rem;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(148, 132, 255, 0.5);
+    background: rgba(19, 12, 49, 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .helpRowLabel {
+    font-size: 0.95rem;
+    color: #d9d1ff;
+  }
+  
+  .helpRowSelect {
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 132, 255, 0.85);
+    background: #0e071f;
+    color: #f4f1ff;
+    font-size: 0.9rem;
+  }
+  
+  /* Simple footer */
+  .siteFooter {
+    border-top: 1px solid rgba(76, 61, 160, 0.7);
+    padding: 1rem 0 1.5rem;
+    font-size: 0.8rem;
+    color: #a99ae0;
+    margin-top: 1.5rem;
+  }
+  
+  /* Section utilities */
+  .siteSection {
+    padding: 3rem 0 1rem;
+  }
+  
+  .siteSectionHeader {
+    margin-bottom: 1.5rem;
+  }
+  
+  .siteSectionKicker {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #a391ff;
+    margin-bottom: 0.4rem;
+  }
+  
+  .siteSectionTitle {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+  }
+  
+  .siteSectionLead {
+    font-size: 0.96rem;
+    color: #d2c9ff;
+    max-width: 34rem;
+  }
+  
+  /* Simple grid for creative services sections */
+  .serviceSection {
+    margin-bottom: 2.5rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 1rem;
+    background: radial-gradient(circle at top left, #24144f, #0e071f);
+    border: 1px solid rgba(102, 82, 214, 0.7);
+  }
+  
+  .serviceTitle {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+  }
+  
+  .serviceSubtitle {
+    font-size: 0.9rem;
+    color: #d2c9ff;
+    margin-bottom: 0.9rem;
+  }
+  
+  .serviceActions {
+    margin-top: 0.85rem;
+  }
+  
