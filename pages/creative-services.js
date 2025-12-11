@@ -1,10 +1,31 @@
 // pages/creative-services.js
 import Head from "next/head";
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/router";
 import "../styles/site.css";
 import SiteHeader from "../components/SiteHeader";
 
 export default function CreativeServicesPage() {
+    const router = useRouter();
+
+    useEffect(() => {
+      if (!router.isReady) return;
+      if (typeof window === "undefined") return;
+  
+      const hash = window.location.hash;
+      if (!hash) return;
+  
+      const cleanHash = hash.split("?")[0]; // remove ?scroll=1
+        const el = document.querySelector(cleanHash);
+
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
+      }
+    }, [router.isReady]);
+      
   return (
     <>
       <Head>

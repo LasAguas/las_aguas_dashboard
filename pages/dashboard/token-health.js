@@ -190,21 +190,20 @@ export default function TokenHealthPage() {
     return rows.map((artist) => (
       <tr key={artist.id} className="border-b align-top">
         <td className="py-2 px-2 font-medium">{artist.name}</td>
-
+  
         {PLATFORMS.map((platform) => {
           const statusRow = getStatus(artist.id, platform);
           const status = statusRow?.status || "missing";
-          const handle =
-            artist[`${platform}_handle`] || "(no handle set)";
+          const handle = artist[`${platform}_handle`] || "(no handle set)";
           const colorClass = STATUS_COLORS[status] || STATUS_COLORS.missing;
           const isSavingStatus = savingKey === `${artist.id}-${platform}`;
           const isSavingToken = savingTokenKey === `${artist.id}-${platform}`;
           const tokenValue = statusRow?.access_token || "";
-
+  
           return (
             <td key={platform} className="py-2 px-2 space-y-1">
               <div className="text-xs text-gray-600 mb-1">{handle}</div>
-
+  
               <div className="flex items-center gap-2">
                 <div
                   className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colorClass}`}
@@ -212,7 +211,7 @@ export default function TokenHealthPage() {
                   {STATUS_LABELS[status] || status}
                 </div>
               </div>
-
+  
               <div className="flex gap-1 mt-1">
                 <button
                   className="text-[11px] px-2 py-1 border rounded"
@@ -231,7 +230,7 @@ export default function TokenHealthPage() {
                   Dismiss
                 </button>
               </div>
-
+  
               <div className="mt-2 space-y-1">
                 <label className="block text-[11px] text-gray-600">
                   Token
@@ -274,7 +273,20 @@ export default function TokenHealthPage() {
                   </button>
                 </div>
               </div>
-
+  
+              {/* TikTok OAuth connect button */}
+              {platform === "tiktok" && (
+                <button
+                  className="text-[11px] px-2 py-1 border rounded whitespace-nowrap mt-1 bg-white/60 hover:bg-white"
+                  onClick={() => {
+                    window.location.href = `/api/tiktok-auth-start?artistId=${artist.id}`;
+                  }}
+                  disabled={isSavingStatus || isSavingToken}
+                >
+                  Connect via TikTok
+                </button>
+              )}
+  
               {statusRow?.last_error && (
                 <div className="text-[11px] text-red-600 mt-1">
                   {statusRow.last_error}
@@ -286,6 +298,7 @@ export default function TokenHealthPage() {
       </tr>
     ));
   }
+  
 
   if (loading) {
     return (

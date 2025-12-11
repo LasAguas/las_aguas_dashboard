@@ -30,23 +30,26 @@ export default function SiteHeader() {
             alignItems: "center",
           }}
         >
-          <div>
-            <p
-              style={{
-                color: "#bbe1ac",
-                fontSize: "0.85rem",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                marginBottom: "0.2rem",
-              }}
-            >
-              Las Aguas Productions · Creative and Label Services
-            </p>
+          <Link href="/" style={{ textDecoration: "none" }}>
+            <div style={{ cursor: "pointer" }}>
+                <p
+                style={{
+                    color: "#bbe1ac",
+                    fontSize: "0.85rem",
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    marginBottom: "0.2rem",
+                }}
+                >
+                Las Aguas Productions · Creative and Label Services
+                </p>
 
-            <p style={{ color: "#a89fe4", fontSize: "1rem", fontWeight: 600 }}>
-              You be the artist, we handle the tech
-            </p>
-          </div>
+                <p style={{ color: "#a89fe4", fontSize: "1rem", fontWeight: 600 }}>
+                You be the artist, we handle the tech
+                </p>
+            </div>
+            </Link>
+
 
           {/* Menu Icon */}
           <button

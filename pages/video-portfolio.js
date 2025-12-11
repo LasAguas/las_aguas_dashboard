@@ -94,97 +94,194 @@ export default function VideoPortfolio() {
             </div>
           </section>
 
-          {/* ========================================================= */}
-          {/* LIVE SHOW REELS — 9:16 aspect, placeholder video files   */}
-          {/* ========================================================= */}
+        {/* ========================================================= */}
+        {/* LIVE SHOW REELS — 9:16 aspect, MP4 files in /video-portfolio */}
+        {/* ========================================================= */}
 
-          <section style={{ marginTop: "3rem" }}>
-            <h2 className="site-heading" style={{ fontSize: "1.45rem" }}>
-              Live Show Reels
-            </h2>
+        <section style={{ marginTop: "3rem" }}>
+        <h2 className="site-heading" style={{ fontSize: "1.45rem" }}>
+            Live Show Reels
+        </h2>
 
-            {/* Top row of 3 */}
-            <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-              {[1, 2, 3].map((n) => (
-                <article key={`live-top-${n}`} className="music-card">
-                  <div className="video-frame-9x16">
-                    <video
-                      src={`/videos/live-reels/reel-${n}.mp4`}
-                      muted
-                      playsInline
-                      controls
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                  <h3 className="music-title">Live Show Reel #{n}</h3>
-                </article>
-              ))}
+        {/* ---------- ROW 1 ---------- */}
+        <div className="music-grid" style={{ marginTop: "1.5rem" }}>
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Laiz Live at 90mil.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
             </div>
+            <h3 className="music-title">Live Show Reel 1</h3>
+            </article>
 
-            {/* Bottom row of 3 */}
-            <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-              {[4, 5, 6].map((n) => (
-                <article key={`live-bottom-${n}`} className="music-card">
-                  <div className="video-frame-9x16">
-                    <video
-                      src={`/videos/live-reels/reel-${n}.mp4`}
-                      muted
-                      playsInline
-                      controls
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                  <h3 className="music-title">Live Show Reel #{n}</h3>
-                </article>
-              ))}
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/KOOB Live at Kantine am Berghain Reel 2.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
             </div>
-          </section>
+            <h3 className="music-title">Live Show Reel 2</h3>
+            </article>
 
-          {/* ========================================================= */}
-          {/* VISUALISER REELS — also 9:16 placeholders                */}
-          {/* ========================================================= */}
-
-          <section style={{ marginTop: "3rem", marginBottom: "3rem" }}>
-            <h2 className="site-heading" style={{ fontSize: "1.45rem" }}>
-              Visualiser Reels
-            </h2>
-
-            {/* Top row */}
-            <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-              {[1, 2, 3].map((n) => (
-                <article key={`vis-top-${n}`} className="music-card">
-                  <div className="video-frame-9x16">
-                    <video
-                      src={`/videos/visualisers/vis-${n}.mp4`}
-                      muted
-                      playsInline
-                      controls
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                  <h3 className="music-title">Visualiser Reel #{n}</h3>
-                </article>
-              ))}
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/CORP Live at Junction Bar.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
             </div>
+            <h3 className="music-title">Live Show Reel 3</h3>
+            </article>
+        </div>
 
-            {/* Bottom row */}
-            <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-              {[4, 5, 6].map((n) => (
-                <article key={`vis-bottom-${n}`} className="music-card">
-                  <div className="video-frame-9x16">
-                    <video
-                      src={`/videos/visualisers/vis-${n}.mp4`}
-                      muted
-                      playsInline
-                      controls
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                  <h3 className="music-title">Visualiser Reel #{n}</h3>
-                </article>
-              ))}
+        {/* ---------- ROW 2 ---------- */}
+        <div className="music-grid" style={{ marginTop: "1.5rem" }}>
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Conexion Salsa Reel.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
             </div>
-          </section>
+            <h3 className="music-title">Live Show Reel 4</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Carcara Reel Laiz.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Live Show Reel 5</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/KOOB Live at Kantine am Berghain Reel 1.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Live Show Reel 6</h3>
+            </article>
+        </div>
+        </section>
+
+        {/* ========================================================= */}
+        {/* VISUALISER REELS — Also 9:16, MP4 files */}
+        {/* ========================================================= */}
+
+        <section style={{ marginTop: "3rem", marginBottom: "3rem" }}>
+        <h2 className="site-heading" style={{ fontSize: "1.45rem" }}>
+            Visualiser Reels
+        </h2>
+
+        {/* ---------- ROW 1 ---------- */}
+        <div className="music-grid" style={{ marginTop: "1.5rem" }}>
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Avui Reel Emetres.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 1</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/CORP Visualiser Super Base.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 2</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Cuchibeats Cover Art Breakdown.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 3</h3>
+            </article>
+        </div>
+
+        {/* ---------- ROW 2 ---------- */}
+        <div className="music-grid" style={{ marginTop: "1.5rem" }}>
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Escape the Rat Song Breakdown.mov"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 4</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Facundo Swing 3B Visualiser.mov"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 5</h3>
+            </article>
+
+            <article className="music-card">
+            <div className="video-frame-9x16">
+                <video
+                src="/video-portfolio/Saba Lou Visualiser.mp4"
+                muted
+                playsInline
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+            </div>
+            <h3 className="music-title">Visualiser Reel 6</h3>
+            </article>
+        </div>
+        </section>
+
 
         </div>
 
