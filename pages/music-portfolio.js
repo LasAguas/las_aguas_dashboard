@@ -40,16 +40,26 @@ export default function MusicPortfolioPage() {
                 }}
               >
                 <div
-                  style={{
-                    width: "100%",
-                    height: "220px",
-                    borderRadius: "1.25rem",
-                    backgroundColor: "#000",
-                    marginBottom: "0.9rem",
-                  }}
-                >
-                  {/* TODO: replace with cover art */}
-                </div>
+                    style={{
+                        width: "100%",
+                        aspectRatio: "16 / 9",
+                        borderRadius: "1.25rem",
+                        overflow: "hidden",
+                        backgroundColor: "#000",
+                        marginBottom: "0.9rem",
+                    }}
+                    >
+                    <iframe
+                        width="100%"
+                        height="100%"
+                        src="https://www.youtube.com/embed/0yuSjXRZlVc?list=OLAK5uy_le-e6gWjErNmVrg6G3ZBNu5506W2JoaWc"
+                        title="Facundo Swing – Refréscate el Chip"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    ></iframe>
+                    </div>
+
                 <h2
                   style={{
                     fontSize: "1.05rem",
@@ -82,16 +92,26 @@ export default function MusicPortfolioPage() {
                 }}
               >
                 <div
-                  style={{
+                style={{
                     width: "100%",
-                    height: "220px",
+                    aspectRatio: "16 / 9",
                     borderRadius: "1.25rem",
+                    overflow: "hidden",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
-                  }}
+                }}
                 >
-                  {/* TODO: replace with cover art */}
+                <iframe
+                    width="100%"
+                    height="100%"
+                    src="https://www.youtube.com/embed/JxK0twTfT-0?list=OLAK5uy_lcechhKxC9A1Q7_DKOdf-Ki0H44Kbw7YY"
+                    title="Aura – MujerPlantaEco"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                ></iframe>
                 </div>
+
                 <h2
                   style={{
                     fontSize: "1.05rem",
@@ -122,16 +142,26 @@ export default function MusicPortfolioPage() {
                 }}
               >
                 <div
-                  style={{
-                    width: "100%",
-                    height: "220px",
-                    borderRadius: "1.25rem",
-                    backgroundColor: "#000",
-                    marginBottom: "0.9rem",
-                  }}
-                >
-                  {/* TODO: replace with cover art */}
-                </div>
+                    style={{
+                        width: "100%",
+                        aspectRatio: "16 / 9",
+                        borderRadius: "1.25rem",
+                        overflow: "hidden",
+                        backgroundColor: "#000",
+                        marginBottom: "0.9rem",
+                    }}
+                    >
+                    <iframe
+                        width="100%"
+                        height="100%"
+                        src="https://www.youtube.com/embed/TZm9LPuvT5U?list=OLAK5uy_lkETyhCmHpspPR34SJMMGHFsK5n0U69pw"
+                        title="Mercedes & Marxx – Latin American Post-Pop"
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                    ></iframe>
+                    </div>
+
                 <h2
                   style={{
                     fontSize: "1.05rem",
@@ -186,8 +216,8 @@ export default function MusicPortfolioPage() {
                 <iframe
                 width="100%"
                 height="100%"
-                src="https://www.youtube.com/watch?v=vJBtMCSeA2k&list=RDvJBtMCSeA2k&start_radio=1"
-                title="Live Session 1 - Sorvina"
+                src="https://www.youtube.com/embed/vJBtMCSeA2k"
+                title="Sorvina: Live From Riverside Studios"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -224,12 +254,13 @@ export default function MusicPortfolioPage() {
                 <iframe
                 width="100%"
                 height="100%"
-                src="https://www.youtube.com/embed/VIDEO_ID_HERE"
-                title="Live Session 2 - CORP."
+                src="https://www.youtube.com/embed/ZJQNVhkhfs8"
+                title="CORP: Live at LA Recordings"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 ></iframe>
+
             </div>
 
             <h3 style={{ color: "#bbe1ac", fontSize: "1.05rem" }}>
@@ -262,8 +293,8 @@ export default function MusicPortfolioPage() {
                 <iframe
                 width="100%"
                 height="100%"
-                src="https://www.youtube.com/embed/iBCTlDAVHNU&list=RDiBCTlDAVHNU&start_radio=1"
-                title="Live Session 3"
+                src="https://www.youtube.com/embed/iBCTlDAVHNU"
+                title="Maia Valentine – Unausgesprochenes Versprechen"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen

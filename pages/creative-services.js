@@ -127,16 +127,16 @@ export default function CreativeServicesPage() {
               
               <div className="site-carousel__item">
                 <img 
-                  src="/videography/Yannick at Drums Video.jpeg"
-                  alt="Yannick at Drums Video"
-                  className="site-carousel__img"
+                src="/videography/yannick-sorvina-session-2.jpeg"
+                alt="Yannick filming Sorvina live session"
+                className="site-carousel__img"
                 />
-              </div>
-              
-              <div className="site-carousel__item">
+            </div>
+
+            <div className="site-carousel__item">
                 <img 
-                  src="/videography/Yannick Filming Sorvina Live Session 2.jpeg"
-                  alt="Yannick Filming Sorvina Live Session 2"
+                  src="/videography/Yannick at Drums Video.jpg"
+                  alt="Yannick at Drums Video"
                   className="site-carousel__img"
                 />
               </div>
@@ -198,7 +198,7 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Aura-and-Jair-at-Las-Aguas.jpeg"
+                  src="/tracking-engineering/Aura and Jair at Las Aguas.jpeg"
                   alt="Aura and Jair at Las Aguas"
                   className="site-carousel__img"
                 />
@@ -206,7 +206,7 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Drum Kit at Las Aguas.jpeg"
+                  src="/tracking-engineering/Drum Kit at Las Aguas.jpeg"
                   alt="Drum Kit at Las Aguas"
                   className="site-carousel__img"
                 />
@@ -214,7 +214,7 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Maia Valentine at Las Aguas.jpeg"
+                  src="/tracking-engineering/Maia Valentine at Las Aguas.jpeg"
                   alt="Maia Valentine at Las Aguas"
                   className="site-carousel__img"
                 />
@@ -222,15 +222,7 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Simon Timm at Las Aguas.jpeg"
-                  alt="Simon Timm at Las Aguas"
-                  className="site-carousel__img"
-                />
-              </div>
-
-              <div className="site-carousel__item">
-                <img 
-                  src="/tracking and engineering/Nikolai and Efro at Las Aguas.jpeg"
+                  src="/tracking-engineering/Nikolai and Efro at Las Aguas.jpeg"
                   alt="Nikolai and Efro at Las Aguas"
                   className="site-carousel__img"
                 />
@@ -238,7 +230,7 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Sebastian Sheath Saxophone.jpeg"
+                  src="/tracking-engineering/Sebastian Sheath Saxophone.jpeg"
                   alt="Sebastian Sheath Saxophone"
                   className="site-carousel__img"
                 />
@@ -246,8 +238,24 @@ export default function CreativeServicesPage() {
 
               <div className="site-carousel__item">
                 <img 
-                  src="/tracking and engineering/Nikolai Looft at Las Aguas.jpeg"
+                  src="/tracking-engineering/Simon Timm at Las Aguas.jpeg"
+                  alt="Simon Timm at Las Aguas"
+                  className="site-carousel__img"
+                />
+              </div>
+
+              <div className="site-carousel__item">
+                <img 
+                  src="/tracking-engineering/Nikolai Looft at Las Aguas.jpeg"
                   alt="Nikolai Looft at Las Aguas"
+                  className="site-carousel__img"
+                />
+              </div>
+
+              <div className="site-carousel__item">
+                <img 
+                  src="/tracking-engineering/Nikolai Looft on Drums at Las Aguas.jpeg"
+                  alt="Nikolai Looft on Drums at Las Aguas"
                   className="site-carousel__img"
                 />
               </div>

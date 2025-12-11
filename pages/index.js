@@ -14,16 +14,16 @@ export default function HomePage() {
 
     switch (value) {
       case "mixing-mastering":
-        router.push("/creative-services#mixing-mastering");
+        router.push("/creative-services#tracking-production?scroll=1");
         break;
       case "music-production":
-        router.push("/creative-services#tracking-production");
+        router.push("/creative-services#tracking-production?scroll=1");
         break;
       case "artist-development":
         router.push("/artist-development");
         break;
       case "video":
-        router.push("/creative-services#videography");
+        router.push("/creative-services#videography?scroll=1");
         break;
       case "social-media":
         router.push("/digital-strategy");

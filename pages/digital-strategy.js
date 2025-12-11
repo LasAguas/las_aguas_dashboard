@@ -105,15 +105,14 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Saba Lou Roster Pic.jpeg"
+                    src="/roster/Saba Lou Roster Pic.jpg"
                     alt="Saba Lou Roster Pic"
+                    className="roster-img"
                 >
-                  {/* TODO: replace with Saba Lou image */}
                 </img>
                 <h3
                   style={{
@@ -167,7 +166,7 @@ export default function DigitalStrategyPage() {
                 </p>
               </article>
 
-              {/* Emetres */}
+              {/* Efro */}
               <article
                 style={{
                   backgroundColor: "#271f5a",
@@ -179,15 +178,15 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Efro Roster Pic.jpeg"
+                    src="/roster/Efro Roster Pic.jpg"
                     alt="Efro Roster Pic"
+                    className="roster-img"
                 >
-                  {/* TODO: replace with Saba Lou image */}
+
                 </img>
                 <h3
                   style={{
@@ -196,7 +195,7 @@ export default function DigitalStrategyPage() {
                     marginBottom: "0.4rem",
                   }}
                 >
-                  Emetres
+                  Efro
                 </h3>
                 <p
                   style={{
@@ -204,14 +203,13 @@ export default function DigitalStrategyPage() {
                     color: "#599b40",
                   }}
                 >
-                  Emetres is a Berlin-based,{" "}
+                  Efro is a Berlin-based,{" "}
                   <span style={{ color: "#a89fe4" }}>
-                    Venezuelan-Catalan
+                    indie rock
                   </span>{" "}
-                  singer-songwriter making soft Latin pop, pulling inspiration
-                  from{" "}
+                  artist making music that falls somewhere in between{" "}
                   <span style={{ color: "#a89fe4" }}>
-                    The Marías, Vicentico Garcia and Muerdo
+                  Radiohead and PJ Harvey
                   </span>
                   .
                 </p>
@@ -222,30 +220,12 @@ export default function DigitalStrategyPage() {
                     marginTop: "0.6rem",
                   }}
                 >
-                  Released in March 2025, her debut album{" "}
-                  <em>Cuchibeats</em> explores a soundscape inspired at times by{" "}
-                  <span style={{ color: "#a89fe4" }}>
-                    contemporary electronic artists
-                  </span>{" "}
-                  as well as a strong Latin folk heritage. Throughout the album,
-                  her songwriting focuses on capturing the sensitivity and
-                  creative lyrical tradition of her roots.
+                  Efro's first full album is coming soon and we are working with her to build out her digital presence in the lead up to the release.
                 </p>
-                <p
-                  style={{
-                    fontSize: "0.95rem",
-                    color: "#599b40",
-                    marginTop: "0.6rem",
-                  }}
-                >
-                  With Las Aguas, we are working on Laíz’s{" "}
-                  <span style={{ color: "#a89fe4" }}>
-                    digital strategy and content creation.
-                  </span>
-                </p>
+
                 <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
                   <a
-                    href="https://open.spotify.com/artist/0kyn948FvzvuJ5a2CJkUP3"
+                    href="https://open.spotify.com/artist/26VdeiPhYb7YIg9LpXMTdw"
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
@@ -256,7 +236,7 @@ export default function DigitalStrategyPage() {
                 </p>
               </article>
 
-              {/* CORP. */}
+              {/* Uwineza. */}
               <article
                 style={{
                   backgroundColor: "#271f5a",
@@ -268,15 +248,14 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Uwineza Roster Pic.jpeg"
+                    src="/roster/Uwineza Roster Pic.jpg"
                     alt="Uwineza Roster Pic"
+                    className="roster-img"
                 >
-                  {/* TODO: replace with Saba Lou image */}
                 </img>
                 <h3
                   style={{
@@ -285,7 +264,7 @@ export default function DigitalStrategyPage() {
                     marginBottom: "0.4rem",
                   }}
                 >
-                  CORP.
+                  Uwineza
                 </h3>
                 <p
                   style={{
@@ -294,15 +273,16 @@ export default function DigitalStrategyPage() {
                   }}
                 >
                   <span style={{ color: "#a89fe4" }}>
-                    Viagra Boys meets MGMT
+                    Olivia Dean meets Steve Lacey
                   </span>
-                  , Talking Heads, and Surf Curse. CORP. is a Berlin-based
-                  “corporation” which radically disrupts consumers’ livelihoods
-                  through high-risk post-punk and pop. Their first EP{" "}
-                  <em>Employee Orientation</em> was released in Q2 2024,
-                  followed by{" "}
-                  <em>Whispers from the Watercooler</em> in Q1 2025.
+                  , Dominic Fike, and Corrine Bailey. Uwineza is a Berlin-based
+                  romantic rock artist from South Africa. <br /><br />
+                  Her debut album{" "}
+                  <em>You're Gonna Hate It</em> was released in September 2024,
+                  followed by collaborations with{" "}
+                  <em>*Maliiik, Ju Zahkarii, and moss.png</em> in 2025.
                 </p>
+
                 <p
                   style={{
                     fontSize: "0.95rem",
@@ -310,26 +290,14 @@ export default function DigitalStrategyPage() {
                     marginTop: "0.6rem",
                   }}
                 >
-                  Left to right, Rory is the band’s drummer; Conor is the
-                  founder and covers half of the vocals; Uli is on bass; and
-                  Wouter is on guitar and the other half of the vocals.
-                </p>
-                <p
-                  style={{
-                    fontSize: "0.95rem",
-                    color: "#599b40",
-                    marginTop: "0.6rem",
-                  }}
-                >
-                  With Las Aguas, we are working on their{" "}
+                  With Las Aguas, we are working on her{" "}
                   <span style={{ color: "#a89fe4" }}>
-                    social media strategy, content creation and merch
-                    production.
+                    social media and marketing strategy.
                   </span>
                 </p>
                 <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
                   <a
-                    href="https://corp.band/?window=music"
+                    href="https://open.spotify.com/album/7olp6hYLNx1nXdJjmqiZWg"
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
@@ -352,15 +320,14 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Lemon Eye Roster Pic.jpeg"
+                    src="/roster/Lemon Eye Roster Pic.jpg"
                     alt="Lemon Eye Roster Pic"
+                    className="roster-img"
                 >
-                  {/* TODO: replace with Saba Lou image */}
                 </img>
                 <h3
                   style={{
@@ -369,7 +336,7 @@ export default function DigitalStrategyPage() {
                     marginBottom: "0.4rem",
                   }}
                 >
-                  Facundo Swing
+                  Lemon Eye
                 </h3>
                 <p
                   style={{
@@ -377,38 +344,15 @@ export default function DigitalStrategyPage() {
                     color: "#599b40",
                   }}
                 >
-                  Facundo Swing is a Germany-based project by Nicaraguan artist
-                  Sebastian Barberena and producer Miguel Lee (who is also part
-                  of the Las Aguas studio team). Miguel and Sebastian have been
-                  making music together since they were 12 and now, living far
-                  from Nicaragua, their music explores their roots and{" "}
-                  <span style={{ color: "#a89fe4" }}>
-                    celebrates the Nicaraguan culture of urban and alternative
-                    music.
-                  </span>
-                </p>
-                <p
-                  style={{
-                    fontSize: "0.95rem",
-                    color: "#599b40",
-                    marginTop: "0.6rem",
-                  }}
-                >
-                  Their debut album <em>Refréscate el Chip</em> came out in
-                  December 2024 and our approach to growing the project is
-                  rooted in social media first,{" "}
-                  <span style={{ color: "#a89fe4" }}>
-                    growing a digital presence that adds value to their
-                    portfolio beyond the music.
-                  </span>{" "}
-                  This involves not only vertical short-form video, but making
-                  sure the appropriate infrastructure is in place to take
-                  advantage of social growth – merchandise, regular shows,
-                  behind-the-scenes admin, and a structured web presence.
+
+                  Lemon Eye spent some time jumping between genres: rock, chamber pop, and RnB, but now they've got it figured out. 
+                  Their new single Honey? exactly what they want to sound like. <span style={{ color: "#a89fe4" }}>A mix of rock energy, indie cool, and just the right amount of miam miam, mmmmm, and grrr.</span> 
+                  It’s got all the attitude and all the heart. <br /><br />
+                  Band members: Aicha (vocals/guitar), Ada (lead guitar), AC (backing vocals/cello), Julien (bass) and Jakob (drums).
                 </p>
                 <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
                   <a
-                    href="http://facundoswing.com/musica"
+                    href="https://open.spotify.com/artist/0TWRk3ga3JAtCHFyGZFWiT"
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
@@ -431,15 +375,14 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Aura Roster Pic.jpeg"
+                    src="/roster/Aura Roster Pic.jpg"
                     alt="Aura Roster Pic"
+                    className="roster-img"
                 >
-                  {/* TODO: replace with Saba Lou image */}
                 </img>
                 <h3
                   style={{
@@ -504,13 +447,13 @@ export default function DigitalStrategyPage() {
                 <img
                   style={{
                     width: "100%",
-                    height: "220px",
                     borderRadius: "1.25rem",
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/KOOB Roster Pic.jpeg"
+                    src="/roster/KOOB Roster Pic.jpg"
                     alt="KOOB Roster Pic"
+                    className="roster-img"
                 >
                   {/* TODO: replace with Saba Lou image */}
                 </img>

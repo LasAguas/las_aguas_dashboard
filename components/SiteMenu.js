@@ -101,6 +101,13 @@ export default function SiteMenu({ open, setOpen }) {
           >
             Music Portfolio
           </Link>
+          <Link
+            href="/dashboard/login"
+            onClick={() => setOpen(false)}
+            className="site-menu-link"
+          >
+            Dashboard Login
+          </Link>
           {/*<Link
             href="/tech-specs"
             onClick={() => setOpen(false)}

@@ -398,3 +398,23 @@
     }
   }
   
+/* ------------------------------------------------------ */
+/* DIGITAL STRATEGY ROSTER IMAGES — MATCH ABOUT PAGE      */
+/* ------------------------------------------------------ */
+
+.roster-img {
+    width: 100%;              /* fill card width */
+    height: 520px;            /* keep consistent height like About page */
+    object-fit: cover;        /* proportional scaling, fills area */
+    object-position: center;  /* crop evenly if necessary */
+    border-radius: 1.25rem;
+    display: block;
+    background-color: #000;
+  }
+  
+  @media (min-width: 900px) {
+    .roster-img {
+      height: 360px;          /* slightly taller desktops (optional) */
+    }
+  }
+  
