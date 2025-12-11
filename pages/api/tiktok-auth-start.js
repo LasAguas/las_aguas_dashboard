@@ -29,9 +29,10 @@ export default async function handler(req, res) {
       const params = new URLSearchParams({
         client_key: clientKey,
         response_type: "code",
-        scope: "user.info.basic,video.list,video.info,video.data",
+        // Start simple: only request the basic user scope that all Login apps get
+        scope: "user.info.basic",
         redirect_uri: redirectUri,
-        state: String(artistId), // we’ll read this back as artistId
+        state: String(artistId),
       });
   
       const url = `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
