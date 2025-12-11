@@ -1620,6 +1620,7 @@ const navItems = [
   { href: "/dashboard/stats-view", label: "Stats" },
   { href: "/dashboard/audio-database", label: "Audio DB" },
   { href: "/dashboard/menu", label: "Home" },
+  { href: "/dashboard/posts-stats", label: "Posts Stats" },
 ];
 
 useEffect(() => {

@@ -31,7 +31,7 @@ const STATUS_OPTIONS = [
 "assets obtained",
 "uploaded",
 "ready",
-"posted",
+"posted",{ href: "/dashboard/posts-stats", label: "Posts Stats" },
 ];
 
 // Spreadsheet-driven value table
@@ -1177,6 +1177,7 @@ export default function EditNextPage() {
     { href: "/dashboard/stats-view", label: "Stats" },
     { href: "/dashboard/audio-database", label: "Audio Database" },
     { href: "/dashboard/menu", label: "Home" },
+    { href: "/dashboard/posts-stats", label: "Posts Stats" },
   ];
 
   useEffect(() => {

@@ -1335,6 +1335,7 @@ export default function MenuPage() {
     { href: "/dashboard/leads", label: "Leads" },
     { href: "/dashboard/stats-view", label: "Stats" },
     { href: "/dashboard/audio-database", label: "Audio Database" },
+    { href: "/dashboard/posts-stats", label: "Posts Stats" },
   ];
 
   const handleNotificationClick = (post) => {

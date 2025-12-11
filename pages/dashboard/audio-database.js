@@ -10,6 +10,7 @@ const navItems = [
   { href: "/dashboard/leads", label: "Leads" },
   { href: "/dashboard/stats-view", label: "Stats" },
   { href: "/dashboard/menu", label: "Home" },
+  { href: "/dashboard/posts-stats", label: "Posts Stats" },
 ];
 
 export default function AudioDatabasePage() {
