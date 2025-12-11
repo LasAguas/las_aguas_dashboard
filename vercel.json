@@ -1,0 +1,9 @@
+{
+    "crons": [
+      {
+        "path": "/api/metrics/youtube-batch",
+        "schedule": "0 5 * * *"
+      }
+    ]
+  }
+  
