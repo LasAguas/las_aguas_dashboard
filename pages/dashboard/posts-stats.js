@@ -93,7 +93,7 @@ function MiniLineChart({ points, avgValue, height = 120, labelFormatter }) {
 
   const minY = 0;
   const maxY = Math.max(...ys, avgValue ?? ys[0]);
-  
+
   const spanY = maxY - minY || 1;
 
   const scaleX = (x) =>
@@ -255,6 +255,14 @@ export default function PostsStatsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
 
+  const [tiktokInfo, setTiktokInfo] = useState({
+    loading: false,
+    error: "",
+    tokenCount: 0,
+    postCount: 0,
+    snapshotCount: 0,
+  });
+
   // Modal state
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
@@ -269,6 +277,61 @@ export default function PostsStatsPage() {
     { href: "/dashboard/menu", label: "Home" },
     { href: "/dashboard/posts-stats", label: "Posts Stats" },
   ];
+  
+  useEffect(() => {
+    async function loadTikTokInfo() {
+      if (activeTab !== "tiktok") return;
+  
+      setTiktokInfo((p) => ({ ...p, loading: true, error: "" }));
+  
+      try {
+        // 1) count connected TikTok tokens
+        const { data: tokens, error: tokenErr } = await supabase
+          .from("artist_social_auth_status")
+          .select("artist_id", { count: "exact", head: true })
+          .eq("platform", "tiktok")
+          .eq("status", "ok");
+  
+        if (tokenErr) throw tokenErr;
+  
+        // 2) count posted posts with tiktok_url
+        // IMPORTANT: if your column is not tiktok_url, tell me the correct name.
+        const { error: postErr, count: postCount } = await supabase
+          .from("posts")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "posted")
+          .not("tiktok_url", "is", null);
+  
+        if (postErr) throw postErr;
+  
+        // 3) count tiktok snapshots
+        const { error: snapErr, count: snapCount } = await supabase
+          .from("post_metrics_snapshots")
+          .select("id", { count: "exact", head: true })
+          .eq("platform", "tiktok");
+  
+        if (snapErr) throw snapErr;
+  
+        setTiktokInfo({
+          loading: false,
+          error: "",
+          tokenCount: tokens?.length ? tokens.length : 0, // head:true often returns null data; count not returned by v2 client reliably
+          postCount: postCount || 0,
+          snapshotCount: snapCount || 0,
+        });
+      } catch (e) {
+        console.error(e);
+        setTiktokInfo((p) => ({
+          ...p,
+          loading: false,
+          error: "Failed to load TikTok status (check console / column name).",
+        }));
+      }
+    }
+  
+    loadTikTokInfo();
+  }, [activeTab]);
+  
 
   // ---- load overview data ----
   useEffect(() => {
@@ -711,11 +774,78 @@ export default function PostsStatsPage() {
             )}
 
             {activeTab === "tiktok" && (
-              <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
-                This tab is under construction. Once TikTok metrics are wired
-                in, you&apos;ll see per-post funnel and growth stats here.
+              <div className="bg-[#eef8ea] rounded-xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">TikTok (stub)</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      This tab will mirror YouTube once TikTok metrics scopes are enabled.
+                      For now, it shows what’s missing.
+                    </div>
+                  </div>
+
+                  <button
+                    className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch("/api/metrics/tiktok-batch", {
+                          method: "GET",
+                          headers: {
+                            Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ""}`,
+                          },
+                        });
+                        const json = await res.json();
+                        console.log("TikTok batch result:", json);
+                        alert("Ran TikTok batch. Check console for details.");
+                      } catch (e) {
+                        console.error(e);
+                        alert("Failed to run TikTok batch (check console).");
+                      }
+                    }}
+                  >
+                    Run TikTok fetch (manual)
+                  </button>
+                </div>
+
+                <div className="mt-4 grid md:grid-cols-3 gap-3 text-xs">
+                  <div className="bg-white rounded-lg p-3 border">
+                    <div className="text-gray-500">Connected TikTok tokens</div>
+                    <div className="text-lg font-semibold">
+                      {tiktokInfo.loading ? "…" : tiktokInfo.tokenCount}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border">
+                    <div className="text-gray-500">Posted posts w/ TikTok links</div>
+                    <div className="text-lg font-semibold">
+                      {tiktokInfo.loading ? "…" : tiktokInfo.postCount}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border">
+                    <div className="text-gray-500">TikTok snapshots</div>
+                    <div className="text-lg font-semibold">
+                      {tiktokInfo.loading ? "…" : tiktokInfo.snapshotCount}
+                    </div>
+                  </div>
+                </div>
+
+                {tiktokInfo.error && (
+                  <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
+                    {tiktokInfo.error}
+                  </div>
+                )}
+
+                <div className="mt-4 text-xs text-gray-700">
+                  <div className="font-semibold mb-1">Next steps</div>
+                  <ol className="list-decimal ml-5 space-y-1">
+                    <li>Ensure each post has a TikTok link saved in <code>posts.tiktok_url</code>.</li>
+                    <li>Ensure the artist has TikTok connected (Token Health page → Connect via TikTok).</li>
+                    <li>Enable TikTok API scopes for video metrics (requires TikTok approval).</li>
+                    <li>Once scopes are enabled, the cron will begin generating snapshots here.</li>
+                  </ol>
+                </div>
               </div>
             )}
+
 
             {activeTab === "standout" && (
               <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
