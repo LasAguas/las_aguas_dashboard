@@ -788,15 +788,16 @@ export default function PostsStatsPage() {
                     className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
                     onClick={async () => {
                       try {
-                        const res = await fetch("/api/metrics/tiktok-batch", {
-                          method: "GET",
+                        const res = await fetch("/api/metrics/tiktok-batch-manual", {
+                          method: "POST",
                           headers: {
-                            Authorization: `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ""}`,
+                            "Content-Type": "application/json",
                           },
                         });
                         const json = await res.json();
                         console.log("TikTok batch result:", json);
                         alert("Ran TikTok batch. Check console for details.");
+                        
                       } catch (e) {
                         console.error(e);
                         alert("Failed to run TikTok batch (check console).");

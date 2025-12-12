@@ -57,32 +57,40 @@ font-display: swap; /* Prevents invisible text during load */
     padding-bottom: 0.25rem;
   }
 }
-/* MOBILE: stack days, hide header, thinner empty days */
+/* MOBILE DAY LABEL REPLACEMENT */
 @media (max-width: 768px) {
-  /* Hide the weekday header row (Mon Tue Wed...) */
+
+  /* 1. Hide the weekday header row */
   .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
     > .grid.grid-cols-7.text-xs {
     display: none !important;
   }
 
-  /* Stack day cells vertically */
+  /* 2. Stack day cells (from previous fix) */
   .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
     > .grid.grid-cols-7:not(.text-xs) {
     grid-template-columns: 1fr !important;
   }
 
-  /* Day cells (all 7 days in the body grid) */
-  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
-    > .grid.grid-cols-7:not(.text-xs) > div {
-    min-height: auto;              /* let content define height */
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-    border-left-width: 0;          /* no vertical separators */
-    border-top-width: 1px;         /* line between stacked days */
+  /* 3. Insert "Mon - 24/11" style label above the cell content */
+  .day-cell {
+    position: relative;
+    padding-top: 2.2rem !important; /* room for label */
   }
 
-  .border.rounded-lg.overflow-hidden.bg-white.shadow-sm
-    > .grid.grid-cols-7:not(.text-xs) > div:first-child {
-    border-top-width: 0;           /* no top line on first */
+  .day-cell::before {
+    content: attr(data-day-label);  /* label injected via data attribute */
+    position: absolute;
+    top: 0.35rem;
+    left: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #444;
+  }
+
+  /* 4. Thinner empty days */
+  .day-cell.empty {
+    padding-top: 1.3rem !important;
+    padding-bottom: 0.3rem !important;
   }
 }
