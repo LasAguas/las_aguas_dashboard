@@ -8,6 +8,52 @@ import { supabase } from "../../lib/supabaseClient";
 
 const PLATFORM_YOUTUBE_SHORTS = "youtube_shorts"; // adjust if you use a different value
 
+function computeStandoutMetric({ postId, tierPosts, latestSnapshotByPostId }) {
+  const metrics = [
+    { key: "views", label: "Views" },
+    { key: "reach", label: "Reach" },
+    { key: "likes", label: "Likes" },
+    { key: "comments", label: "Comments" },
+    { key: "avg_view_duration", label: "Avg view duration" },
+    { key: "retention_rate", label: "Viewer retention" },
+    { key: "completion_rate", label: "% stayed to watch" },
+  ];
+
+  const targetSnap = latestSnapshotByPostId.get(postId);
+  if (!targetSnap) return null;
+
+  // Build peer snapshots (same tier)
+  const peerSnaps = (tierPosts || [])
+    .map((p) => latestSnapshotByPostId.get(p.id))
+    .filter(Boolean);
+
+  if (peerSnaps.length < 3) return null; // avoid noisy comparisons
+
+  let best = null;
+
+  for (const m of metrics) {
+    const postVal = Number(targetSnap[m.key]);
+    if (!Number.isFinite(postVal)) continue;
+
+    const peerVals = peerSnaps
+      .map((s) => Number(s[m.key]))
+      .filter((v) => Number.isFinite(v));
+
+    if (peerVals.length < 3) continue;
+
+    const avg = peerVals.reduce((a, b) => a + b, 0) / peerVals.length;
+    if (!Number.isFinite(avg) || avg === 0) continue;
+
+    const pctDiff = ((postVal - avg) / avg) * 100; // positive = outperforming
+    if (best == null || pctDiff > best.pctDiff) {
+      best = { key: m.key, label: m.label, pctDiff, postVal, avg };
+    }
+  }
+
+  return best;
+}
+
+
 function formatNumber(n) {
   if (n == null || isNaN(n)) return "—";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -45,9 +91,9 @@ function MiniLineChart({ points, avgValue, height = 120, labelFormatter }) {
   const xs = points.map((p, i) => i); // simple index-based x
   const ys = points.map((p) => (p.value == null ? 0 : p.value));
 
-  const minY = Math.min(...ys, avgValue ?? ys[0]);
+  const minY = 0;
   const maxY = Math.max(...ys, avgValue ?? ys[0]);
-
+  
   const spanY = maxY - minY || 1;
 
   const scaleX = (x) =>
@@ -375,6 +421,23 @@ export default function PostsStatsPage() {
 
   async function openPostModal(post) {
     try {
+
+      const artist = artistById.get(post.artist_id);
+      const tierKey = getArtistTier(artist);
+      const tierPosts = postsByTier.get(tierKey) || [];
+
+      const standout = computeStandoutMetric({
+        postId: post.id,
+        tierPosts,
+        latestSnapshotByPostId,
+      });
+
+      setSelectedPost((prev) => ({
+        ...prev,
+        __tierKey: tierKey,
+        __standout: standout,
+      }));
+
       setSelectedPost(post);
       setSelectedPostVariations([]);
       setModalLoading(true);
@@ -839,6 +902,24 @@ function PostDetailsModal({
               Each chart compares this post (solid line) against the artist
               average for the last 15 shorts (dashed line).
             </p>
+
+            {post.__standout ? (
+            <div className="mt-2 text-sm bg-[#eef8ea] rounded-lg px-3 py-2 border border-gray-200">
+              <div className="font-semibold">Standout statistic</div>
+              <div className="text-xs text-gray-700">
+                {post.__standout.label}:{" "}
+                <span className="font-semibold">
+                  +{post.__standout.pctDiff.toFixed(0)}%
+                </span>{" "}
+                vs tier average ({post.__tierKey})
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 text-xs text-gray-500">
+              Standout statistic: not enough peer data yet.
+            </div>
+          )}<br />
+
 
             <div className="space-y-4">
               {metricDefs.map((metric) => {
