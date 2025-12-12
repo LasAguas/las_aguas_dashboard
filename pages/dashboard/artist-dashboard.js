@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabaseClient'
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -58,119 +58,338 @@ function movePostInWeeks(weeksArr, postId, sourceYMD, destYMD, destIndex = 0) {
 }
 
 function MediaPlayer({ variation, onClose, onRefreshPost }) {
-    const [mediaUrl, setMediaUrl] = useState(null);
-    const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-    const [feedback, setFeedback] = useState("");   // start empty
-    const [savingFeedback, setSavingFeedback] = useState(false);
-  
-    useEffect(() => {
-      if (!variation) return;
-  
-      // ✅ always sync with latest variation
-      setFeedback(variation.feedback || "");
-  
-      if (!variation.file_name) return;
-  
-      const { data, error } = supabase.storage
-        .from("post-variations")
-        .getPublicUrl(variation.file_name);
-  
-      if (error) {
-        console.error("Error fetching media URL:", error);
-      } else {
-        setMediaUrl(data.publicUrl);
-  
-        const media = variation.file_name.match(/\.(jpe?g|png|gif|webp)$/i)
-          ? new Image()
-          : document.createElement("video");
-  
-        media.onloadedmetadata = function () {
-          setDimensions({
-            width: this.naturalWidth || this.videoWidth,
-            height: this.naturalHeight || this.videoHeight,
-          });
-        };
-        media.src = data.publicUrl;
-      }
-    }, [variation]);
-  
-    if (!variation || !mediaUrl) return null;
-  
-    const isImage = /\.(jpe?g|png|gif|webp)$/i.test(variation.file_name || "");
-    const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(variation.file_name || "");
-  
-    const handleSaveFeedback = async () => {
-      setSavingFeedback(true);
-      const { data, error } = await supabase
-        .from("postvariations")
-        .update({ feedback })
-        .eq("id", variation.id)
-        .select();
-  
-      setSavingFeedback(false);
-  
-      if (error) {
-        console.error("Error saving feedback:", error);
-        alert("Could not save feedback: " + error.message);
-      } else {
-        console.log("Feedback saved:", data);
-        if (onRefreshPost) onRefreshPost();
-        alert("Feedback saved!");
-      }
-    };
-  
-    return (
-      <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div className="relative bg-white rounded-lg p-6 max-w-5xl w-full flex gap-6">
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            className="absolute top-2 right-2 text-gray-500 hover:text-white bg-black/50 rounded-full p-1"
-          >
-            ✕
-          </button>
-  
-          {/* Left: Media */}
-          <div className="flex-1 flex items-center justify-center bg-black/5 rounded-lg overflow-hidden">
-            {isImage && (
-              <img
-                src={mediaUrl}
-                alt={variation.file_name}
-                className="h-[60h] max-h-[70vh] object-contain"
-              />
-            )}
-            {isVideo && (
-              <video controls controlsList="nodownload" className="max-h-[70vh] object-contain">
-                <source src={mediaUrl} type="video/mp4" />
-              </video>
-            )}
-            {!isImage && !isVideo && (
-              <div className="text-gray-600 p-4">
-                Unsupported file type: {variation.file_name}
+  const [mediaItems, setMediaItems] = useState([]); // [{ path, url, type }]
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
+
+  const [audioUrl, setAudioUrl] = useState(null);
+  const audioRef = useRef(null);
+
+  const [feedback, setFeedback] = useState("");
+  const [savingFeedback, setSavingFeedback] = useState(false);
+
+  // Snippet controls (artist is allowed to change + save)
+  const [snippetStart, setSnippetStart] = useState(0);
+  const [snippetDuration, setSnippetDuration] = useState(10);
+  const [savingSnippet, setSavingSnippet] = useState(false);
+
+  // Keep local state in sync when opening a different variation
+  useEffect(() => {
+    if (!variation) return;
+    setFeedback(variation.feedback || "");
+    setSnippetStart(Number(variation.audio_start_seconds) || 0);
+  }, [variation?.id]);
+
+  const getFileName = (p = "") => {
+    const parts = String(p).split("/");
+    return parts[parts.length - 1] || p;
+  };
+
+  const detectType = (path = "") => {
+    const p = String(path).toLowerCase();
+    if (p.match(/\.(mp4|mov|webm|m4v)$/i)) return "video";
+    if (p.match(/\.(jpe?g|png|gif|webp)$/i)) return "image";
+    return "file";
+  };
+
+  // Load media URLs (single file or carousel) + alphabetical sort
+  useEffect(() => {
+    if (!variation) return;
+
+    const pathsRaw =
+      Array.isArray(variation.carousel_files) && variation.carousel_files.length > 0
+        ? variation.carousel_files
+        : variation.file_name
+        ? [variation.file_name]
+        : [];
+
+    // Alphabetical by filename (case-insensitive, numeric-aware)
+    const paths = [...pathsRaw].sort((a, b) =>
+      getFileName(a).localeCompare(getFileName(b), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    );
+
+    if (!paths.length) {
+      setMediaItems([]);
+      setCurrentIndex(0);
+      return;
+    }
+
+    try {
+      const items = paths.map((path) => {
+        const { data, error } = supabase.storage.from("post-variations").getPublicUrl(path);
+        if (error) throw error;
+        return { path, url: data.publicUrl, type: detectType(path) };
+      });
+
+      setMediaItems(items);
+      setCurrentIndex(0);
+    } catch (err) {
+      console.error("Error loading media URLs:", err);
+      setMediaItems([]);
+      setCurrentIndex(0);
+      alert("Could not load media. See console for details.");
+    }
+  }, [variation?.id, variation?.file_name, variation?.carousel_files]);
+
+  // Load audio snippet URL (same bucket as calendar)
+  useEffect(() => {
+    if (!variation?.audio_file_name) {
+      setAudioUrl(null);
+      return;
+    }
+    const { data, error } = supabase.storage
+      .from("post-variations")
+      .getPublicUrl(variation.audio_file_name);
+
+    if (error) {
+      console.error("Error fetching audio URL:", error);
+      setAudioUrl(null);
+    } else {
+      setAudioUrl(data.publicUrl);
+    }
+  }, [variation?.audio_file_name]);
+
+  if (!variation) return null;
+
+  const hasCarousel = mediaItems.length > 1;
+  const active = mediaItems[currentIndex];
+
+  const goPrev = () => {
+    if (!hasCarousel) return;
+    setCurrentIndex((i) => (i - 1 + mediaItems.length) % mediaItems.length);
+  };
+
+  const goNext = () => {
+    if (!hasCarousel) return;
+    setCurrentIndex((i) => (i + 1) % mediaItems.length);
+  };
+
+  const handleTouchStart = (e) => {
+    if (!hasCarousel) return;
+    setTouchStartX(e.touches[0].clientX);
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!hasCarousel || touchStartX == null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX;
+    if (deltaX > 50) goPrev();
+    else if (deltaX < -50) goNext();
+    setTouchStartX(null);
+  };
+
+  const formatTime = (sec) => {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    const m = Math.floor(s / 60);
+    const r = String(s % 60).padStart(2, "0");
+    return `${m}:${r}`;
+  };
+
+  const handlePlaySnippet = () => {
+    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    const start = Number(snippetStart) || 0;
+    const dur = Number(snippetDuration) || 0;
+
+    audio.currentTime = start;
+    audio.muted = false;
+
+    audio.play().catch((e) => console.error("Audio play error:", e));
+
+    if (dur > 0) {
+      setTimeout(() => {
+        if (!audio.paused) audio.pause();
+      }, dur * 1000);
+    }
+  };
+
+  const handleSaveSnippetStart = async () => {
+    if (!variation?.id) return;
+    setSavingSnippet(true);
+
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ audio_start_seconds: Number(snippetStart) || 0 })
+      .eq("id", variation.id);
+
+    setSavingSnippet(false);
+
+    if (error) {
+      console.error("Error saving snippet start:", error);
+      alert("Could not save snippet start.");
+      return;
+    }
+
+    // keep local variation in sync
+    variation.audio_start_seconds = Number(snippetStart) || 0;
+    if (typeof onRefreshPost === "function") onRefreshPost();
+  };
+
+  const handleSaveFeedback = async () => {
+    if (!variation?.id) return;
+    setSavingFeedback(true);
+
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ feedback })
+      .eq("id", variation.id);
+
+    setSavingFeedback(false);
+
+    if (error) {
+      console.error("Error saving feedback:", error);
+      alert("Could not save feedback: " + error.message);
+      return;
+    }
+
+    variation.feedback = feedback; // keep local in sync
+    if (typeof onRefreshPost === "function") onRefreshPost();
+    alert("Feedback saved!");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+      <div className="relative bg-white rounded-lg w-[95vw] max-w-4xl max-h-[90vh] overflow-auto p-4">
+        <button
+          onClick={onClose}
+          className="absolute top-2 right-2 text-gray-500 hover:text-gray-700"
+          aria-label="Close media player"
+        >
+          ✕
+        </button>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Media */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm text-gray-700">
+                <span className="font-semibold">
+                  {(variation.platforms && variation.platforms.length
+                    ? variation.platforms.join(", ")
+                    : "—")}
+                </span>{" "}
+                — {variation.test_version || "—"}
+              </div>
+
+              {hasCarousel && (
+                <div className="text-xs text-gray-500">
+                  {currentIndex + 1} / {mediaItems.length}
+                </div>
+              )}
+            </div>
+
+            <div
+              className="relative w-full bg-gray-100 rounded overflow-hidden"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              {active?.type === "video" ? (
+                <video
+                  controls
+                  className="w-full h-auto"
+                  src={active.url}
+                />
+              ) : active?.type === "image" ? (
+                <img
+                  src={active.url}
+                  alt={getFileName(active.path)}
+                  className="w-full h-auto object-contain"
+                />
+              ) : (
+                <div className="p-6 text-sm text-gray-600">
+                  Unsupported media type.
+                </div>
+              )}
+
+              {hasCarousel && (
+                <>
+                  <button
+                    type="button"
+                    onClick={goPrev}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 rounded-full w-9 h-9 flex items-center justify-center shadow"
+                    aria-label="Previous image"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 rounded-full w-9 h-9 flex items-center justify-center shadow"
+                    aria-label="Next image"
+                  >
+                    ›
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Audio snippet */}
+            {audioUrl && (
+              <div className="mt-4 border rounded p-3">
+                <div className="text-sm font-semibold mb-2">Song snippet</div>
+
+                <audio ref={audioRef} controls src={audioUrl} className="w-full" />
+
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Start (seconds) — {formatTime(snippetStart)}
+                    </label>
+                    <input
+                      type="number"
+                      value={snippetStart}
+                      onChange={(e) => setSnippetStart(Number(e.target.value) || 0)}
+                      className="w-full border rounded p-1"
+                      min={0}
+                      step={1}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">
+                      Duration (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      value={snippetDuration}
+                      onChange={(e) => setSnippetDuration(Number(e.target.value) || 0)}
+                      className="w-full border rounded p-1"
+                      min={0}
+                      step={1}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={handlePlaySnippet}
+                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                  >
+                    Preview snippet
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveSnippetStart}
+                    disabled={savingSnippet}
+                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-xs disabled:opacity-60"
+                  >
+                    {savingSnippet ? "Saving…" : "Save snippet start"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
-  
-          {/* Right: Feedback */}
-          <div className="flex-1 flex flex-col">
-            <div className="mb-4 text-sm">
-              <p>
-                <strong>Platforms:</strong>{" "}
-                {(variation.platforms && variation.platforms.length
-                  ? variation.platforms.join(", ")
-                  : "—")}
-              </p>
-              <p>
-                <strong>Version:</strong> {variation.test_version || "N/A"}
-              </p>
-            </div>
-  
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {variation.feedback_resolved ? "Feedback - resolved" : "Feedback"}
-            </label>
+
+          {/* Feedback (artist allowed) */}
+          <div>
+            <div className="text-sm font-semibold mb-2">Feedback</div>
             <textarea
-              className="w-full border rounded p-2 text-sm flex-grow"
-              rows={8}
+              className="w-full border rounded p-2 min-h-[180px]"
+              placeholder="Leave feedback here…"
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
             />
@@ -181,11 +400,15 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
             >
               {savingFeedback ? "Saving..." : "Save Feedback"}
             </button>
+
+            {/* IMPORTANT: no Delete / Replace / Mark Resolved buttons here */}
           </div>
         </div>
       </div>
-    );
-  }    
+    </div>
+  );
+}
+   
 
 //Upload Modal Function
 function UploadModal({ postId, artistId, defaultDate, onClose, onSave }) {
@@ -773,7 +996,18 @@ async function openPostDetails(postId) {
       // 2) Fetch variations for that post (✅ now includes feedback)
       const { data: variations, error: varErr } = await supabase
         .from('postvariations')
-        .select('id, platforms, test_version, file_name, length_seconds, feedback, feedback_resolved')
+        .select(`
+          id,
+          platforms,
+          test_version,
+          file_name,
+          length_seconds,
+          feedback,
+          feedback_resolved,
+          audio_file_name,
+          audio_start_seconds,
+          carousel_files
+        `)
         .eq('post_id', postId)
         .order('test_version', { ascending: true })
       if (varErr) throw varErr
