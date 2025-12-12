@@ -7,6 +7,8 @@ const supabaseAdmin = createClient(
 );
 
 export default async function handler(req, res) {
+  let artistId = null;
+
   try {
     if (req.method !== "GET") {
       return res.redirect("/dashboard/token-health?error=method_not_allowed");
@@ -26,7 +28,7 @@ export default async function handler(req, res) {
       );
     }
 
-    const artistId = state;
+    artistId = state;
     if (!artistId) {
       console.error("Invalid artistId (state):", state);
       return res.redirect("/dashboard/token-health?error=invalid_artist");
@@ -40,13 +42,22 @@ export default async function handler(req, res) {
     }
 
     // Build the SAME redirectUri as in tiktok-auth-start
-    const protoHeader = req.headers["x-forwarded-proto"] || "http";
-    const protocol = Array.isArray(protoHeader)
-      ? protoHeader[0]
-      : protoHeader.split(",")[0];
-    const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const redirectUri = `${protocol}://${host}/api/tiktok-auth-callback`;
+    const redirectUri = process.env.TIKTOK_REDIRECT_URI;
+    if (!redirectUri) {
+      console.error("Missing TIKTOK_REDIRECT_URI");
+      return res.redirect("/dashboard/token-health?error=server_config");
+    }
+    
+    const cookieHeader = req.headers.cookie || "";
+    const verifierMatch = cookieHeader.match(
+      new RegExp(`(?:^|;\\s*)tt_pkce_${artistId}=([^;]+)`)
+    );
+    const codeVerifier = verifierMatch ? decodeURIComponent(verifierMatch[1]) : null;
 
+    if (!codeVerifier) {
+      console.error("Missing PKCE verifier cookie for artist:", artistId);
+      return res.redirect("/dashboard/token-health?error=missing_pkce_verifier");
+    }
     // Exchange code for access_token
     const tokenRes = await fetch(
       "https://open.tiktokapis.com/v2/oauth/token/",
@@ -59,6 +70,9 @@ export default async function handler(req, res) {
           code,
           grant_type: "authorization_code",
           redirect_uri: redirectUri,
+        
+          // ✅ PKCE
+          code_verifier: codeVerifier,
         }),
       }
     );
@@ -119,7 +133,7 @@ export default async function handler(req, res) {
 
     return res.redirect("/dashboard/token-health?connected=tiktok");
   } catch (err) {
-    console.error("TikTok callback error:", err);
+    console.error("TikTok callback error for artist:", artistId, err);
     return res.redirect("/dashboard/token-health?error=unknown");
   }
 }
