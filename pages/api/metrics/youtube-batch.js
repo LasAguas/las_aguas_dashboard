@@ -6,7 +6,9 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Helper: extract the YouTube video ID from a URL
+// ---------------- Helpers ----------------
+
+// Extract the YouTube video ID from a URL
 function extractYouTubeVideoId(url) {
   if (!url) return null;
   try {
@@ -32,7 +34,7 @@ function extractYouTubeVideoId(url) {
   }
 }
 
-// Helper: detect shorts vs longform from URL
+// Detect shorts vs longform from URL
 function detectYouTubeTypeFromUrl(url) {
   if (!url) return "longform";
   try {
@@ -44,7 +46,7 @@ function detectYouTubeTypeFromUrl(url) {
   }
 }
 
-// Helper: get age in days from a date string
+// Get age in days from a date string
 function getAgeInDays(dateStr) {
   if (!dateStr) return Infinity;
   const d = new Date(dateStr);
@@ -54,141 +56,229 @@ function getAgeInDays(dateStr) {
   return diffMs / (1000 * 60 * 60 * 24);
 }
 
-// Main handler – can be called by a cron job (GET request)
+// Parse JSON body (pages API)
+async function parseBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8") || "{}";
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function requireCronAuth(req, res) {
+  const auth = req.headers.authorization;
+  if (!auth || auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    res.status(401).json({ error: "Unauthorized (cron secret mismatch)" });
+    return false;
+  }
+  return true;
+}
+
+// ---------------- Main Handler ----------------
+
 export default async function handler(req, res) {
   try {
-    if (req.method !== "GET") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
-
-    // --- CRON PROTECTION ---
-    const auth = req.headers.authorization;
-    if (!auth || auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: "Unauthorized (cron secret mismatch)" });
-    }
-
     const apiKey = process.env.YOUTUBE_API_KEY;
     if (!apiKey) {
       console.error("YOUTUBE_API_KEY not configured");
       return res.status(500).json({ error: "YOUTUBE_API_KEY not configured" });
     }
 
-    // 1) Load all posts that have a YouTube URL and are posted
-    const { data: posts, error: postsError } = await supabaseAdmin
-      .from("posts")
-      .select("id, youtube_url, post_date, status")
-      .not("youtube_url", "is", null);
+    // =========================
+    // POST = single snapshot mode
+    // =========================
+    if (req.method === "POST") {
+      // For safety, keep it protected (same secret you use for cron/manual triggers).
+      // If you want a localhost bypass later, we can add it.
+      if (!requireCronAuth(req, res)) return;
 
-    if (postsError) {
-      console.error("Error loading posts:", postsError);
-      return res.status(500).json({ error: "Failed to load posts" });
-    }
+      const { postId, type } = await parseBody(req);
 
-    const now = new Date();
-
-    // Filter to eligible posts based on age/status
-    const eligible = (posts || []).filter((post) => {
-      if (post.status !== "posted") return false;
-      const ageDays = getAgeInDays(post.post_date);
-      if (ageDays > 45) return false; // ignore older than 45 days
-      return true;
-    });
-
-    if (eligible.length === 0) {
-      return res.status(200).json({ ok: true, processed: 0, reason: "no eligible posts" });
-    }
-
-    const eligibleIds = eligible.map((p) => p.id);
-
-    // 2) Load latest snapshots for these posts (for both YT platforms)
-    const { data: snapshots, error: snapshotsError } = await supabaseAdmin
-      .from("post_metrics_snapshots")
-      .select("post_id, platform, snapshot_at")
-      .in("post_id", eligibleIds)
-      .in("platform", ["youtube_shorts", "youtube_longform"]);
-
-    if (snapshotsError) {
-      console.error("Error loading snapshots:", snapshotsError);
-      return res.status(500).json({ error: "Failed to load snapshots" });
-    }
-
-    const latestMap = new Map();
-    (snapshots || []).forEach((row) => {
-      const key = `${row.post_id}:${row.platform}`;
-      const existing = latestMap.get(key);
-      const ts = new Date(row.snapshot_at).getTime();
-      if (!existing || ts > existing) {
-        latestMap.set(key, ts);
-      }
-    });
-
-    // 3) Decide which posts to refresh based on age & last snapshot
-    const toRefresh = [];
-    for (const post of eligible) {
-      const type = detectYouTubeTypeFromUrl(post.youtube_url);
-      const platform = type === "shorts" ? "youtube_shorts" : "youtube_longform";
-      const key = `${post.id}:${platform}`;
-      const ageDays = getAgeInDays(post.post_date);
-
-      let minIntervalDays = 7;
-      if (ageDays <= 3) minIntervalDays = 1; // daily for first 3 days
-
-      const lastTs = latestMap.get(key);
-      if (!lastTs) {
-        // never fetched → always refresh
-        toRefresh.push({ post, type, platform });
-        continue;
+      if (!postId) {
+        return res.status(400).json({ error: "Missing postId" });
       }
 
-      const lastAgeDays =
-        (now.getTime() - lastTs) / (1000 * 60 * 60 * 24);
+      // Load post to get youtube_url
+      const { data: post, error: postError } = await supabaseAdmin
+        .from("posts")
+        .select("id, youtube_url")
+        .eq("id", postId)
+        .single();
 
-      if (lastAgeDays >= minIntervalDays) {
-        toRefresh.push({ post, type, platform });
+      if (postError || !post) {
+        console.error("Post not found:", postError);
+        return res.status(404).json({ error: "Post not found" });
       }
+
+      if (!post.youtube_url) {
+        return res.status(400).json({ error: "Post has no youtube_url set" });
+      }
+
+      // Determine type:
+      // - Prefer provided "type" if valid
+      // - Otherwise infer from URL
+      let finalType = type;
+      if (!["shorts", "longform"].includes(finalType)) {
+        finalType = detectYouTubeTypeFromUrl(post.youtube_url);
+      }
+
+      const platform =
+        finalType === "shorts" ? "youtube_shorts" : "youtube_longform";
+
+      const ok = await fetchAndSaveYouTubeSnapshot({
+        post,
+        type: finalType,
+        platform,
+        apiKey,
+      });
+
+      if (!ok) {
+        return res.status(500).json({ error: "Failed to fetch/save snapshot" });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        postId: post.id,
+        platform,
+        type: finalType,
+      });
     }
 
-    // Optional: cap how many we process per run
-    const MAX_PER_RUN = 20;
-    const slice = toRefresh.slice(0, MAX_PER_RUN);
+    // =========================
+    // GET = batch mode (cron)
+    // =========================
+    if (req.method === "GET") {
+      if (!requireCronAuth(req, res)) return;
 
-    let successCount = 0;
-    const errors = [];
+      // 1) Load all posts that have a YouTube URL
+      const { data: posts, error: postsError } = await supabaseAdmin
+        .from("posts")
+        .select("id, youtube_url, post_date, status")
+        .not("youtube_url", "is", null);
 
-    for (const item of slice) {
-      try {
-        const result = await fetchAndSaveYouTubeSnapshot({
-          post: item.post,
-          type: item.type,
-          platform: item.platform,
-          apiKey,
-        });
-        if (result) successCount++;
-      } catch (e) {
-        console.error("Error refreshing post", item.post.id, e);
-        errors.push({ postId: item.post.id, error: String(e) });
+      if (postsError) {
+        console.error("Error loading posts:", postsError);
+        return res.status(500).json({ error: "Failed to load posts" });
       }
+
+      const now = new Date();
+
+      // Filter to eligible posts based on age/status
+      const eligible = (posts || []).filter((post) => {
+        if (post.status !== "posted") return false;
+        const ageDays = getAgeInDays(post.post_date);
+        if (ageDays > 45) return false;
+        return true;
+      });
+
+      if (eligible.length === 0) {
+        return res
+          .status(200)
+          .json({ ok: true, processed: 0, reason: "no eligible posts" });
+      }
+
+      const eligibleIds = eligible.map((p) => p.id);
+
+      // 2) Load latest snapshot timestamps for these posts (both platforms)
+      const { data: snapshots, error: snapshotsError } = await supabaseAdmin
+        .from("post_metrics_snapshots")
+        .select("post_id, platform, snapshot_at")
+        .in("post_id", eligibleIds)
+        .in("platform", ["youtube_shorts", "youtube_longform"]);
+
+      if (snapshotsError) {
+        console.error("Error loading snapshots:", snapshotsError);
+        return res.status(500).json({ error: "Failed to load snapshots" });
+      }
+
+      const latestMap = new Map();
+      (snapshots || []).forEach((row) => {
+        const key = `${row.post_id}:${row.platform}`;
+        const existing = latestMap.get(key);
+        const ts = new Date(row.snapshot_at).getTime();
+        if (!existing || ts > existing) {
+          latestMap.set(key, ts);
+        }
+      });
+
+      // 3) Decide which posts to refresh based on age & last snapshot
+      const toRefresh = [];
+      for (const post of eligible) {
+        const type = detectYouTubeTypeFromUrl(post.youtube_url);
+        const platform =
+          type === "shorts" ? "youtube_shorts" : "youtube_longform";
+        const key = `${post.id}:${platform}`;
+        const ageDays = getAgeInDays(post.post_date);
+
+        let minIntervalDays = 7;
+        if (ageDays <= 3) minIntervalDays = 1; // daily for first 3 days
+
+        const lastTs = latestMap.get(key);
+        if (!lastTs) {
+          toRefresh.push({ post, type, platform });
+          continue;
+        }
+
+        const lastAgeDays = (now.getTime() - lastTs) / (1000 * 60 * 60 * 24);
+        if (lastAgeDays >= minIntervalDays) {
+          toRefresh.push({ post, type, platform });
+        }
+      }
+
+      // cap per run
+      const MAX_PER_RUN = 20;
+      const slice = toRefresh.slice(0, MAX_PER_RUN);
+
+      let successCount = 0;
+      const errors = [];
+
+      for (const item of slice) {
+        try {
+          const ok = await fetchAndSaveYouTubeSnapshot({
+            post: item.post,
+            type: item.type,
+            platform: item.platform,
+            apiKey,
+          });
+          if (ok) successCount++;
+        } catch (e) {
+          console.error("Error refreshing post", item.post.id, e);
+          errors.push({ postId: item.post.id, error: String(e) });
+        }
+      }
+
+      return res.status(200).json({
+        ok: true,
+        eligiblePosts: eligible.length,
+        toRefresh: toRefresh.length,
+        processed: slice.length,
+        successCount,
+        errors,
+      });
     }
 
-    return res.status(200).json({
-      ok: true,
-      eligiblePosts: eligible.length,
-      toRefresh: toRefresh.length,
-      processed: slice.length,
-      successCount,
-      errors,
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   } catch (err) {
     console.error("YouTube batch handler error:", err);
     return res.status(500).json({ error: "Unexpected error" });
   }
 }
 
+// ---------------- Worker ----------------
+
 // Call YouTube Data API and write a snapshot for one post
 async function fetchAndSaveYouTubeSnapshot({ post, type, platform, apiKey }) {
   const videoId = extractYouTubeVideoId(post.youtube_url);
   if (!videoId) {
-    console.error("Could not parse video ID for post", post.id, post.youtube_url);
+    console.error(
+      "Could not parse video ID for post",
+      post.id,
+      post.youtube_url
+    );
     return false;
   }
 
@@ -213,14 +303,9 @@ async function fetchAndSaveYouTubeSnapshot({ post, type, platform, apiKey }) {
   let yt_longform_intent_score = null;
 
   if (type === "shorts") {
-    yt_shorts_score =
-      (views || 0) * 0.1 +
-      (likes || 0) * 2 +
-      (comments || 0) * 3;
+    yt_shorts_score = (views || 0) * 0.1 + (likes || 0) * 2 + (comments || 0) * 3;
   } else {
-    yt_longform_intent_score =
-      (likes || 0) * 1 +
-      (comments || 0) * 2;
+    yt_longform_intent_score = (likes || 0) * 1 + (comments || 0) * 2;
   }
 
   const { error: insertError } = await supabaseAdmin
