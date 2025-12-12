@@ -84,6 +84,13 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
     const parts = String(p).split("/");
     return parts[parts.length - 1] || p;
   };
+  
+  const getCarouselOrder = (p = "") => {
+    const base = getFileName(p).replace(/\.[^/.]+$/, "");
+    const nums = base.match(/\d+/g);
+    if (!nums || nums.length === 0) return Number.MAX_SAFE_INTEGER;
+    return parseInt(nums[nums.length - 1], 10);
+  };  
 
   const detectType = (path = "") => {
     const p = String(path).toLowerCase();
@@ -104,12 +111,25 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
         : [];
 
     // Alphabetical by filename (case-insensitive, numeric-aware)
-    const paths = [...pathsRaw].sort((a, b) =>
-      getFileName(a).localeCompare(getFileName(b), undefined, {
+    const getCarouselOrder = (p = "") => {
+      const base = getFileName(p).replace(/\.[^/.]+$/, ""); // strip extension
+      const nums = base.match(/\d+/g);
+      if (!nums || nums.length === 0) return Number.MAX_SAFE_INTEGER;
+      return parseInt(nums[nums.length - 1], 10); // last number in filename
+    };
+    
+    // Numeric by “frame number” (last numeric chunk), fallback to filename compare
+    const paths = [...pathsRaw].sort((a, b) => {
+      const oa = getCarouselOrder(a);
+      const ob = getCarouselOrder(b);
+      if (oa !== ob) return oa - ob;
+    
+      return getFileName(a).localeCompare(getFileName(b), undefined, {
         numeric: true,
         sensitivity: "base",
-      })
-    );
+      });
+    });
+    
 
     if (!paths.length) {
       setMediaItems([]);
@@ -786,12 +806,41 @@ const [allVariations, setAllVariations] = useState([])
 // Checking width for dates
 const [isNarrow, setIsNarrow] = useState(false);
 
+// Keep isNarrow in sync with viewport width (mobile vs desktop)
 useEffect(() => {
-  const handleResize = () => setIsNarrow(window.innerWidth < 800);
-  handleResize(); // run once at mount
-  window.addEventListener('resize', handleResize);
-  return () => window.removeEventListener('resize', handleResize);
+  const handleResize = () => {
+    if (typeof window === "undefined") return;
+    // You can tweak 768 to whatever breakpoint you consider "mobile"
+    setIsNarrow(window.innerWidth < 768);
+  };
+
+  handleResize(); // set initial value on mount
+  window.addEventListener("resize", handleResize);
+  return () => window.removeEventListener("resize", handleResize);
 }, []);
+
+// Mobile week collapse state (only used when isNarrow === true)
+const [collapsedWeeks, setCollapsedWeeks] = useState(() => new Set());
+
+
+// Default: on mobile, collapse only the previous week by default;
+// current week and all future weeks remain open.
+useEffect(() => {
+  if (!isNarrow) {
+    // On desktop, treat all weeks as expanded.
+    setCollapsedWeeks(new Set());
+    return;
+  }
+
+  const today = new Date();
+  const startThisWeek = startOfWeekMonday(today);
+  const startPrevWeek = addDays(startThisWeek, -7);
+
+  // Collapse only the previous week's key
+  setCollapsedWeeks(new Set([toYMD(startPrevWeek)]));
+}, [isNarrow]);
+
+
 
 // View switching
 const [viewMode, setViewMode] = useState('4weeks') // '4weeks' (Current) | 'month'
@@ -1069,94 +1118,123 @@ return (
     {errorMsg && <div className="text-red-600 mb-4">{errorMsg}</div>}
 
     {/* Calendar: stacked weeks */}
-<div className="space-y-6">
-  {weeks.map((week, wi) => (
-    <div
-      key={wi}
-      className="border rounded-lg overflow-hidden bg-white shadow-sm"
-    >
-      <div className="px-4 py-2 bg-gray-50 border-b text-sm font-medium">
-        Week of {week.weekStart.toLocaleDateString()}
-      </div>
+    <div className="space-y-6">
+      {weeks.map((week, wi) => {
+        const weekKey = toYMD(new Date(week.weekStart));
+        const isCollapsed = isNarrow && collapsedWeeks.has(weekKey);
 
-      <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
-        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((d) => (
-          <div key={d} className="px-3 py-2">{d}</div>
-        ))}
-      </div>
+        const toggleWeek = () => {
+          if (!isNarrow) return;
+          setCollapsedWeeks((prev) => {
+            const next = new Set(prev);
+            if (next.has(weekKey)) next.delete(weekKey);
+            else next.add(weekKey);
+            return next;
+          });
+        };
 
-      <div className="grid grid-cols-7">
-        {week.days.map((day) => (
-          <div
-            key={day.ymd}
-            className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2 ${
-              day.date.toDateString() === new Date().toDateString()
-                ? 'bg-[#eef8ea]'  // highlight today
-                : ''
-            }`}
-          >
-            <div className="text-xs text-gray-500 mb-1">
-              {day.date.toLocaleDateString(undefined, { weekday: "short" })}{" "}
-              -{" "}
-              {day.date.getDate().toString().padStart(2, "0")}/
-              {(day.date.getMonth() + 1).toString().padStart(2, "0")}
-            </div>
+        return (
+          <div key={wi} className="border rounded-lg overflow-hidden bg-white shadow-sm">
+            {isNarrow ? (
+              <button
+                type="button"
+                onClick={toggleWeek}
+                className="w-full px-4 py-2 bg-gray-50 border-b text-sm font-medium flex items-center justify-between"
+              >
+                <span>Week of {new Date(week.weekStart).toLocaleDateString()}</span>
+                <span className="text-gray-500">{isCollapsed ? "▸" : "▾"}</span>
+              </button>
+            ) : (
+              <div className="px-4 py-2 bg-gray-50 border-b text-sm font-medium">
+                Week of {new Date(week.weekStart).toLocaleDateString()}
+              </div>
+            )}
 
-            <div className="space-y-1">
-              {day.posts.map((post) => {
-                const postPlatforms = Array.from(
-                  new Set(
-                    allVariations
-                      .filter((v) => v.post_id === post.id)
-                      .flatMap((v) => v.platforms || [])
-                      .filter(Boolean)
-                  )
-                );
-
-                return (
-                  <div
-                    key={post.id}
-                    className="text-xs px-2 py-1 rounded text-white cursor-pointer"
-                    style={{ backgroundColor: statusColor(post.status) }}
-                    title={post.status || ''}
-                    onClick={() => openPostDetails(post.id)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span>{post.post_name}</span>
-
-                      {postPlatforms.length > 0 && (
-                        <div className="flex flex-col gap-1">
-                          {postPlatforms
-                            .sort(
-                              (a, b) =>
-                                PLATFORM_OPTIONS.findIndex((o) => o.value === a) -
-                                PLATFORM_OPTIONS.findIndex((o) => o.value === b)
-                            )
-                            .map((plat) => {
-                              const cfg = PLATFORM_OPTIONS.find((o) => o.value === plat);
-                              const short = cfg?.short || plat[0] || '?';
-                              return (
-                                <span
-                                  key={plat}
-                                  className="inline-flex items-center rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] leading-none"
-                                >
-                                  {short}
-                                </span>
-                              );
-                            })}
-                        </div>
-                      )}
+            {!isCollapsed && (
+              <>
+                <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                    <div key={d} className="px-3 py-2">
+                      {d}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7">
+                  {week.days.map((day) => (
+                    <div
+                      key={day.ymd}
+                      className={`min-h-[120px] border-l first:border-l-0 border-t-0 p-2 ${
+                        day.date.toDateString() === new Date().toDateString()
+                          ? "bg-[#eef8ea]"
+                          : ""
+                      }`}
+                    >
+                      <div className="text-xs text-gray-500 mb-1">
+                        {day.date.toLocaleDateString(undefined, { weekday: "short" })} -{" "}
+                        {day.date.getDate().toString().padStart(2, "0")}/
+                        {(day.date.getMonth() + 1).toString().padStart(2, "0")}
+                      </div>
+
+                      <div className="space-y-1">
+                        {day.posts.map((post) => {
+                          const postPlatforms = Array.from(
+                            new Set(
+                              allVariations
+                                .filter((v) => v.post_id === post.id)
+                                .flatMap((v) => v.platforms || [])
+                                .filter(Boolean)
+                            )
+                          );
+
+                          return (
+                            <div
+                              key={post.id}
+                              className="text-xs px-2 py-1 rounded text-white cursor-pointer"
+                              style={{ backgroundColor: statusColor(post.status) }}
+                              title={post.status || ""}
+                              onClick={() => openPostDetails(post.id)}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <span>{post.post_name}</span>
+
+                                {postPlatforms.length > 0 && (
+                                  <div className="flex flex-col gap-1">
+                                    {postPlatforms
+                                      .sort(
+                                        (a, b) =>
+                                          PLATFORM_OPTIONS.findIndex((o) => o.value === a) -
+                                          PLATFORM_OPTIONS.findIndex((o) => o.value === b)
+                                      )
+                                      .map((plat) => {
+                                        const cfg = PLATFORM_OPTIONS.find((o) => o.value === plat);
+                                        const short = cfg?.short || plat[0] || "?";
+                                        return (
+                                          <span
+                                            key={plat}
+                                            className="inline-flex items-center rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] leading-none"
+                                          >
+                                            {short}
+                                          </span>
+                                        );
+                                      })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
-  ))}
-</div>
+
 
     {/* Post Detail Modal */}
     {selectedPostId && (
