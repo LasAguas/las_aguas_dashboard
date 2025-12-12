@@ -2,15 +2,15 @@
     "crons": [
       {
         "path": "/api/metrics/youtube-batch",
-        "schedule": "0 */12 * * *"
+        "schedule": "0 1 * * *"
       },
       {
         "path": "/api/metrics/tiktok-batch",
-        "schedule": "10 */12 * * *"
-      },
-      {
-        "path": "/api/youtube/update-channel-sizes",
-        "schedule": "0 3 * * 1"
+        "schedule": "10 1 * * *"
       }
+     // {
+       // "path": "/api/youtube/update-channel-sizes",
+     //   "schedule": "0 3 * * 1"
+      //}
     ]
   }

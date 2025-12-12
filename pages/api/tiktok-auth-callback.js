@@ -71,22 +71,46 @@ export default async function handler(req, res) {
       return res.redirect("/dashboard/token-health?error=tiktok_token");
     }
 
-    const accessToken = tokenJson.access_token;
-    const now = new Date().toISOString();
-
+    const {
+      access_token,
+      refresh_token,
+      expires_in,
+      refresh_expires_in,
+    } = tokenJson;
+    
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    
+    const accessExpiresAt = expires_in
+      ? new Date(nowMs + Number(expires_in) * 1000).toISOString()
+      : null;
+    
+    const refreshExpiresAt = refresh_expires_in
+      ? new Date(nowMs + Number(refresh_expires_in) * 1000).toISOString()
+      : null;
+    
     const { error: upsertError } = await supabaseAdmin
       .from("artist_social_auth_status")
       .upsert(
         {
-          artist_id: artistId,
+          artist_id: Number(artistId),
           platform: "tiktok",
           status: "ok",
-          access_token: accessToken,
-          last_checked_at: now,
-          last_token_updated_at: now,
+    
+          access_token,
+          refresh_token,
+    
+          access_expires_at: accessExpiresAt,
+          refresh_expires_at: refreshExpiresAt,
+    
+          token_json: tokenJson,
+    
+          last_checked_at: nowIso,
+          last_token_updated_at: nowIso,
         },
         { onConflict: "artist_id,platform" }
       );
+    
 
     if (upsertError) {
       console.error("Error saving TikTok token:", upsertError);
