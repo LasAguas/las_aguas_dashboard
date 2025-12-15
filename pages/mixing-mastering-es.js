@@ -6,6 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import Link from "next/link";
+import Script from "next/script";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toYMD = (d) =>
