@@ -263,6 +263,46 @@ export default function PostsStatsPage() {
     snapshotCount: 0,
   });
 
+  const [ytManualRun, setYtManualRun] = useState({ loading: false, msg: "" });
+
+  async function runYouTubeManualCollect() {
+    try {
+      setYtManualRun({ loading: true, msg: "" });
+  
+      const res = await fetch("/api/metrics/youtube-batch-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+  
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        console.error("Manual collect returned non-JSON:", text);
+        setYtManualRun({ loading: false, msg: "Manual collect failed: non-JSON response (see console)" });
+        return;
+      }
+  
+      console.log("YouTube manual batch result:", json);
+  
+      if (!res.ok) {
+        setYtManualRun({ loading: false, msg: json?.error || "Manual collect failed (see console)" });
+        return;
+      }
+  
+      setYtManualRun({
+        loading: false,
+        msg: `Collected. successCount=${json.successCount ?? "?"}, processed=${json.processed ?? "?"}`,
+      });
+  
+      //window.location.reload();
+    } catch (e) {
+      console.error(e);
+      setYtManualRun({ loading: false, msg: "Manual collect crashed (see console)" });
+    }
+  }  
+
   // Modal state
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
@@ -556,6 +596,22 @@ export default function PostsStatsPage() {
 
     return (
       <div className="space-y-6">
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-gray-700">
+            {ytManualRun.msg ? ytManualRun.msg : " "}
+          </div>
+
+          <button
+            type="button"
+            className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={runYouTubeManualCollect}
+            disabled={ytManualRun.loading}
+          >
+            {ytManualRun.loading ? "Collecting…" : "Manually collect data"}
+          </button>
+        </div>
+        
         {tiers.map((tierKey) => {
           const postsInTier = (postsByTier.get(tierKey) || []).slice(0, 4);
           if (!postsInTier.length) return null;
@@ -591,6 +647,7 @@ export default function PostsStatsPage() {
                       onClick={() => openPostModal(post)}
                       className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
                     >
+
                       <div className="flex justify-between items-start gap-2">
                         <div>
                           <div className="text-sm font-semibold">

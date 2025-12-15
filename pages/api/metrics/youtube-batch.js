@@ -70,9 +70,21 @@ async function parseBody(req) {
 }
 
 function requireCronAuth(req, res) {
-  const auth = req.headers.authorization;
-  if (!auth || auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    res.status(401).json({ error: "Unauthorized (cron secret mismatch)" });
+  // Allow Vercel cron to hit the endpoint without custom headers,
+  // but require a shared secret via query string.
+  const cronFlag = req.query?.cron;
+  const secret = req.query?.secret;
+
+  // Option A: simplest (only allow cron=1 AND env secret is not required)
+  // if (cronFlag === "1") return true;
+
+  // Option B (recommended): require secret in query too
+  if (!process.env.CRON_SECRET) {
+    res.status(500).json({ error: "CRON_SECRET not set" });
+    return false;
+  }
+  if (cronFlag !== "1" || secret !== process.env.CRON_SECRET) {
+    res.status(401).json({ error: "Unauthorized" });
     return false;
   }
   return true;
@@ -152,6 +164,7 @@ export default async function handler(req, res) {
     // GET = batch mode (cron)
     // =========================
     if (req.method === "GET") {
+      const force = req.query?.force === "1";
       if (!requireCronAuth(req, res)) return;
 
       // 1) Load all posts that have a YouTube URL
@@ -218,6 +231,12 @@ export default async function handler(req, res) {
         if (ageDays <= 3) minIntervalDays = 1; // daily for first 3 days
 
         const lastTs = latestMap.get(key);
+        // Force mode: refresh everything eligible (still respects MAX_PER_RUN)
+        if (force) {
+          toRefresh.push({ post, type, platform });
+          continue;
+        }
+
         if (!lastTs) {
           toRefresh.push({ post, type, platform });
           continue;
