@@ -264,6 +264,8 @@ export default function PostsStatsPage() {
   });
 
   const [ytManualRun, setYtManualRun] = useState({ loading: false, msg: "" });
+  const [tierTopLimit, setTierTopLimit] = useState({});
+  const [tierShowWorst, setTierShowWorst] = useState({});
 
   async function runYouTubeManualCollect() {
     try {
@@ -412,6 +414,8 @@ export default function PostsStatsPage() {
         setArtists(artistRows || []);
         setPosts(postRows || []);
         setSnapshots(snapshotRows);
+        setTierTopLimit({});
+        setTierShowWorst({});
       } catch (err) {
         console.error("Error loading stats data:", err);
         setErrorMsg("Could not load stats data. Check console for details.");
@@ -613,7 +617,19 @@ export default function PostsStatsPage() {
         </div>
         
         {tiers.map((tierKey) => {
-          const postsInTier = (postsByTier.get(tierKey) || []).slice(0, 4);
+          const allTierPosts = postsByTier.get(tierKey) || [];
+          const limit = tierTopLimit[tierKey] ?? 4;
+          const postsInTier = allTierPosts.slice(0, limit);
+          
+          // worst 4 in tier (by latest views, falling back to 0)
+          const worstInTier = [...allTierPosts]
+            .sort((a, b) => {
+              const va = Number(latestSnapshotByPostId.get(a.id)?.views) || 0;
+              const vb = Number(latestSnapshotByPostId.get(b.id)?.views) || 0;
+              return va - vb;
+            })
+            .slice(0, 4);
+
           if (!postsInTier.length) return null;
 
           return (
@@ -626,6 +642,80 @@ export default function PostsStatsPage() {
                     <span className="text-lg font-semibold">{tierKey}</span>
                     <span className="text-xs text-gray-600">click to collapse</span>
                 </summary>
+
+                <div className="mt-3 mb-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTierTopLimit((prev) => ({
+                        ...prev,
+                        [tierKey]: (prev[tierKey] ?? 4) + 4,
+                      }));
+                    }}
+                  >
+                    Show more
+                  </button>
+
+                  <button
+                    type="button"
+                    className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setTierShowWorst((prev) => ({
+                        ...prev,
+                        [tierKey]: !prev[tierKey],
+                      }));
+                    }}
+                  >
+                    See worst performing
+                  </button>
+
+                  <div className="text-[11px] text-gray-600 ml-auto">
+                    Showing {Math.min(limit, allTierPosts.length)} of {allTierPosts.length}
+                  </div>
+                </div>
+
+                {tierShowWorst[tierKey] && (
+                  <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
+                    <div className="text-sm font-semibold mb-2">Worst performing (bottom 4)</div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {worstInTier.map((post) => {
+                        const artist = artistById.get(post.artist_id);
+                        const latest = latestSnapshotByPostId.get(post.id);
+                        const views = latest?.views;
+                        const likes = latest?.likes;
+                        const comments = latest?.comments;
+
+                        return (
+                          <button
+                            key={post.id}
+                            onClick={() => openPostModal(post)}
+                            className="text-left bg-[#eef8ea] rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-1"
+                          >
+                            <div className="text-sm font-semibold">
+                              {post.post_name || "Untitled post"}
+                            </div>
+                            <div className="text-xs text-gray-600">
+                              {artist?.name || "Unknown artist"} •{" "}
+                              {post.post_date
+                                ? new Date(post.post_date).toLocaleDateString()
+                                : "No date"}
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <span className="font-semibold">{formatNumber(views)}</span> views •{" "}
+                              {formatNumber(likes)} likes • {formatNumber(comments)} comments
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
 
               <div className="grid gap-3 md:grid-cols-2">
                 {postsInTier.map((post) => {
