@@ -1106,7 +1106,16 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
 }
 
 export default function MenuPage() {
+  // Posts that need edits (your existing notifications)
   const [notifications, setNotifications] = useState([]);
+
+  // NEW: feedback notifications (per post)
+  const [feedbackByPostId, setFeedbackByPostId] = useState(new Map());
+
+  // NEW: ad leads notifications + modal
+  const [leadNotifications, setLeadNotifications] = useState([]);
+  const [selectedLead, setSelectedLead] = useState(null);
+
   const [artistsById, setArtistsById] = useState({});
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -1227,32 +1236,138 @@ export default function MenuPage() {
 
         // --- load posts not marked as "ready" ---
         const { data: posts, error } = await supabase
-          .from("posts")
-          .select("id, post_name, post_date, status, artist_id")
-          .gte("post_date", from)
-          .lte("post_date", to)
-          .neq("status", "posted")
-          .neq("status", "ready")
-          .order("post_date", { ascending: true });
+        .from("posts")
+        .select("id, post_name, post_date, status, artist_id")
+        .gte("post_date", from)
+        .lte("post_date", to)
+        .neq("status", "posted")
+        .neq("status", "ready")
+        .order("post_date", { ascending: true });
 
         if (error) throw error;
 
         // --- load artists just for labels ---
         const { data: artists, error: artistError } = await supabase
-          .from("artists")
-          .select("id, name");
+        .from("artists")
+        .select("id, name");
 
         if (artistError) {
-          console.error("Error loading artists:", artistError);
+        console.error("Error loading artists:", artistError);
         }
 
         const map = {};
         (artists || []).forEach((a) => {
-          map[a.id] = a.name;
+        map[a.id] = a.name;
         });
 
         setArtistsById(map);
         setNotifications(posts || []);
+
+        // -----------------------------
+        // NEW: feedback notifications
+        // “If there is feedback on any upcoming posts”
+        // (count unresolved feedback across postvariations)
+        // -----------------------------
+        try {
+        const postIds = (posts || []).map((p) => p.id).filter(Boolean);
+
+        if (postIds.length) {
+          const { data: vars, error: varErr } = await supabase
+            .from("postvariations")
+            .select("id, post_id, feedback, feedback_resolved")
+            .in("post_id", postIds);
+
+          if (varErr) throw varErr;
+
+          const fbMap = new Map();
+          (vars || []).forEach((v) => {
+            const hasFeedback =
+              v.feedback && String(v.feedback).trim() !== "" && !v.feedback_resolved;
+            if (!hasFeedback) return;
+            fbMap.set(v.post_id, (fbMap.get(v.post_id) || 0) + 1);
+          });
+
+          setFeedbackByPostId(fbMap);
+        } else {
+          setFeedbackByPostId(new Map());
+        }
+        } catch (e) {
+        console.error("Error loading feedback notifications:", e);
+        setFeedbackByPostId(new Map());
+        }
+
+        // -----------------------------
+        // NEW: ad leads notifications (EN + ES)
+        // Show bubbles for unanswered leads, with priority ranking rules
+        // -----------------------------
+        try {
+          const { data: enLeads, error: enErr } = await supabase
+          .from("ad_leads_en")
+          .select("*")
+          .or("answered.is.null,answered.eq.false");
+        
+        if (enErr) throw enErr;
+        
+        const { data: esLeads, error: esErr } = await supabase
+          .from("ad_leads_es")
+          .select("*")
+          .or("answered.is.null,answered.eq.false");
+        
+        if (esErr) throw esErr;
+        
+        const normalizeLead = (row, sourceTable) => ({
+          ...row,
+          __sourceTable: sourceTable, // "ad_leads_en" | "ad_leads_es"
+        });
+        
+        const allLeads = [
+          ...(enLeads || []).map((r) => normalizeLead(r, "ad_leads_en")),
+          ...(esLeads || []).map((r) => normalizeLead(r, "ad_leads_es")),
+        ];
+
+        console.log("Lead counts:", {
+          en: enLeads?.length,
+          es: esLeads?.length,
+          total: allLeads.length,
+        });   
+
+        const budgetTierScore = (tier) => {
+          // Higher = more important. Tries to handle numeric tiers or strings.
+          if (tier == null) return 0;
+          const n = Number(tier);
+          if (!Number.isNaN(n)) return n;
+
+          const s = String(tier).toLowerCase();
+          // crude fallback ordering if tiers are words
+          if (s.includes("high")) return 3;
+          if (s.includes("mid")) return 2;
+          if (s.includes("low")) return 1;
+          return 0;
+        };
+
+        allLeads.sort((a, b) => {
+          // 1) reached out date: earlier = more important
+          const da = new Date(a.created_at).getTime();
+          const db = new Date(b.created_at).getTime();
+          if (da !== db) return da - db;
+
+          // 2) budget tier: higher = more important
+          const ba = budgetTierScore(a.budget_tier);
+          const bb = budgetTierScore(b.budget_tier);
+          if (ba !== bb) return bb - ba;
+
+          // 3) release date: earlier = more important
+          const ra = a.ideal_release_date ? new Date(a.ideal_release_date).getTime() : Infinity;
+          const rb = b.ideal_release_date ? new Date(b.ideal_release_date).getTime() : Infinity;
+          return ra - rb;
+        });
+
+        setLeadNotifications(allLeads);
+        } catch (e) {
+        console.error("Error loading lead notifications:", e);
+        setLeadNotifications([]);
+        }
+
       } catch (err) {
         console.error("Error loading notifications:", err);
         setErrorMsg("Error loading notifications.");
@@ -1419,6 +1534,51 @@ export default function MenuPage() {
               <div className="text-gray-700 text-sm">Loading notifications…</div>
             ) : (
               <>
+                {/* NEW: Leads notifications (highest priority) */}
+                {leadNotifications?.length > 0 && (
+                  <div className="bg-white rounded-xl p-4 shadow-sm border mb-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">Leads</h2>
+                      <span className="text-xs text-gray-600">
+                        Unanswered: {leadNotifications.length}
+                      </span>
+                    </div>
+
+                    <ul className="mt-3 space-y-2">
+                      {leadNotifications.slice(0, 7).map((lead) => (
+                        <li
+                          key={`${lead.__sourceTable}-${lead.id}`}
+                          className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
+                          onClick={() => setSelectedLead(lead)}
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium flex items-center gap-2">
+                              <span className="truncate">
+                                {lead.lead_type || "Lead"}
+                              </span>
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                {new Date(lead.created_at).toLocaleDateString(undefined, {
+                                  weekday: "short",
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                })}
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-gray-700">
+                              {lead.email ? `Email: ${lead.email}` : ""}
+                              {lead.budget_tier ? ` • Budget tier: ${lead.budget_tier}` : ""}
+                              {lead.ideal_release_date
+                                ? ` • Release: ${new Date(lead.ideal_release_date).toLocaleDateString()}`
+                                : ""}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Remaining days of this week */}
                 <div className="mb-6">
                   <h2 className="font-semibold mb-2 text-sm uppercase tracking-wide text-gray-800">
@@ -1430,40 +1590,44 @@ export default function MenuPage() {
                     </div>
                   ) : (
                     <ul className="space-y-2">
-                      {grouped.currentWeek.map((post) => (
-                        <li
-                          key={post.id}
-                          className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
-                          onClick={() => handleNotificationClick(post)}
-                        >
-                          <div>
-                            <div className="font-medium">
-                              {post.post_name || "(Untitled post)"}
-                            </div>
-                            <div className="text-xs text-gray-700">
-                              {new Date(post.post_date).toLocaleDateString(
-                                undefined,
-                                {
+                      {grouped.currentWeek.map((post) => {
+                        const fbCount = feedbackByPostId.get(post.id) || 0;
+
+                        return (
+                          <li
+                            key={post.id}
+                            className="border rounded-md px-3 py-2 text-sm flex justify-between items-start bg-[#eef8ea] cursor-pointer hover:bg-white"
+                            onClick={() => handleNotificationClick(post)}
+                          >
+                            <div className="min-w-0">
+                              <div className="font-medium flex items-center gap-2">
+                                <span className="truncate">{post.post_name || "(Untitled post)"}</span>
+
+                                {/* NEW: feedback bubble (lower priority than “normal edits”, but visible) */}
+                                {fbCount > 0 && (
+                                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-yellow-100 text-yellow-800 border border-yellow-200">
+                                    Feedback {fbCount}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-gray-700">
+                                {new Date(post.post_date).toLocaleDateString(undefined, {
                                   weekday: "short",
                                   day: "2-digit",
                                   month: "2-digit",
-                                }
-                              )}
-                              {" • "}
-                              Status:{" "}
-                              <span className="font-semibold">
-                                {post.status || "unknown"}
-                              </span>
-                              {post.artist_id && artistsById[post.artist_id] && (
-                                <>
-                                  {" • "}
-                                  Artist: {artistsById[post.artist_id]}
-                                </>
-                              )}
+                                })}
+                                {" • "}
+                                Status: <span className="font-semibold">{post.status || "unknown"}</span>
+                                {post.artist_id && artistsById?.[post.artist_id]
+                                  ? ` • ${artistsById[post.artist_id]}`
+                                  : ""}
+                              </div>
                             </div>
-                          </div>
-                        </li>
-                      ))}
+                          </li>
+                        );
+                      })}
+
                     </ul>
                   )}
                 </div>
@@ -1699,6 +1863,81 @@ export default function MenuPage() {
         </div>
       )}
 
+    {/* NEW: LeadsDetailsModal */}
+    {selectedLead && (
+      <div
+        className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        onClick={() => setSelectedLead(null)}
+      >
+        <div
+          className="bg-white rounded-lg shadow-lg max-w-[90vw] w-full p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold truncate">
+                Lead details: {selectedLead.lead_type || "Lead"}
+              </h2>
+              <div className="text-xs text-gray-600">
+                Submitted{" "}
+                {new Date(selectedLead.created_at).toLocaleString()}
+                {" • "}
+                Source: {selectedLead.__sourceTable}
+              </div>
+            </div>
+
+            <button
+              className="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm"
+              onClick={() => setSelectedLead(null)}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* Everything in English labels + clickable links */}
+          <div className="text-sm space-y-2">
+            {[
+              ["Email", selectedLead.email],
+              ["Phone", selectedLead.phone],
+              ["About project", selectedLead.about_project],
+              ["Budget per song", selectedLead.budget_per_song],
+              ["Monthly marketing budget", selectedLead.monthly_marketing_budget],
+              ["Budget tier", selectedLead.budget_tier],
+              ["Ideal release date", selectedLead.ideal_release_date],
+              ["Music link", selectedLead.music_link],
+              ["Social links", selectedLead.social_links],
+              ["EPK URL", selectedLead.epk_url],
+              ["Notes", selectedLead.notes],
+              ["Reference music links", selectedLead.reference_music_links],
+              ["Reference video links", selectedLead.reference_video_links],
+              ["What to film", selectedLead.what_to_film],
+              ["Wants additional digital strategy", String(!!selectedLead.wants_additional_digital_strategy)],
+              ["Extra fields", selectedLead.extra_fields ? JSON.stringify(selectedLead.extra_fields, null, 2) : ""],
+            ].map(([label, value]) => {
+              if (!value) return null;
+
+              const s = String(value);
+
+              // make URLs clickable (basic)
+              const isUrl = /^https?:\/\//i.test(s);
+              return (
+                <div key={label} className="border rounded p-3 bg-white">
+                  <div className="text-xs font-semibold text-gray-700 mb-1">{label}</div>
+                  {isUrl ? (
+                    <a className="text-blue-600 underline break-words" href={s} target="_blank" rel="noreferrer">
+                      {s}
+                    </a>
+                  ) : (
+                    <div className="whitespace-pre-wrap break-words">{s}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    )}
 
         {/* Media player modal */}
         {showMediaPlayer && selectedVariation && (
