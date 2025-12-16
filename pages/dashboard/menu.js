@@ -1257,11 +1257,23 @@ export default function MenuPage() {
 
         const map = {};
         (artists || []).forEach((a) => {
-        map[a.id] = a.name;
+          map[a.id] = a.name;
         });
 
+        // Filter out Lemon Eye posts from notifications
+        const lemonEyeArtistIds = new Set(
+          (artists || [])
+            .filter((a) => String(a.name || "").trim().toLowerCase() === "lemon eye")
+            .map((a) => a.id)
+        );
+
+        const filteredPosts = (posts || []).filter(
+          (p) => !lemonEyeArtistIds.has(p.artist_id)
+        );
+
         setArtistsById(map);
-        setNotifications(posts || []);
+        setNotifications(filteredPosts);
+
 
         // -----------------------------
         // NEW: feedback notifications
