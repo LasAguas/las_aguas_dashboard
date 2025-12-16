@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import Link from "next/link";
+import Script from "next/script";
 
 const isValidEmail = (value) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((value || "").trim());
@@ -214,7 +215,22 @@ export default function DigitalStrategyLeadEsPage() {
   const tierLabel = getTierLabel(budget);
 
   return (
+    
     <div className="min-h-screen flex items-center justify-center bg-[#a89ee4] p-4">
+      <Script id="meta-pixel" strategy="afterInteractive">
+        {`
+          !function(f,b,e,v,n,t,s)
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t,s)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', '1596969374985643');
+          fbq('track', 'PageView');
+        `}
+      </Script>
       <div className="w-full max-w-xl bg-[#bbe1ac] p-6 md:p-8 rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-[#33296b]">
