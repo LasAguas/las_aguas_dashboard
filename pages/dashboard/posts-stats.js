@@ -113,7 +113,6 @@ function MiniLineChart({ points, avgValue, height = 120, labelFormatter }) {
             .map((p, idx) => `${idx === 0 ? "M" : "L"} ${scaleX(idx)} ${scaleY(p.value ?? 0)}`)
             .join(" ");
 
-
   const avgPath =
     avgValue == null
       ? ""
@@ -453,6 +452,10 @@ export default function PostsStatsPage() {
     });
     return map;
   }, [snapshots]);
+  
+  const postsWithData = useMemo(() => {
+    return (posts || []).filter((p) => latestSnapshotByPostId.has(p.id));
+  }, [posts, latestSnapshotByPostId]);  
 
   // compute per-artist averages from last 15 posts (using latest snapshot only)
   const artistAverages = useMemo(() => {
@@ -498,33 +501,32 @@ export default function PostsStatsPage() {
   function getArtistTier(artist) {
     const followers = artist?.youtube_followers;
     if (followers == null || Number.isNaN(Number(followers))) return "Unknown size";
-    if (followers < 400) return "Under 400 followers";
-    if (followers < 1000) return "400–1k followers";
+    if (followers < 95) return "Under 95 followers";
+    if (followers < 1000) return "95–1k followers";
     return "Over 1k followers";
   }  
 
   const postsByTier = useMemo(() => {
     const buckets = new Map();
-    posts.forEach((p) => {
+  
+    postsWithData.forEach((p) => {
       const artist = artistById.get(p.artist_id);
       const tier = getArtistTier(artist);
       if (!buckets.has(tier)) buckets.set(tier, []);
       buckets.get(tier).push(p);
     });
-
-    // within each bucket, sort by views (latest snapshot)
-    buckets.forEach((list, tier) => {
+  
+    buckets.forEach((list) => {
       list.sort((a, b) => {
-        const snapA = latestSnapshotByPostId.get(a.id);
-        const snapB = latestSnapshotByPostId.get(b.id);
-        const viewsA = snapA ? Number(snapA.views) || 0 : 0;
-        const viewsB = snapB ? Number(snapB.views) || 0 : 0;
+        const viewsA = Number(latestSnapshotByPostId.get(a.id)?.views) || 0;
+        const viewsB = Number(latestSnapshotByPostId.get(b.id)?.views) || 0;
         return viewsB - viewsA;
       });
     });
-
+  
     return buckets;
-  }, [posts, artistById, latestSnapshotByPostId]);
+  }, [postsWithData, artistById, latestSnapshotByPostId]);
+  
 
   async function openPostModal(post) {
     try {
@@ -585,6 +587,7 @@ export default function PostsStatsPage() {
         </div>
       );
     }
+    
     if (!posts.length) {
       return (
         <div className="text-sm text-gray-800">
@@ -592,6 +595,15 @@ export default function PostsStatsPage() {
         </div>
       );
     }
+    
+    if (!postsWithData.length) {
+      return (
+        <div className="text-sm text-gray-800">
+          No metrics collected yet (run “Manually collect data”).
+        </div>
+      );
+    }
+    
 
     const tiers = Array.from(postsByTier.keys()).sort((a, b) => {
       const order = ["0–10k subs", "10k–50k subs", "50k–100k subs", "100k+ subs", "Unknown size"];
@@ -623,6 +635,7 @@ export default function PostsStatsPage() {
           
           // worst 4 in tier (by latest views, falling back to 0)
           const worstInTier = [...allTierPosts]
+            .filter((p) => latestSnapshotByPostId.has(p.id))
             .sort((a, b) => {
               const va = Number(latestSnapshotByPostId.get(a.id)?.views) || 0;
               const vb = Number(latestSnapshotByPostId.get(b.id)?.views) || 0;
@@ -680,7 +693,7 @@ export default function PostsStatsPage() {
                 </div>
 
                 {tierShowWorst[tierKey] && (
-                  <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200 pb-4">
                     <div className="text-sm font-semibold mb-2">Worst performing (bottom 4)</div>
                     <div className="grid gap-3 md:grid-cols-2">
                       {worstInTier.map((post) => {

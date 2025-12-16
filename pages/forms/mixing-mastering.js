@@ -6,6 +6,7 @@ import { supabase } from "../../lib/supabaseClient";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import Link from "next/link";
+import Script from "next/script";
 
 const pad = (n) => String(n).padStart(2, "0");
 const toYMD = (d) =>
@@ -123,6 +124,28 @@ export default function LasAguasMixingLeadPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#a89ee4] p-4">
+      <Script id="meta-pixel-782404974822483" strategy="afterInteractive">
+        {`
+          !function(f,b,e,v,n,t,s)
+          {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+          n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+          if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+          n.queue=[];t=b.createElement(e);t.async=!0;
+          t.src=v;s=b.getElementsByTagName(e)[0];
+          s.parentNode.insertBefore(t,s)}(window, document,'script',
+          'https://connect.facebook.net/en_US/fbevents.js');
+          fbq('init', '782404974822483');
+          fbq('track', 'PageView');
+        `}
+      </Script>
+
+      <noscript
+        dangerouslySetInnerHTML={{
+          __html:
+            '<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=782404974822483&ev=PageView&noscript=1" />',
+        }}
+      />
+
       <div className="w-full max-w-xl bg-[#bbe1ac] p-6 md:p-8 rounded-2xl shadow-lg">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-2xl font-bold text-[#33296b]">
