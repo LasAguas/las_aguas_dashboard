@@ -881,11 +881,40 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   const audioRef = useRef(null);
   const [snippetDuration, setSnippetDuration] = useState(15); // needed by handlePreviewSnippet
 
+  const MOV_REJECT_REPLIES = [
+    "Kein .movs diggi",
+    "Ayo .mp4 bitte",
+    "Porfavor no mas con .movs",
+    ".mov bruh",
+    "hmmmmm.mov",
+  ];
+  
+  const isMovFile = (f) => {
+    const name = (f?.name || "").toLowerCase();
+    const type = (f?.type || "").toLowerCase();
+    return name.endsWith(".mov") || type === "video/quicktime";
+  };
+  
+  const randomMovReply = () =>
+    MOV_REJECT_REPLIES[Math.floor(Math.random() * MOV_REJECT_REPLIES.length)];
+  
   const handleFileChange = (e) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
+  
+    // Always reset state first
     if (!files.length) {
       setFile(null);
       setExtraFiles([]);
+      return;
+    }
+  
+    // 🚫 Block .mov anywhere in selection
+    if (files.some(isMovFile)) {
+      alert(randomMovReply());
+      setFile(null);
+      setExtraFiles([]);
+      // reset the input so selecting the same file again re-triggers onChange
+      e.target.value = "";
       return;
     }
   
@@ -897,6 +926,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
       alert("Please select only images OR only a single video.");
       setFile(null);
       setExtraFiles([]);
+      e.target.value = "";
       return;
     }
   
@@ -910,7 +940,8 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   
     setFile(first);
     setExtraFiles(files.slice(1)); // remaining images become carousel frames
-  };  
+  };
+  
 
 
       // Load audio library songs for this artist
@@ -1127,7 +1158,8 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           <input
             type="file"
             multiple
-            accept="image/*,video/*"
+            // allow images + common web video formats (intentionally excluding QuickTime)
+            accept="image/*,video/mp4,video/webm,video/ogg,.mp4,.webm,.ogg"
             onChange={handleFileChange}
             className="w-full text-sm"
             disabled={uploading}

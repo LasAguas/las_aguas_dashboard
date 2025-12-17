@@ -501,8 +501,8 @@ export default function PostsStatsPage() {
   function getArtistTier(artist) {
     const followers = artist?.youtube_followers;
     if (followers == null || Number.isNaN(Number(followers))) return "Unknown size";
-    if (followers < 95) return "Under 95 followers";
-    if (followers < 1000) return "95–1k followers";
+    if (followers < 100) return "Under 100 followers";
+    if (followers < 1000) return "100–1k followers";
     return "Over 1k followers";
   }  
 
