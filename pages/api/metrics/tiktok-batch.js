@@ -43,7 +43,9 @@ function extractTikTokVideoIdFromUrl(url) {
 }
 
 async function fetchTikTokVideoMetrics({ accessToken, videoId }) {
-  const url = "https://open.tiktokapis.com/v2/video/query/";
+  // TikTok Display API expects `fields` as a query param, not in the JSON body.
+  const url =
+    "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count,share_count";
 
   const resp = await fetch(url, {
     method: "POST",
@@ -53,7 +55,6 @@ async function fetchTikTokVideoMetrics({ accessToken, videoId }) {
     },
     body: JSON.stringify({
       filters: { video_ids: [videoId] },
-      fields: ["id", "view_count", "like_count", "comment_count", "share_count"],
     }),
   });
 
@@ -77,6 +78,7 @@ async function fetchTikTokVideoMetrics({ accessToken, videoId }) {
     raw: json,
   };
 }
+
 
 async function snapshotOnePost({ postId }) {
   // Load post
