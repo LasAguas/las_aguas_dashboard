@@ -71,7 +71,7 @@ export default async function handler(req, res) {
         {
           artist_id: Number(artistId),
           platform: "tiktok",
-          status: "connected",
+          status: "ok",
           access_token,
           refresh_token,
           access_expires_at: accessExpiresAt,

@@ -35,8 +35,8 @@ function extractTikTokVideoIdFromUrl(url) {
   if (!url) return null;
   try {
     const u = new URL(url);
-    const m = u.pathname.match(/\/video\/(\d+)/);
-    return m?.[1] || null;
+    const m = u.pathname.match(/\/(video|photo)\/(\d+)/);
+    return m?.[2] || null;
   } catch {
     return null;
   }
@@ -96,7 +96,7 @@ async function snapshotOnePost({ postId }) {
   // Load token for the artist
   const { data: authRow, error: authErr } = await supabaseAdmin
     .from("artist_social_auth_status")
-    .select("access_token")
+    .select("access_token, refresh_token, access_expires_at")
     .eq("artist_id", post.artist_id)
     .eq("platform", "tiktok")
     .eq("status", "ok")
