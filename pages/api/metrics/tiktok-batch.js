@@ -43,7 +43,7 @@ function extractTikTokVideoIdFromUrl(url) {
 }
 
 async function fetchTikTokVideoMetrics({ accessToken, videoId }) {
-  // TikTok Display API expects `fields` as a query param, not in the JSON body.
+  // TikTok expects `fields` in the query string, not the JSON body
   const url =
     "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count,share_count";
 
@@ -79,12 +79,11 @@ async function fetchTikTokVideoMetrics({ accessToken, videoId }) {
   };
 }
 
-
 async function snapshotOnePost({ postId }) {
   // Load post
   const { data: post, error: postErr } = await supabaseAdmin
     .from("posts")
-    .select("id, artist_id, tiktok_url, status")
+    .select("id, artist_id, tiktok_url, status, post_date")
     .eq("id", postId)
     .single();
 
@@ -115,6 +114,33 @@ async function snapshotOnePost({ postId }) {
 
   if (!metrics.ok) return { ok: false, reason: metrics.reason, detail: metrics.detail };
 
+  // --- Derived scores ---
+  let tiktokRetentionScore = null;
+  let tiktokShareabilityScore = null;
+
+  const views = metrics.data.views;
+  const shares = metrics.data.shares;
+
+  // Retention-ish score: views per hour since post_date
+  if (post.post_date && typeof views === "number" && !Number.isNaN(views)) {
+    const postDate = new Date(post.post_date);
+    const ageHours = Math.max(
+      1,
+      (Date.now() - postDate.getTime()) / (1000 * 60 * 60)
+    );
+    tiktokRetentionScore = views / ageHours;
+  }
+
+  // Shareability: shares per view
+  if (
+    typeof views === "number" &&
+    views > 0 &&
+    typeof shares === "number" &&
+    !Number.isNaN(shares)
+  ) {
+    tiktokShareabilityScore = shares / views;
+  }
+
   const { error: insErr } = await supabaseAdmin
     .from("post_metrics_snapshots")
     .insert({
@@ -125,8 +151,11 @@ async function snapshotOnePost({ postId }) {
       likes: metrics.data.likes,
       comments: metrics.data.comments,
       shares: metrics.data.shares,
+      tiktok_retention_score: tiktokRetentionScore,
+      tiktok_shareability_score: tiktokShareabilityScore,
       raw_metrics: metrics.raw,
     });
+
 
   if (insErr) return { ok: false, reason: "Insert failed", detail: insErr };
 

@@ -61,6 +61,19 @@ function formatNumber(n) {
   return String(n);
 }
 
+function formatHalfStep(n) {
+  if (n == null || isNaN(n)) return "—";
+  const num = Number(n);
+  const rounded = Math.round(num * 2) / 2; // nearest 0.5
+  return rounded.toFixed(1);
+}
+
+function formatPerThousand(n) {
+  if (n == null || isNaN(n)) return "—";
+  const num = Number(n) * 1000; // convert ratio to per-1000
+  return num.toFixed(1); // 1 decimal place
+}
+
 function formatPercent(p) {
   if (p == null || isNaN(p)) return "—";
   return p.toFixed(1) + "%";
@@ -266,6 +279,16 @@ export default function PostsStatsPage() {
   const [tierTopLimit, setTierTopLimit] = useState({});
   const [tierShowWorst, setTierShowWorst] = useState({});
 
+  // TikTok stats state
+  const [ttManualRun, setTtManualRun] = useState({ loading: false, msg: "" });
+  const [tiktokPosts, setTiktokPosts] = useState([]);
+  const [tiktokSnapshots, setTiktokSnapshots] = useState([]);
+  const [tiktokLoadingData, setTiktokLoadingData] = useState(false);
+  const [tiktokErrorMsg, setTiktokErrorMsg] = useState("");
+  const [tiktokTierTopLimit, setTiktokTierTopLimit] = useState({});
+  const [tiktokTierShowWorst, setTiktokTierShowWorst] = useState({});
+
+
   async function runYouTubeManualCollect() {
     try {
       setYtManualRun({ loading: true, msg: "" });
@@ -301,6 +324,54 @@ export default function PostsStatsPage() {
     } catch (e) {
       console.error(e);
       setYtManualRun({ loading: false, msg: "Manual collect crashed (see console)" });
+    }
+  }  
+
+  async function runTikTokManualCollect() {
+    try {
+      setTtManualRun({ loading: true, msg: "" });
+  
+      const res = await fetch("/api/metrics/tiktok-batch-manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+  
+      const text = await res.text();
+      let json = null;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        console.error("TikTok manual batch returned non-JSON:", text);
+        setTtManualRun({
+          loading: false,
+          msg: "TikTok collect failed: non-JSON response (see console)",
+        });
+        return;
+      }
+  
+      console.log("TikTok batch result:", json);
+  
+      if (!res.ok) {
+        setTtManualRun({
+          loading: false,
+          msg: json?.error || "TikTok collect failed (see console)",
+        });
+        return;
+      }
+  
+      setTtManualRun({
+        loading: false,
+        msg: `TikTok collected: successCount=${json.successCount ?? "?"}, processed=${json.processed ?? "?"}`,
+      });
+  
+      // reload TikTok posts + snapshots
+      await loadTikTokData();
+    } catch (e) {
+      console.error(e);
+      setTtManualRun({
+        loading: false,
+        msg: "TikTok collect crashed (see console)",
+      });
     }
   }  
 
@@ -372,7 +443,58 @@ export default function PostsStatsPage() {
   
     loadTikTokInfo();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "tiktok") {
+      loadTikTokData();
+    }
+  }, [activeTab]);  
+
+  async function loadTikTokData() {
+    try {
+      setTiktokLoadingData(true);
+      setTiktokErrorMsg("");
   
+      // 1) Load posted posts that have a TikTok URL
+      const { data: postRows, error: postErr } = await supabase
+        .from("posts")
+        .select(
+          "id, post_name, post_date, status, artist_id, tiktok_url, notes"
+        )
+        .eq("status", "posted")
+        .not("tiktok_url", "is", null);
+  
+      if (postErr) throw postErr;
+  
+      const postIds = (postRows || []).map((p) => p.id);
+  
+      // 2) Load TikTok snapshots for those posts
+      let snapshotRows = [];
+      if (postIds.length > 0) {
+        const { data: snapRows, error: snapErr } = await supabase
+          .from("post_metrics_snapshots")
+          .select("*")
+          .in("post_id", postIds)
+          .eq("platform", "tiktok")
+          .order("snapshot_at", { ascending: true });
+  
+        if (snapErr) throw snapErr;
+        snapshotRows = snapRows || [];
+      }
+  
+      setTiktokPosts(postRows || []);
+      setTiktokSnapshots(snapshotRows);
+      setTiktokTierTopLimit({});
+      setTiktokTierShowWorst({});
+    } catch (err) {
+      console.error("Error loading TikTok stats data:", err);
+      setTiktokErrorMsg(
+        "Could not load TikTok stats data. Check console for details."
+      );
+    } finally {
+      setTiktokLoadingData(false);
+    }
+  }  
 
   // ---- load overview data ----
   useEffect(() => {
@@ -452,12 +574,41 @@ export default function PostsStatsPage() {
     });
     return map;
   }, [snapshots]);
+
+  // TikTok-specific maps
+const tiktokSnapshotsByPostId = useMemo(() => {
+  const map = new Map();
+  tiktokSnapshots.forEach((s) => {
+    if (!map.has(s.post_id)) map.set(s.post_id, []);
+    map.get(s.post_id).push(s);
+  });
+  return map;
+}, [tiktokSnapshots]);
+
+const tiktokLatestSnapshotByPostId = useMemo(() => {
+  const map = new Map();
+  tiktokSnapshots.forEach((s) => {
+    const prev = map.get(s.post_id);
+    if (!prev || new Date(s.snapshot_at) > new Date(prev.snapshot_at)) {
+      map.set(s.post_id, s);
+    }
+  });
+  return map;
+}, [tiktokSnapshots]);
+
   
   const postsWithData = useMemo(() => {
     return (posts || []).filter((p) => latestSnapshotByPostId.has(p.id));
-  }, [posts, latestSnapshotByPostId]);  
+  }, [posts, latestSnapshotByPostId]);
 
-  // compute per-artist averages from last 15 posts (using latest snapshot only)
+  const tiktokPostsWithData = useMemo(() => {
+    return (tiktokPosts || []).filter((p) =>
+      tiktokLatestSnapshotByPostId.has(p.id)
+    );
+  }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
+
+
+  // YT compute per-artist averages from last 15 posts (using latest snapshot only)
   const artistAverages = useMemo(() => {
     const byArtist = new Map();
 
@@ -497,12 +648,60 @@ export default function PostsStatsPage() {
     return result;
   }, [posts, latestSnapshotByPostId]);
 
-  // group posts by channel size tier (based on artist.youtube_followers or "Unknown")
+  // TikTok per-artist averages from last 15 posts (latest snapshot only)
+const tiktokArtistAverages = useMemo(() => {
+  const byArtist = new Map();
+
+  tiktokPosts.forEach((post) => {
+    const snap = tiktokLatestSnapshotByPostId.get(post.id);
+    if (!snap) return;
+    if (!byArtist.has(post.artist_id)) {
+      byArtist.set(post.artist_id, { rows: [] });
+    }
+    byArtist.get(post.artist_id).rows.push(snap);
+  });
+
+  const result = new Map();
+  byArtist.forEach((value, artistId) => {
+    const rows = value.rows
+      .sort(
+        (a, b) =>
+          new Date(b.snapshot_at).getTime() - new Date(a.snapshot_at).getTime()
+      )
+      .slice(0, 15);
+
+    if (rows.length === 0) return;
+    const avg = (key) =>
+      rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0) / rows.length;
+
+    result.set(artistId, {
+      views: avg("views"),
+      likes: avg("likes"),
+      comments: avg("comments"),
+      shares: avg("shares"),
+      tiktok_retention_score: avg("tiktok_retention_score"),
+      tiktok_shareability_score: avg("tiktok_shareability_score"),
+    });
+  });
+
+  return result;
+}, [tiktokPosts, tiktokLatestSnapshotByPostId]);
+
+  // YT group posts by channel size tier (based on artist.youtube_followers or "Unknown")
   function getArtistTier(artist) {
     const followers = artist?.youtube_followers;
     if (followers == null || Number.isNaN(Number(followers))) return "Unknown size";
     if (followers < 100) return "Under 100 followers";
     if (followers < 1000) return "100–1k followers";
+    return "Over 1k followers";
+  }  
+
+  function getTikTokTier(artist) {
+    const followers = artist?.tiktok_followers;
+    if (followers == null || Number.isNaN(Number(followers)))
+      return "Unknown size";
+    if (followers < 300) return "Under 300 followers";
+    if (followers < 1000) return "300–1k followers";
     return "Over 1k followers";
   }  
 
@@ -527,7 +726,30 @@ export default function PostsStatsPage() {
     return buckets;
   }, [postsWithData, artistById, latestSnapshotByPostId]);
   
-
+  const tiktokPostsByTier = useMemo(() => {
+    const buckets = new Map();
+  
+    tiktokPostsWithData.forEach((p) => {
+      const artist = artistById.get(p.artist_id);
+      const tier = getTikTokTier(artist);
+      if (!buckets.has(tier)) buckets.set(tier, []);
+      buckets.get(tier).push(p);
+    });
+  
+    // sort each tier's posts by latest views desc
+    buckets.forEach((list) => {
+      list.sort((a, b) => {
+        const va =
+          Number(tiktokLatestSnapshotByPostId.get(a.id)?.views) || 0;
+        const vb =
+          Number(tiktokLatestSnapshotByPostId.get(b.id)?.views) || 0;
+        return vb - va;
+      });
+    });
+  
+    return buckets;
+  }, [tiktokPostsWithData, artistById, tiktokLatestSnapshotByPostId]);
+  
   async function openPostModal(post) {
     try {
 
@@ -847,6 +1069,282 @@ export default function PostsStatsPage() {
     );
   }
 
+  function renderTikTokTab() {
+    if (tiktokLoadingData) {
+      return <div className="text-sm text-gray-700">Loading…</div>;
+    }
+    if (tiktokErrorMsg) {
+      return (
+        <div className="text-sm text-red-700 bg-white/70 rounded px-3 py-2">
+          {tiktokErrorMsg}
+        </div>
+      );
+    }
+  
+    if (!tiktokPosts.length) {
+      return (
+        <div className="text-sm text-gray-800">
+          No posted TikTok items with links yet.
+        </div>
+      );
+    }
+  
+    if (!tiktokPostsWithData.length) {
+      return (
+        <div className="text-sm text-gray-800">
+          No TikTok metrics collected yet (run “Manually collect TikTok data”).
+        </div>
+      );
+    }
+  
+    const tiers = Array.from(tiktokPostsByTier.keys()).sort((a, b) => {
+      const order = [
+        "Under 400 followers",
+        "400–1k followers",
+        "Over 1k followers",
+        "Unknown size",
+      ];
+      return order.indexOf(a) - order.indexOf(b);
+    });
+  
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-gray-700">
+            {ttManualRun.msg ? (
+              <>
+                {ttManualRun.msg}
+                {tiktokInfo && (
+                  <>
+                    <br />
+                    Tokens: {tiktokInfo.tokenCount} • Posts:{" "}
+                    {tiktokInfo.postCount} • Snapshots:{" "}
+                    {tiktokInfo.snapshotCount}
+                  </>
+                )}
+              </>
+            ) : (
+              " "
+            )}
+          </div>
+  
+          <button
+            type="button"
+            className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={runTikTokManualCollect}
+            disabled={ttManualRun.loading}
+          >
+            {ttManualRun.loading ? "Collecting…" : "Manually collect TikTok data"}
+          </button>
+        </div>
+  
+        {tiers.map((tierKey) => {
+          const allTierPosts = tiktokPostsByTier.get(tierKey) || [];
+          const limit = tiktokTierTopLimit[tierKey] ?? 4;
+          const postsInTier = allTierPosts.slice(0, limit);
+  
+          // worst 4 in tier by views
+          const worstInTier = [...allTierPosts]
+            .filter((p) => tiktokLatestSnapshotByPostId.has(p.id))
+            .sort((a, b) => {
+              const va =
+                Number(tiktokLatestSnapshotByPostId.get(a.id)?.views) || 0;
+              const vb =
+                Number(tiktokLatestSnapshotByPostId.get(b.id)?.views) || 0;
+              return va - vb;
+            })
+            .slice(0, 4);
+  
+          if (!postsInTier.length) return null;
+  
+          return (
+            <details
+              key={tierKey}
+              className="bg-[#eef8ea] rounded-xl p-4 shadow-inner"
+              open
+            >
+              <summary className="cursor-pointer select-none flex items-center justify-between">
+                <span className="text-lg font-semibold">{tierKey}</span>
+                <span className="text-xs text-gray-600">click to collapse</span>
+              </summary>
+  
+              <div className="mt-3 mb-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTiktokTierTopLimit((prev) => ({
+                      ...prev,
+                      [tierKey]: (prev[tierKey] ?? 4) + 4,
+                    }));
+                  }}
+                >
+                  Show more
+                </button>
+  
+                <button
+                  type="button"
+                  className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTiktokTierShowWorst((prev) => ({
+                      ...prev,
+                      [tierKey]: !prev[tierKey],
+                    }));
+                  }}
+                >
+                  See worst performing
+                </button>
+  
+                <div className="text-[11px] text-gray-600 ml-auto">
+                  Showing {Math.min(limit, allTierPosts.length)} of{" "}
+                  {allTierPosts.length}
+                </div>
+              </div>
+  
+              {tiktokTierShowWorst[tierKey] && (
+                <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200 pb-4">
+                  <div className="text-sm font-semibold mb-2">
+                    Worst performing (bottom 4)
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {worstInTier.map((post) => {
+                      const artist = artistById.get(post.artist_id);
+                      const latest =
+                        tiktokLatestSnapshotByPostId.get(post.id);
+                      const views = latest?.views;
+                      const likes = latest?.likes;
+                      const comments = latest?.comments;
+                      const shares = latest?.shares;
+  
+                      return (
+                        <button
+                          key={post.id}
+                          onClick={() => openPostModal(post)}
+                          className="text-left bg-[#eef8ea] rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-1"
+                        >
+                          <div className="text-sm font-semibold">
+                            {post.post_name || "Untitled post"}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {artist?.name || "Unknown artist"} •{" "}
+                            {post.post_date
+                              ? new Date(
+                                  post.post_date
+                                ).toLocaleDateString()
+                              : "No date"}
+                          </div>
+                          <div className="text-xs text-gray-700 mt-1">
+                            <span className="font-semibold">
+                              {formatNumber(views)}
+                            </span>{" "}
+                            views • {formatNumber(likes)} likes •{" "}
+                            {formatNumber(comments)} comments •{" "}
+                            {formatNumber(shares)} shares
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+  
+              <div className="grid gap-3 md:grid-cols-2">
+                {postsInTier.map((post) => {
+                  const artist = artistById.get(post.artist_id);
+                  const latest = tiktokLatestSnapshotByPostId.get(post.id);
+                  const artistAvg = tiktokArtistAverages.get(post.artist_id);
+  
+                  const views = latest?.views;
+                  const likes = latest?.likes;
+                  const comments = latest?.comments;
+                  const shares = latest?.shares;
+                  const retentionScore = latest?.tiktok_retention_score;
+                  const shareScore = latest?.tiktok_shareability_score;
+  
+                  return (
+                    <button
+                      key={post.id}
+                      onClick={() => openPostModal(post)}
+                      className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {post.post_name || "Untitled post"}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {artist?.name || "Unknown artist"} •{" "}
+                            {post.post_date
+                              ? new Date(
+                                  post.post_date
+                                ).toLocaleDateString()
+                              : "No date"}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-gray-600">
+                          <div>
+                            <span className="font-semibold">
+                              {formatNumber(views)}
+                            </span>{" "}
+                            views
+                          </div>
+                          <div>
+                            {formatNumber(likes)} likes •{" "}
+                            {formatNumber(comments)} comments
+                          </div>
+                          <div>{formatNumber(shares)} shares</div>
+                        </div>
+                      </div>
+  
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-700">
+                        <div>
+                          <div className="font-semibold">
+                            Retention score (views/hr)
+                          </div>
+                          <div>
+                            Post: {formatHalfStep(retentionScore)}{" "}
+                            {artistAvg?.tiktok_retention_score != null && (
+                              <>
+                                <span className="text-gray-400 mx-1">•</span>
+                                Avg: {formatHalfStep(artistAvg.tiktok_retention_score)}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="font-semibold">
+                            Shareability (shares / 1k views)
+                          </div>
+                          <div>
+                            Post: {formatPerThousand(shareScore)}{" "}
+                            {artistAvg?.tiktok_shareability_score != null && (
+                              <>
+                                <span className="text-gray-400 mx-1">•</span>
+                                Avg: {formatPerThousand(artistAvg.tiktok_shareability_score)}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+  
+                      <div className="mt-1 text-[10px] text-gray-500">
+                        Click to see post details & variations
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    );
+  }
+  
   // ---------------------------------------------------------------------------
   // MAIN RENDER
   // ---------------------------------------------------------------------------
@@ -933,80 +1431,8 @@ export default function PostsStatsPage() {
               </div>
             )}
 
-            {activeTab === "tiktok" && (
-              <div className="bg-[#eef8ea] rounded-xl p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">TikTok (stub)</div>
-                    <div className="text-xs text-gray-600 mt-1">
-                      This tab will mirror YouTube once TikTok metrics scopes are enabled.
-                      For now, it shows what’s missing.
-                    </div>
-                  </div>
-
-                  <button
-                    className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch("/api/metrics/tiktok-batch-manual", {
-                          method: "POST",
-                          headers: {
-                            "Content-Type": "application/json",
-                          },
-                        });
-                        const json = await res.json();
-                        console.log("TikTok batch result:", json);
-                        alert("Ran TikTok batch. Check console for details.");
-                        
-                      } catch (e) {
-                        console.error(e);
-                        alert("Failed to run TikTok batch (check console).");
-                      }
-                    }}
-                  >
-                    Run TikTok fetch (manual)
-                  </button>
-                </div>
-
-                <div className="mt-4 grid md:grid-cols-3 gap-3 text-xs">
-                  <div className="bg-white rounded-lg p-3 border">
-                    <div className="text-gray-500">Connected TikTok tokens</div>
-                    <div className="text-lg font-semibold">
-                      {tiktokInfo.loading ? "…" : tiktokInfo.tokenCount}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border">
-                    <div className="text-gray-500">Posted posts w/ TikTok links</div>
-                    <div className="text-lg font-semibold">
-                      {tiktokInfo.loading ? "…" : tiktokInfo.postCount}
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-lg p-3 border">
-                    <div className="text-gray-500">TikTok snapshots</div>
-                    <div className="text-lg font-semibold">
-                      {tiktokInfo.loading ? "…" : tiktokInfo.snapshotCount}
-                    </div>
-                  </div>
-                </div>
-
-                {tiktokInfo.error && (
-                  <div className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-3 py-2">
-                    {tiktokInfo.error}
-                  </div>
-                )}
-
-                <div className="mt-4 text-xs text-gray-700">
-                  <div className="font-semibold mb-1">Next steps</div>
-                  <ol className="list-decimal ml-5 space-y-1">
-                    <li>Ensure each post has a TikTok link saved in <code>posts.tiktok_url</code>.</li>
-                    <li>Ensure the artist has TikTok connected (Token Health page → Connect via TikTok).</li>
-                    <li>Enable TikTok API scopes for video metrics (requires TikTok approval).</li>
-                    <li>Once scopes are enabled, the cron will begin generating snapshots here.</li>
-                  </ol>
-                </div>
-              </div>
+            {activeTab === "tiktok" && ( renderTikTokTab()
             )}
-
 
             {activeTab === "standout" && (
               <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
@@ -1057,7 +1483,10 @@ function PostDetailsModal({
   const selectedVariation =
     variations.find((v) => v.id === selectedVariationId) || null;
 
-  const metricDefs = [
+  const isTikTokPost = !!post.tiktok_url && !post.youtube_url;
+  const platformLabel = isTikTokPost ? "TikTok" : "YouTube Shorts";
+  
+    const metricDefs = [
     {
       key: "views",
       label: "Views",
@@ -1125,16 +1554,26 @@ function PostDetailsModal({
               {post.post_date
                 ? new Date(post.post_date).toLocaleString()
                 : "No date"}{" "}
-              • YouTube Shorts
+              • {platformLabel}
             </div>
             {post.youtube_url && (
               <a
                 href={post.youtube_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-block mt-1 text-xs text-blue-600 underline"
+                className="inline-block mt-1 mr-2 text-xs text-blue-600 underline"
               >
                 Open on YouTube
+              </a>
+            )}
+            {post.tiktok_url && (
+              <a
+                href={post.tiktok_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-block mt-1 text-xs text-blue-600 underline"
+              >
+                Open on TikTok
               </a>
             )}
           </div>
