@@ -1395,7 +1395,7 @@ const tiktokArtistAverages = useMemo(() => {
         <div className="flex-1 flex flex-col gap-4">
           <section className="bg-[#bbe1ac] rounded-2xl shadow-lg p-4 md:p-6 flex-1">
             <h1 className="text-xl md:text-2xl font-bold mb-4">
-              Posts Stats (YouTube first pass)
+              Posts Stats
             </h1>
 
             {/* tabs */}

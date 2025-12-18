@@ -823,11 +823,9 @@ useEffect(() => {
 const [collapsedWeeks, setCollapsedWeeks] = useState(() => new Set());
 
 
-// Default: on mobile, collapse only the previous week by default;
-// current week and all future weeks remain open.
+// Default: previous week collapsed, current+future open
 useEffect(() => {
   if (!isNarrow) {
-    // On desktop, treat all weeks as expanded.
     setCollapsedWeeks(new Set());
     return;
   }
@@ -836,10 +834,8 @@ useEffect(() => {
   const startThisWeek = startOfWeekMonday(today);
   const startPrevWeek = addDays(startThisWeek, -7);
 
-  // Collapse only the previous week's key
   setCollapsedWeeks(new Set([toYMD(startPrevWeek)]));
 }, [isNarrow]);
-
 
 
 // View switching

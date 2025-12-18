@@ -286,6 +286,20 @@ export default function TokenHealthPage() {
                   Connect via TikTok
                 </button>
               )}
+
+              {/* YouTube Analytics OAuth connect button */}
+              {platform === "youtube" && (
+                <button
+                  className="text-[11px] px-2 py-1 border rounded whitespace-nowrap mt-1 bg-white/60 hover:bg-white"
+                  onClick={() => {
+                    window.location.href = `/api/youtube/auth-start?artistId=${artist.id}`;
+                  }}
+                  disabled={isSavingStatus || isSavingToken}
+                >
+                  Connect YouTube Analytics
+                </button>
+              )}
+
   
               {statusRow?.last_error && (
                 <div className="text-[11px] text-red-600 mt-1">

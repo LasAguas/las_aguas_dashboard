@@ -35,6 +35,7 @@ export default function AboutPage() {
               '<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1596969374985643&ev=PageView&noscript=1" />',
           }}
         />
+        {/* Mixing Mastering Form Pixel */}
         <Script id="meta-pixel-782404974822483" strategy="afterInteractive">
           {`
             !function(f,b,e,v,n,t,s)
