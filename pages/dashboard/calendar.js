@@ -927,21 +927,21 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
     const baseType = first.type.split("/")[0]; // "image" or "video"
   
     // Disallow mixing images and videos
-    if (files.some((f) => f.type.split("/")[0] !== baseType)) {
-      alert("Please select only images OR only a single video.");
-      setFile(null);
-      setExtraFiles([]);
-      e.target.value = "";
-      return;
-    }
+    //if (files.some((f) => f.type.split("/")[0] !== baseType)) {
+      //alert("Please select only images OR only a single video.");
+      //setFile(null);
+      //setExtraFiles([]);
+      //e.target.value = "";
+      //return;
+    //}
   
     // Only one video allowed
-    if (baseType === "video" && files.length > 1) {
-      alert("Video variations support a single file only.");
-      setFile(first);
-      setExtraFiles([]);
-      return;
-    }
+    //if (baseType === "video" && files.length > 1) {
+      //alert("Video variations support a single file only.");
+      //setFile(first);
+      //setExtraFiles([]);
+      //return;
+    //}
   
     setFile(first);
     setExtraFiles(files.slice(1)); // remaining images become carousel frames
