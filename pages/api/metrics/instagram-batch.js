@@ -47,106 +47,89 @@ function normalizeUrl(url) {
 }
 
 // Find the IG media whose permalink matches the `instagram_url`
-async function findInstagramMediaByUrl({ accessToken, postUrl }) {
-    const target = normalizeUrl(postUrl);
-  
-    // 1) Get the Pages this user manages, including page access tokens
-    const pagesResp = await fetch(
-      "https://graph.facebook.com/v21.0/me/accounts" +
-        "?fields=id,name,access_token" +
-        `&access_token=${encodeURIComponent(accessToken)}`
-    );
-    const pagesJson = await pagesResp.json();
-  
-    if (!pagesResp.ok) {
-      return { ok: false, reason: "IG media list error", detail: pagesJson };
+// using a known facebook_page_id instead of /me/accounts
+async function findInstagramMediaByUrl({ accessToken, postUrl, facebookPageId }) {
+  const target = normalizeUrl(postUrl);
+
+  if (!facebookPageId) {
+    return {
+      ok: false,
+      reason: "No facebook_page_id for this artist",
+      detail: null,
+    };
+  }
+
+  // 1) Get the IG business account attached to this Page
+  const pageResp = await fetch(
+    `https://graph.facebook.com/v21.0/${encodeURIComponent(facebookPageId)}` +
+      "?fields=instagram_business_account{username,id}" +
+      `&access_token=${encodeURIComponent(accessToken)}`
+  );
+  const pageJson = await pageResp.json();
+
+  if (!pageResp.ok) {
+    return {
+      ok: false,
+      reason: "IG media list error",
+      detail: pageJson,
+    };
+  }
+
+  const igAccount = pageJson.instagram_business_account;
+  if (!igAccount || !igAccount.id) {
+    return {
+      ok: false,
+      reason: "No instagram_business_account for this page",
+      detail: pageJson,
+    };
+  }
+
+  const igUserId = igAccount.id;
+
+  // 2) Walk that IG user's media looking for a matching permalink
+  let url =
+    `https://graph.facebook.com/v21.0/${encodeURIComponent(igUserId)}/media` +
+    "?fields=id,permalink,media_type,timestamp,like_count,comments_count" +
+    "&limit=50" +
+    `&access_token=${encodeURIComponent(accessToken)}`;
+
+  let pagesChecked = 0;
+  const MAX_PAGES = 10;
+
+  while (url && pagesChecked < MAX_PAGES) {
+    const resp = await fetch(url);
+    const json = await resp.json();
+
+    if (!resp.ok) {
+      return { ok: false, reason: "IG media list error", detail: json };
     }
-  
-    const pages = pagesJson.data || [];
-    if (!pages.length) {
-      return {
-        ok: false,
-        reason: "No Facebook Pages found for this user",
-        detail: pagesJson,
-      };
-    }
-  
-    // 2) Find a Page that has an instagram_business_account
-    let igAccount = null;
-    let pageAccessToken = null;
-  
-    for (const page of pages) {
-      const pToken = page.access_token || accessToken;
-      const pageResp = await fetch(
-        `https://graph.facebook.com/v21.0/${encodeURIComponent(page.id)}` +
-          "?fields=instagram_business_account{username,id}" +
-          `&access_token=${encodeURIComponent(pToken)}`
-      );
-      const pageJson = await pageResp.json();
-  
-      if (!pageResp.ok) {
-        // ignore and try next page
-        continue;
+
+    const data = json.data || [];
+    for (const m of data) {
+      if (!m.permalink) continue;
+      const perm = normalizeUrl(m.permalink);
+      if (perm === target) {
+        return { ok: true, media: m, raw: json };
       }
-  
-      if (pageJson.instagram_business_account && pageJson.instagram_business_account.id) {
-        igAccount = pageJson.instagram_business_account;
-        pageAccessToken = pToken;
-        break;
-      }
     }
-  
-    if (!igAccount || !igAccount.id) {
-      return {
-        ok: false,
-        reason: "No instagram_business_account for any managed Page",
-        detail: { pages },
-      };
-    }
-  
-    const igUserId = igAccount.id;
-    const tokenToUse = pageAccessToken || accessToken;
-  
-    // 3) Walk that IG user's media looking for a matching permalink
-    let url =
-      `https://graph.facebook.com/v21.0/${encodeURIComponent(igUserId)}/media` +
-      "?fields=id,permalink,media_type,timestamp,like_count,comments_count" +
-      "&limit=50" +
-      `&access_token=${encodeURIComponent(tokenToUse)}`;
-  
-    let pagesChecked = 0;
-    const MAX_PAGES = 10;
-  
-    while (url && pagesChecked < MAX_PAGES) {
-      const resp = await fetch(url);
-      const json = await resp.json();
-  
-      if (!resp.ok) {
-        return { ok: false, reason: "IG media list error", detail: json };
-      }
-  
-      const data = json.data || [];
-      for (const m of data) {
-        if (!m.permalink) continue;
-        const perm = normalizeUrl(m.permalink);
-        if (perm === target) {
-          return { ok: true, media: m, raw: json };
-        }
-      }
-  
-      pagesChecked += 1;
-      url = json.paging?.next || null;
-    }
-  
-    return { ok: false, reason: "No matching media for instagram_url", detail: null };
-  }   
+
+    pagesChecked += 1;
+    url = json.paging?.next || null;
+  }
+
+  return { ok: false, reason: "No matching media for instagram_url", detail: null };
+}
 
 // Fetch insights for a single media
 async function fetchInstagramInsights({ accessToken, mediaId }) {
   const url =
+    // v21.0 where /{ig-media-id}/insights is supported
     `https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}/insights` +
-    "?metric=impressions,reach,engagement,saves" +
+    // debug: start with a single, known-valid metric
+    "?metric=impressions" +
     `&access_token=${encodeURIComponent(accessToken)}`;
+
+  console.log("IG insights URL:", url); // <– helps confirm what is actually called
 
   const resp = await fetch(url);
   const json = await resp.json();
@@ -164,13 +147,16 @@ async function fetchInstagramInsights({ accessToken, mediaId }) {
     metricsMap[name] = first ? first.value : null;
   }
 
+  const impressions = metricsMap.impressions ?? null;
+
+  // Keep the same shape so the rest of your code doesn’t break
   return {
     ok: true,
     data: {
-      impressions: metricsMap.impressions ?? null,
-      reach: metricsMap.reach ?? null,
-      engagement: metricsMap.engagement ?? null,
-      saves: metricsMap.saves ?? null,
+      impressions,         // filled
+      reach: null,         // not requested yet
+      engagement: null,    // not computed yet
+      saves: null,         // not requested yet
     },
     raw: json,
   };
@@ -224,11 +210,31 @@ async function snapshotOneInstagramPost({ postId }) {
   if (post.status !== "posted") {
     return { ok: false, reason: "Post is not marked posted" };
   }
+
   if (!post.instagram_url) {
     return { ok: false, reason: "Post has no instagram_url" };
   }
 
-  // 2) Load IG token for this artist
+  // 2) Load artist to get facebook_page_id
+  const { data: artist, error: artistErr } = await supabaseAdmin
+    .from("artists")
+    .select("id, facebook_page_id")
+    .eq("id", post.artist_id)
+    .single();
+
+  if (artistErr || !artist) {
+    return { ok: false, reason: "Artist not found", detail: artistErr };
+  }
+
+  if (!artist.facebook_page_id) {
+    return {
+      ok: false,
+      reason: "No facebook_page_id for this artist",
+      detail: { artistId: artist.id },
+    };
+  }
+
+  // 3) Load IG token for this artist
   const { data: authRow, error: authErr } = await supabaseAdmin
     .from("artist_social_auth_status")
     .select("access_token")
@@ -238,16 +244,22 @@ async function snapshotOneInstagramPost({ postId }) {
     .single();
 
   if (authErr || !authRow?.access_token) {
-    return { ok: false, reason: "No Instagram token for this artist", detail: authErr };
+    return {
+      ok: false,
+      reason: "No Instagram token for this artist",
+      detail: authErr,
+    };
   }
 
   const accessToken = authRow.access_token;
 
-  // 3) Find media by URL
+  // 4) Find media by URL using the known facebook_page_id
   const mediaResult = await findInstagramMediaByUrl({
     accessToken,
     postUrl: post.instagram_url,
+    facebookPageId: artist.facebook_page_id,
   });
+
   if (!mediaResult.ok) return mediaResult;
   const media = mediaResult.media;
 
