@@ -384,8 +384,12 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   const hasCarousel = mediaUrls.length > 1;
   const activeUrl = hasMedia ? mediaUrls[currentIndex] : null;
 
-  const isImage = activeUrl ? /\.(jpe?g|png|gif|webp)$/i.test(activeUrl) : false;
-  const isVideo = activeUrl ? /\.(mp4|mov|webm|ogg)$/i.test(activeUrl) : false;
+  const isImageFile = (url) =>
+    /\.(jpe?g|png|gif|webp)$/i.test(url || "");
+  
+  const isVideoFile = (url) =>
+    /\.(mp4|mov|webm|ogg)$/i.test(url || "");
+  
 
   async function handleSavePlatforms() {
     if (!variation || savingPlatforms) return;
@@ -579,14 +583,15 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
               )}
               {!loading && !error && hasMedia && activeUrl && (
                 <>
-                  {isImage && (
+                  {isImageFile(activeUrl) && (
                     <img
                       src={activeUrl}
                       alt={variation.file_name}
                       className="max-h-[70vh] max-w-full object-contain"
                     />
                   )}
-                  {isVideo && (
+
+                  {isVideoFile(activeUrl) && (
                     <div
                       style={{
                         display: "flex",
@@ -612,8 +617,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                     </div>
                   )}
 
-
-                  {!isImage && !isVideo && (
+                  {!isImageFile(activeUrl) && !isVideoFile(activeUrl) && (
                     <div className="text-sm text-gray-200 px-4 text-center">
                       Unsupported file type
                     </div>
@@ -649,6 +653,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                   )}
                 </>
               )}
+
             </div>
           </div>
 
