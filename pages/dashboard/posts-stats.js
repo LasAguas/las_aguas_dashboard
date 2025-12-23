@@ -430,6 +430,7 @@ async function runInstagramManualCollect() {
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
+  const [igLinkModalPost, setIgLinkModalPost] = useState(null);
 
   const navItems = [
     { href: "/dashboard/calendar", label: "Calendar" },
@@ -736,7 +737,13 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
       );
     }, [instagramPosts, instagramLatestSnapshotByPostId]);
   
-
+    const instagramPostsWithoutData = useMemo(() => {
+      if (!instagramPosts || instagramPosts.length === 0) return [];
+      return instagramPosts.filter(
+        (p) => !instagramLatestSnapshotByPostId.has(p.id)
+      );
+    }, [instagramPosts, instagramLatestSnapshotByPostId]);
+  
   // YT compute per-artist averages from last 15 posts (using latest snapshot only)
   const artistAverages = useMemo(() => {
     const byArtist = new Map();
@@ -836,7 +843,7 @@ const tiktokArtistAverages = useMemo(() => {
 
   function getInstagramTier(artist) {
     // adjust this field name if your artists table uses a different one
-    const followers = artist?.instagram_followers;
+    const followers = artist?.ig_followers;
     if (followers == null || Number.isNaN(Number(followers)))
       return "Unknown size";
     if (followers < 1000) return "Under 1k followers";
@@ -959,6 +966,15 @@ const tiktokArtistAverages = useMemo(() => {
     setSelectedPostVariations([]);
     setModalLoading(false);
   }
+
+  function openIgLinkModal(post) {
+    setIgLinkModalPost(post);
+  }
+
+  function closeIgLinkModal() {
+    setIgLinkModalPost(null);
+  }
+
 
   // ----- render helpers -----
 
@@ -1746,6 +1762,59 @@ const tiktokArtistAverages = useMemo(() => {
             </details>
           );
         })}
+              {instagramPostsWithoutData.length > 0 && (
+        <div className="mt-8 bg-white rounded-xl p-4 border border-dashed border-gray-300">
+          <h3 className="text-sm font-semibold mb-1">
+            Posts with IG link but no stats yet
+          </h3>
+          <p className="text-xs text-gray-600 mb-3">
+            These posts have an <code className="bg-gray-100 px-1 rounded">instagram_url</code>{" "}
+            saved but no Instagram metrics snapshots. This usually means the
+            collector hasn&apos;t found a matching IG media for the link yet, or
+            hasn&apos;t run since the link was updated.
+          </p>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {instagramPostsWithoutData.map((post) => {
+              const artist = artistById.get(post.artist_id);
+
+              return (
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => openIgLinkModal(post)}
+                  className="text-left bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 hover:border-gray-500 hover:shadow-sm transition flex flex-col gap-2"
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <div className="text-sm font-semibold">
+                        {post.post_name || "Untitled post"}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {artist?.name || "Unknown artist"} •{" "}
+                        {post.post_date
+                          ? new Date(post.post_date).toLocaleDateString()
+                          : "No date"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-gray-700">
+                    <div className="truncate">
+                      <span className="font-medium">Current link:</span>{" "}
+                      {post.instagram_url || "—"}
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-500">
+                      Click to review the link, see possible issues, and save a new URL.
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       </div>
     );
   }
@@ -1856,9 +1925,26 @@ const tiktokArtistAverages = useMemo(() => {
           onClose={closeModal}
         />
       )}
+
+      {/* IG LINK FIX MODAL */}
+      {igLinkModalPost && (
+        <InstagramLinkFixModal
+          post={igLinkModalPost}
+          artist={artistById.get(igLinkModalPost.artist_id)}
+          onClose={closeIgLinkModal}
+          onUpdatedUrl={(newUrl) => {
+            setInstagramPosts((prev) =>
+              (prev || []).map((p) =>
+                p.id === igLinkModalPost.id ? { ...p, instagram_url: newUrl } : p
+              )
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
+ 
 
 // ----- Post Details Modal -----
 
@@ -2103,6 +2189,140 @@ function PostDetailsModal({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
+  const [url, setUrl] = useState(post.instagram_url || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("Please enter a valid Instagram URL.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const { error: supaErr } = await supabase
+        .from("posts")
+        .update({ instagram_url: trimmed })
+        .eq("id", post.id);
+
+      if (supaErr) {
+        setError(supaErr.message || "Failed to update Instagram URL.");
+      } else {
+        setMessage(
+          "Saved. Re-run “Fetch IG stats” to try again with the new link."
+        );
+        if (onUpdatedUrl) onUpdatedUrl(trimmed);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to update Instagram URL.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Fix Instagram link</h2>
+            <div className="text-xs text-gray-600">
+              {artist?.name || "Unknown artist"} •{" "}
+              {post.post_name || "Untitled post"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-gray-500 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="text-xs text-gray-700 mb-3 space-y-1">
+          <p>No Instagram metrics snapshots exist yet for this post.</p>
+          <p>Common reasons:</p>
+          <ul className="list-disc pl-4">
+            <li>The collector hasn&apos;t run since this post was created.</li>
+            <li>
+              The{" "}
+              <code className="bg-gray-100 px-1 rounded">instagram_url</code>{" "}
+              doesn&apos;t exactly match any media permalink.
+            </li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Instagram URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full border rounded-lg px-2 py-1.5 text-sm"
+            />
+            {post.instagram_url && (
+              <a
+                href={post.instagram_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-[11px] text-blue-600 underline"
+              >
+                Open current link in new tab
+              </a>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-md px-2 py-1">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="text-xs text-green-700 bg-green-50 rounded-md px-2 py-1">
+              {message}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save new link"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
