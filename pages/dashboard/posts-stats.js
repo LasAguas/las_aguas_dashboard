@@ -288,6 +288,14 @@ export default function PostsStatsPage() {
   const [tiktokTierTopLimit, setTiktokTierTopLimit] = useState({});
   const [tiktokTierShowWorst, setTiktokTierShowWorst] = useState({});
 
+   // Instagram stats state
+   const [igManualRun, setIgManualRun] = useState({ loading: false, msg: "" });
+   const [instagramPosts, setInstagramPosts] = useState([]);
+   const [instagramSnapshots, setInstagramSnapshots] = useState([]);
+   const [instagramLoadingData, setInstagramLoadingData] = useState(false);
+   const [instagramErrorMsg, setInstagramErrorMsg] = useState("");
+   const [instagramTierTopLimit, setInstagramTierTopLimit] = useState({});
+   const [instagramTierShowWorst, setInstagramTierShowWorst] = useState({});
 
   async function runYouTubeManualCollect() {
     try {
@@ -326,6 +334,49 @@ export default function PostsStatsPage() {
       setYtManualRun({ loading: false, msg: "Manual collect crashed (see console)" });
     }
   }  
+
+async function runInstagramManualCollect() {
+  try {
+    setIgManualRun({ loading: true, msg: "" });
+
+    const res = await fetch("/api/metrics/instagram-batch-manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const text = await res.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      console.error("IG manual collect returned non-JSON:", text);
+      setIgManualRun({
+        loading: false,
+        msg: "Manual collect failed: non-JSON response (see console)",
+      });
+      return;
+    }
+
+    console.log("Instagram manual batch result:", json);
+
+    if (!res.ok) {
+      setIgManualRun({
+        loading: false,
+        msg: `Manual collect failed: ${json?.error || res.statusText}`,
+      });
+      return;
+    }
+
+    setIgManualRun({
+      loading: false,
+      msg: `OK: processed ${json?.processed ?? "?"} posts`,
+    });
+  } catch (e) {
+    console.error(e);
+    setIgManualRun({ loading: false, msg: `Manual collect error: ${String(e)}` });
+  }
+}
+
 
   async function runTikTokManualCollect() {
     try {
@@ -496,6 +547,57 @@ export default function PostsStatsPage() {
     }
   }  
 
+  useEffect(() => {
+    if (activeTab === "instagram") {
+      loadInstagramData();
+    }
+  }, [activeTab]);
+
+  async function loadInstagramData() {
+    try {
+      setInstagramLoadingData(true);
+      setInstagramErrorMsg("");
+
+      // 1) Load posted posts that have an Instagram URL
+      const { data: postRows, error: postErr } = await supabase
+        .from("posts")
+        .select(
+          "id, post_name, post_date, status, artist_id, instagram_url, notes"
+        )
+        .eq("status", "posted")
+        .not("instagram_url", "is", null);
+
+      if (postErr) throw postErr;
+
+      const postIds = (postRows || []).map((p) => p.id);
+
+      // 2) Load Instagram snapshots for those posts
+      let snapshotRows = [];
+      if (postIds.length > 0) {
+        const { data: snapRows, error: snapErr } = await supabase
+          .from("post_metrics_snapshots")
+          .select("*")
+          .in("post_id", postIds)
+          .eq("platform", "instagram")
+          .order("snapshot_at", { ascending: true });
+
+        if (snapErr) throw snapErr;
+        snapshotRows = snapRows || [];
+      }
+
+      setInstagramPosts(postRows || []);
+      setInstagramSnapshots(snapshotRows);
+      setInstagramTierTopLimit({});
+      setInstagramTierShowWorst({});
+    } catch (err) {
+      console.error(err);
+      setInstagramErrorMsg(err.message || "Failed to load Instagram data");
+    } finally {
+      setInstagramLoadingData(false);
+    }
+  }
+
+
   // ---- load overview data ----
   useEffect(() => {
     async function loadData() {
@@ -607,6 +709,33 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
     );
   }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
 
+    // Instagram-specific maps
+    const instagramSnapshotsByPostId = useMemo(() => {
+      const map = new Map();
+      instagramSnapshots.forEach((s) => {
+        if (!map.has(s.post_id)) map.set(s.post_id, []);
+        map.get(s.post_id).push(s);
+      });
+      return map;
+    }, [instagramSnapshots]);
+  
+    const instagramLatestSnapshotByPostId = useMemo(() => {
+      const map = new Map();
+      instagramSnapshots.forEach((s) => {
+        const prev = map.get(s.post_id);
+        if (!prev || new Date(s.snapshot_at) > new Date(prev.snapshot_at)) {
+          map.set(s.post_id, s);
+        }
+      });
+      return map;
+    }, [instagramSnapshots]);
+  
+    const instagramPostsWithData = useMemo(() => {
+      return (instagramPosts || []).filter((p) =>
+        instagramLatestSnapshotByPostId.has(p.id)
+      );
+    }, [instagramPosts, instagramLatestSnapshotByPostId]);
+  
 
   // YT compute per-artist averages from last 15 posts (using latest snapshot only)
   const artistAverages = useMemo(() => {
@@ -704,6 +833,41 @@ const tiktokArtistAverages = useMemo(() => {
     if (followers < 1000) return "300–1k followers";
     return "Over 1k followers";
   }  
+
+  function getInstagramTier(artist) {
+    // adjust this field name if your artists table uses a different one
+    const followers = artist?.instagram_followers;
+    if (followers == null || Number.isNaN(Number(followers)))
+      return "Unknown size";
+    if (followers < 1000) return "Under 1k followers";
+    if (followers < 3000) return "1k–3k followers";
+    return "Over 3k followers";
+  }
+
+  const instagramPostsByTier = useMemo(() => {
+    const buckets = new Map();
+
+    instagramPostsWithData.forEach((p) => {
+      const artist = artistById.get(p.artist_id);
+      const tier = getInstagramTier(artist);
+      if (!buckets.has(tier)) buckets.set(tier, []);
+      buckets.get(tier).push(p);
+    });
+
+    // sort each tier's posts by latest views desc
+    buckets.forEach((list) => {
+      list.sort((a, b) => {
+        const va =
+          Number(instagramLatestSnapshotByPostId.get(a.id)?.views) || 0;
+        const vb =
+          Number(instagramLatestSnapshotByPostId.get(b.id)?.views) || 0;
+        return vb - va;
+      });
+    });
+
+    return buckets;
+  }, [instagramPostsWithData, artistById, instagramLatestSnapshotByPostId]);
+
 
   const postsByTier = useMemo(() => {
     const buckets = new Map();
@@ -1344,6 +1508,247 @@ const tiktokArtistAverages = useMemo(() => {
       </div>
     );
   }
+
+  function renderInstagramTab() {
+    if (instagramLoadingData) {
+      return <div className="text-sm text-gray-700">Loading…</div>;
+    }
+    if (instagramErrorMsg) {
+      return (
+        <div className="text-sm text-red-700 bg-white/70 rounded px-3 py-2">
+          {instagramErrorMsg}
+        </div>
+      );
+    }
+  
+    if (!instagramPosts.length) {
+      return (
+        <div className="text-sm text-gray-800">
+          No Instagram posts found yet (status=posted & instagram_url present).
+        </div>
+      );
+    }
+  
+    const tiers = Array.from(instagramPostsByTier.keys()).sort((a, b) => {
+      const order = [
+        "Under 1k followers",
+        "1k–3k followers",
+        "Over 3k followers",
+        "Unknown size",
+      ];
+      return order.indexOf(a) - order.indexOf(b);
+    });
+  
+    return (
+      <div className="space-y-6">
+        {/* header: manual collect + status */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-gray-700">
+            {igManualRun.msg ? igManualRun.msg : " "}
+          </div>
+  
+          <button
+            type="button"
+            className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+            onClick={runInstagramManualCollect}
+            disabled={igManualRun.loading}
+          >
+            {igManualRun.loading ? "Collecting…" : "Fetch IG stats"}
+          </button>
+        </div>
+  
+        {tiers.map((tierKey) => {
+          const allTierPosts = instagramPostsByTier.get(tierKey) || [];
+          const limit = instagramTierTopLimit[tierKey] ?? 4;
+          const postsInTier = allTierPosts.slice(0, limit);
+  
+          // worst 4 in tier (by latest views)
+          const worstInTier = [...allTierPosts]
+            .filter((p) => instagramLatestSnapshotByPostId.has(p.id))
+            .sort((a, b) => {
+              const va =
+                Number(instagramLatestSnapshotByPostId.get(a.id)?.views) || 0;
+              const vb =
+                Number(instagramLatestSnapshotByPostId.get(b.id)?.views) || 0;
+              return va - vb;
+            })
+            .slice(0, 4);
+  
+          if (!postsInTier.length) return null;
+  
+          return (
+            <details
+              key={tierKey}
+              className="bg-[#eef8ea] rounded-xl p-4 shadow-inner"
+              open
+            >
+              <summary className="cursor-pointer select-none flex items-center justify-between">
+                <span className="text-lg font-semibold">{tierKey}</span>
+                <span className="text-xs text-gray-600">
+                  {allTierPosts.length} posts with IG stats
+                </span>
+              </summary>
+  
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {postsInTier.map((post) => {
+                  const artist = artistById.get(post.artist_id);
+                  const latest = instagramLatestSnapshotByPostId.get(post.id);
+  
+                  const views = latest?.views;
+                  const reach = latest?.reach;
+                  const likes = latest?.likes;
+                  const comments = latest?.comments;
+                  const saves = latest?.saves;
+                  const shares = latest?.shares;
+                  const reposts = latest?.reposts;
+  
+                  const savesPerK =
+                    views && views > 0 ? (Number(saves || 0) / views) * 1000 : null;
+                  const commentsPerK =
+                    views && views > 0
+                      ? (Number(comments || 0) / views) * 1000
+                      : null;
+  
+                  return (
+                    <button
+                      key={post.id}
+                      onClick={() => openPostModal(post)}
+                      className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {post.post_name || "Untitled post"}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {artist?.name || "Unknown artist"} •{" "}
+                            {post.post_date
+                              ? new Date(post.post_date).toLocaleDateString()
+                              : "No date"}
+                          </div>
+                        </div>
+  
+                        <div className="text-[10px] text-gray-500">
+                          {views != null && `${views.toLocaleString()} views`}
+                        </div>
+                      </div>
+  
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-700 mt-1">
+                        <div>Reach: {reach ?? "—"}</div>
+                        <div>Likes: {likes ?? "—"}</div>
+                        <div>Comments: {comments ?? "—"}</div>
+                        <div>Saves: {saves ?? "—"}</div>
+                        <div>Shares: {shares ?? "—"}</div>
+                        <div>Reposts: {reposts ?? "—"}</div>
+                      </div>
+  
+                      <div className="mt-1 text-[11px] text-gray-600">
+                        {savesPerK != null && (
+                          <span className="mr-3">
+                            Saves / 1k views: {savesPerK.toFixed(1)}
+                          </span>
+                        )}
+                        {commentsPerK != null && (
+                          <span>Comments / 1k views: {commentsPerK.toFixed(1)}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+  
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setInstagramTierTopLimit((prev) => ({
+                      ...prev,
+                      [tierKey]: (prev[tierKey] ?? 4) + 4,
+                    }));
+                  }}
+                >
+                  Show more
+                </button>
+  
+                <button
+                  type="button"
+                  className="text-[11px] px-3 py-2 rounded-lg border bg-white hover:bg-gray-50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setInstagramTierShowWorst((prev) => ({
+                      ...prev,
+                      [tierKey]: !prev[tierKey],
+                    }));
+                  }}
+                >
+                  See worst performing
+                </button>
+  
+                <div className="text-[11px] text-gray-600 ml-auto">
+                  Showing {Math.min(limit, allTierPosts.length)} of{" "}
+                  {allTierPosts.length}
+                </div>
+              </div>
+  
+              {instagramTierShowWorst[tierKey] && (
+                <div className="mt-3 bg-white rounded-lg p-3 border border-gray-200 pb-4">
+                  <div className="text-sm font-semibold mb-2">
+                    Worst performing (bottom 4)
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {worstInTier.map((post) => {
+                      const artist = artistById.get(post.artist_id);
+                      const latest =
+                        instagramLatestSnapshotByPostId.get(post.id);
+  
+                      const views = latest?.views;
+                      const likes = latest?.likes;
+                      const comments = latest?.comments;
+  
+                      return (
+                        <button
+                          key={post.id}
+                          onClick={() => openPostModal(post)}
+                          className="text-left bg-[#eef8ea] rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-1"
+                        >
+                          <div className="text-sm font-semibold">
+                            {post.post_name || "Untitled post"}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {artist?.name || "Unknown artist"} •{" "}
+                            {post.post_date
+                              ? new Date(post.post_date).toLocaleDateString()
+                              : "No date"}
+                          </div>
+                          <div className="text-xs text-gray-700 mt-1">
+                            {views != null && (
+                              <span className="mr-2">
+                                {views.toLocaleString()} views
+                              </span>
+                            )}
+                            {likes != null && (
+                              <span className="mr-2">{likes} likes</span>
+                            )}
+                            {comments != null && (
+                              <span>{comments} comments</span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </details>
+          );
+        })}
+      </div>
+    );
+  }
   
   // ---------------------------------------------------------------------------
   // MAIN RENDER
@@ -1423,13 +1828,7 @@ const tiktokArtistAverages = useMemo(() => {
             {/* tab content */}
             {activeTab === "youtube" && renderYouTubeTab()}
 
-            {activeTab === "instagram" && (
-              <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
-                This tab is under construction. Once the Instagram Graph API is
-                wired in, you&apos;ll see similar per-post metrics and
-                comparisons here.
-              </div>
-            )}
+            {activeTab === "instagram" && renderInstagramTab()}
 
             {activeTab === "tiktok" && ( renderTikTokTab()
             )}

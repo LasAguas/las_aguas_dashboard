@@ -123,10 +123,8 @@ async function findInstagramMediaByUrl({ accessToken, postUrl, facebookPageId })
 // Fetch insights for a single media
 async function fetchInstagramInsights({ accessToken, mediaId }) {
   const url =
-    // v21.0 where /{ig-media-id}/insights is supported
     `https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}/insights` +
-    // debug: start with a single, known-valid metric
-    "?metric=impressions" +
+    "?metric=reposts" +
     `&access_token=${encodeURIComponent(accessToken)}`;
 
   console.log("IG insights URL:", url); // <– helps confirm what is actually called
@@ -147,45 +145,60 @@ async function fetchInstagramInsights({ accessToken, mediaId }) {
     metricsMap[name] = first ? first.value : null;
   }
 
-  const impressions = metricsMap.impressions ?? null;
+  const reposts = metricsMap.reposts ?? null;
 
   // Keep the same shape so the rest of your code doesn’t break
   return {
     ok: true,
     data: {
-      impressions,         // filled
+      reposts,         // filled
       reach: null,         // not requested yet
       engagement: null,    // not computed yet
-      saves: null,         // not requested yet
+      reposts: null,         // not requested yet
     },
     raw: json,
   };
 }
 
-// Build snapshot row for post_metrics_snapshots
 function buildSnapshotRow({ post, media, insights }) {
   const likes = media.like_count ?? null;
   const comments = media.comments_count ?? null;
 
-  const views = insights.impressions ?? null; // treat impressions as views for now
+  const views = insights.views ?? null;
   const reach = insights.reach ?? null;
-  const saves = insights.saves ?? null;
+  const saves = insights.saved ?? null;
+  const shares = insights.shares ?? null;
+  const reposts = insights.reposts ?? null;
+  const plays = insights.plays ?? null;
+
+  const igReelsVideoViewTotalTime = insights.ig_reels_video_view_total_time ?? null;
+  const igReelsAvgWatchTime = insights.ig_reels_avg_watch_time ?? null;
 
   // simple combined score – tweak later if you want
   const igScore =
     (likes || 0) * 1 +
     (comments || 0) * 2 +
-    (saves || 0) * 3;
+    (saves || 0) * 3 +
+    (shares || 0) * 3 +
+    (reposts || 0) * 3;
 
   return {
     post_id: post.id,
     platform: "instagram",
     snapshot_at: new Date().toISOString(),
+
     views,
     reach,
     likes,
     comments,
     saves,
+    shares,
+    reposts,
+    plays,
+
+    ig_reels_video_view_total_time: igReelsVideoViewTotalTime,
+    ig_reels_avg_watch_time: igReelsAvgWatchTime,
+
     ig_score: igScore,
     raw_metrics: {
       media,
