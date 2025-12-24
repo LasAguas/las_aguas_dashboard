@@ -88,6 +88,90 @@ function formatSecondsToHMS(sec) {
   return `${m}m ${r}s`;
 }
 
+function formatShortDate(dateInput) {
+  if (!dateInput) return "No date";
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return "No date";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}`;
+}
+
+function getMetricDelta(postValue, avgValue) {
+  const post = Number(postValue);
+  const avg = Number(avgValue);
+  if (!isFinite(post) || !isFinite(avg)) {
+    return { className: "", symbol: null };
+  }
+  if (post > avg) {
+    return { className: "text-green-600", symbol: "▲" };
+  }
+  if (post < avg) {
+    return { className: "text-red-600", symbol: "▼" };
+  }
+  return { className: "", symbol: null };
+}
+
+// ----- ranking helpers -----
+
+function safeProductScore(values) {
+  let score = 1;
+  let used = false;
+  for (const v of values) {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) continue; // “remove any values of 0”
+    score *= n;
+    used = true;
+  }
+  return used ? score : 0;
+}
+
+// YouTube Score: (comments*10)*(likes)*(views*0.5)
+function computeYouTubeScore(snapshot) {
+  if (!snapshot) return 0;
+  const comments = Number(snapshot.comments) || 0;
+  const likes = Number(snapshot.likes) || 0;
+  const views = Number(snapshot.views) || 0;
+
+  return safeProductScore([
+    comments > 0 ? comments * 10 : 0,
+    likes > 0 ? likes : 0,
+    views > 0 ? views * 0.5 : 0,
+  ]);
+}
+
+// TikTok Score: (shareability*10)*(retention*8)*(comments*3)*(views*0.1)
+function computeTikTokScore(snapshot) {
+  if (!snapshot) return 0;
+  const shareability = Number(snapshot.tiktok_shareability_score) || 0;
+  const retention = Number(snapshot.tiktok_retention_score) || 0;
+  const comments = Number(snapshot.comments) || 0;
+  const views = Number(snapshot.views) || 0;
+
+  return safeProductScore([
+    shareability > 0 ? shareability * 10 : 0,
+    retention > 0 ? retention * 6 : 0,
+    comments > 0 ? comments * 4 : 0,
+    views > 0 ? views * 1 : 0,
+  ]);
+}
+
+// Instagram Score: (shares*3)*(comments*2)*(likes)*(views*0.1)
+function computeInstagramScore(snapshot) {
+  if (!snapshot) return 0;
+  const shares = Number(snapshot.shares) || 0;
+  const comments = Number(snapshot.comments) || 0;
+  const likes = Number(snapshot.likes) || 0;
+  const views = Number(snapshot.views) || 0;
+
+  return safeProductScore([
+    shares > 0 ? shares * 3 : 0,
+    comments > 0 ? comments * 2 : 0,
+    likes > 0 ? likes : 0,
+    views > 0 ? views * 0.1 : 0,
+  ]);
+}
+
 // Very small inline line chart, no external libs.
 function MiniLineChart({ points, avgValue, height = 120, labelFormatter }) {
   if (!points || points.length === 0) {
@@ -497,10 +581,10 @@ async function runInstagramManualCollect() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === "tiktok") {
+    if (activeTab === "tiktok" || activeTab === "standout") {
       loadTikTokData();
     }
-  }, [activeTab]);  
+  }, [activeTab]);
 
   async function loadTikTokData() {
     try {
@@ -549,7 +633,7 @@ async function runInstagramManualCollect() {
   }  
 
   useEffect(() => {
-    if (activeTab === "instagram") {
+    if (activeTab === "instagram" || activeTab === "standout") {
       loadInstagramData();
     }
   }, [activeTab]);
@@ -658,6 +742,26 @@ async function runInstagramManualCollect() {
     return map;
   }, [artists]);
 
+  const postById = useMemo(() => {
+    const map = new Map();
+
+    (posts || []).forEach((p) => {
+      if (!map.has(p.id)) map.set(p.id, p);
+    });
+
+    (tiktokPosts || []).forEach((p) => {
+      if (!map.has(p.id)) map.set(p.id, p);
+      else map.set(p.id, { ...map.get(p.id), ...p });
+    });
+
+    (instagramPosts || []).forEach((p) => {
+      if (!map.has(p.id)) map.set(p.id, p);
+      else map.set(p.id, { ...map.get(p.id), ...p });
+    });
+
+    return map;
+  }, [posts, tiktokPosts, instagramPosts]);
+
   const snapshotsByPostId = useMemo(() => {
     const map = new Map();
     snapshots.forEach((s) => {
@@ -743,6 +847,45 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
         (p) => !instagramLatestSnapshotByPostId.has(p.id)
       );
     }, [instagramPosts, instagramLatestSnapshotByPostId]);
+
+    const instagramArtistAverages = useMemo(() => {
+      const byArtist = new Map();
+  
+      instagramPosts.forEach((post) => {
+        const snap = instagramLatestSnapshotByPostId.get(post.id);
+        if (!snap) return;
+        if (!byArtist.has(post.artist_id)) {
+          byArtist.set(post.artist_id, { rows: [] });
+        }
+        byArtist.get(post.artist_id).rows.push(snap);
+      });
+  
+      const result = new Map();
+      byArtist.forEach((value, artistId) => {
+        const rows = value.rows
+          .sort(
+            (a, b) =>
+              new Date(b.snapshot_at).getTime() -
+              new Date(a.snapshot_at).getTime()
+          )
+          .slice(0, 15);
+  
+        if (rows.length === 0) return;
+        const avg = (key) =>
+          rows.reduce((acc, r) => acc + (Number(r[key]) || 0), 0) /
+          rows.length;
+  
+        result.set(artistId, {
+          views: avg("views"),
+          likes: avg("likes"),
+          comments: avg("comments"),
+          saves: avg("saves"),
+          shares: avg("shares"),
+        });
+      });
+  
+      return result;
+    }, [instagramPosts, instagramLatestSnapshotByPostId]);  
   
   // YT compute per-artist averages from last 15 posts (using latest snapshot only)
   const artistAverages = useMemo(() => {
@@ -823,6 +966,196 @@ const tiktokArtistAverages = useMemo(() => {
   return result;
 }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
 
+const crossStandoutsByCategory = useMemo(() => {
+  const result = {
+    shares: [],
+    comments: [],
+    retention: [],
+    views: [],
+  };
+
+  const allPostIds = new Set();
+  (posts || []).forEach((p) => allPostIds.add(p.id));
+  (tiktokPosts || []).forEach((p) => allPostIds.add(p.id));
+  (instagramPosts || []).forEach((p) => allPostIds.add(p.id));
+
+  const rel = (postVal, avgVal) => {
+    const pv = Number(postVal);
+    const av = Number(avgVal);
+    if (!isFinite(pv) || !isFinite(av) || av <= 0) return 0;
+    return (pv - av) / av;
+  };
+
+  allPostIds.forEach((postId) => {
+    const post = postById.get(postId);
+    if (!post) return;
+    const artistId = post.artist_id;
+    if (!artistId) return;
+
+    const categoryState = {
+      shares: { score: 0, platforms: new Set() },
+      comments: { score: 0, platforms: new Set() },
+      retention: { score: 0, platforms: new Set() },
+      views: { score: 0, platforms: new Set() },
+    };
+
+    // ----- YouTube contributions -----
+    const ytSnap = latestSnapshotByPostId.get(postId);
+    const ytAvg = artistAverages.get(artistId);
+
+    if (ytSnap && ytAvg) {
+      const ytViews = Number(ytSnap.views) || 0;
+      const ytAvgViews = Number(ytAvg.views) || 0;
+
+      // Comments / 1k views
+      if (ytViews > 0 && ytAvgViews > 0) {
+        const postRate =
+          ((Number(ytSnap.comments) || 0) / ytViews) * 1000;
+        const avgRate =
+          ((Number(ytAvg.comments) || 0) / ytAvgViews) * 1000;
+        const d = rel(postRate, avgRate);
+        if (d > 0) {
+          categoryState.comments.score += d;
+          categoryState.comments.platforms.add("YouTube");
+        }
+      }
+
+      // Retention rate
+      const dRet = rel(ytSnap.retention_rate, ytAvg.retention_rate);
+      if (dRet > 0) {
+        categoryState.retention.score += dRet;
+        categoryState.retention.platforms.add("YouTube");
+      }
+
+      // Views
+      const dViews = rel(ytSnap.views, ytAvg.views);
+      if (dViews > 0) {
+        categoryState.views.score += dViews;
+        categoryState.views.platforms.add("YouTube");
+      }
+    }
+
+    // ----- TikTok contributions -----
+    const ttSnap = tiktokLatestSnapshotByPostId.get(postId);
+    const ttAvg = tiktokArtistAverages.get(artistId);
+
+    if (ttSnap && ttAvg) {
+      const ttViews = Number(ttSnap.views) || 0;
+      const ttAvgViews = Number(ttAvg.views) || 0;
+
+      // Shareability (shares / 1k views)
+      const dShare = rel(
+        ttSnap.tiktok_shareability_score,
+        ttAvg.tiktok_shareability_score
+      );
+      if (dShare > 0) {
+        categoryState.shares.score += dShare;
+        categoryState.shares.platforms.add("TikTok");
+      }
+
+      // Comments / 1k views
+      if (ttViews > 0 && ttAvgViews > 0) {
+        const postCommentsRate =
+          ((Number(ttSnap.comments) || 0) / ttViews) * 1000;
+        const avgCommentsRate =
+          ((Number(ttAvg.comments) || 0) / ttAvgViews) * 1000;
+        const dComments = rel(postCommentsRate, avgCommentsRate);
+        if (dComments > 0) {
+          categoryState.comments.score += dComments;
+          categoryState.comments.platforms.add("TikTok");
+        }
+
+        // Views
+        const dViews = rel(ttSnap.views, ttAvg.views);
+        if (dViews > 0) {
+          categoryState.views.score += dViews;
+          categoryState.views.platforms.add("TikTok");
+        }
+      }
+
+      // Retention (tiktok_retention_score)
+      const dRet = rel(
+        ttSnap.tiktok_retention_score,
+        ttAvg.tiktok_retention_score
+      );
+      if (dRet > 0) {
+        categoryState.retention.score += dRet;
+        categoryState.retention.platforms.add("TikTok");
+      }
+    }
+
+    // ----- Instagram contributions -----
+    const igSnap = instagramLatestSnapshotByPostId.get(postId);
+    const igAvg = instagramArtistAverages.get(artistId);
+
+    if (igSnap && igAvg) {
+      const igViews = Number(igSnap.views) || 0;
+      const igAvgViews = Number(igAvg.views) || 0;
+
+      if (igViews > 0 && igAvgViews > 0) {
+        // Shares / 1k views
+        const postSharesRate =
+          ((Number(igSnap.shares) || 0) / igViews) * 1000;
+        const avgSharesRate =
+          ((Number(igAvg.shares) || 0) / igAvgViews) * 1000;
+        const dShares = rel(postSharesRate, avgSharesRate);
+        if (dShares > 0) {
+          categoryState.shares.score += dShares;
+          categoryState.shares.platforms.add("Instagram");
+        }
+
+        // Comments / 1k views
+        const postCommentsRate =
+          ((Number(igSnap.comments) || 0) / igViews) * 1000;
+        const avgCommentsRate =
+          ((Number(igAvg.comments) || 0) / igAvgViews) * 1000;
+        const dComments = rel(postCommentsRate, avgCommentsRate);
+        if (dComments > 0) {
+          categoryState.comments.score += dComments;
+          categoryState.comments.platforms.add("Instagram");
+        }
+
+        // Views
+        const dViews = rel(igSnap.views, igAvg.views);
+        if (dViews > 0) {
+          categoryState.views.score += dViews;
+          categoryState.views.platforms.add("Instagram");
+        }
+      }
+    }
+
+    ["shares", "comments", "retention", "views"].forEach((key) => {
+      const st = categoryState[key];
+      if (st.platforms.size >= 2 && st.score > 0) {
+        result[key].push({
+          postId,
+          artistId,
+          score: st.score,
+          platforms: Array.from(st.platforms),
+        });
+      }
+    });
+  });
+
+  Object.keys(result).forEach((key) => {
+    result[key].sort((a, b) => b.score - a.score);
+  });
+
+  return result;
+}, [
+  posts,
+  tiktokPosts,
+  instagramPosts,
+  postById,
+  artistById,
+  latestSnapshotByPostId,
+  tiktokLatestSnapshotByPostId,
+  instagramLatestSnapshotByPostId,
+  artistAverages,
+  tiktokArtistAverages,
+  instagramArtistAverages,
+]);
+
   // YT group posts by channel size tier (based on artist.youtube_followers or "Unknown")
   function getArtistTier(artist) {
     const followers = artist?.youtube_followers;
@@ -861,66 +1194,67 @@ const tiktokArtistAverages = useMemo(() => {
       buckets.get(tier).push(p);
     });
 
-    // sort each tier's posts by latest views desc
+    // sort each tier's posts by Instagram score desc
     buckets.forEach((list) => {
       list.sort((a, b) => {
-        const va =
-          Number(instagramLatestSnapshotByPostId.get(a.id)?.views) || 0;
-        const vb =
-          Number(instagramLatestSnapshotByPostId.get(b.id)?.views) || 0;
-        return vb - va;
+        const snapA = instagramLatestSnapshotByPostId.get(a.id);
+        const snapB = instagramLatestSnapshotByPostId.get(b.id);
+        const scoreA = computeInstagramScore(snapA);
+        const scoreB = computeInstagramScore(snapB);
+        return scoreB - scoreA;
       });
     });
 
     return buckets;
   }, [instagramPostsWithData, artistById, instagramLatestSnapshotByPostId]);
 
-
   const postsByTier = useMemo(() => {
     const buckets = new Map();
-  
+
     postsWithData.forEach((p) => {
       const artist = artistById.get(p.artist_id);
       const tier = getArtistTier(artist);
       if (!buckets.has(tier)) buckets.set(tier, []);
       buckets.get(tier).push(p);
     });
-  
+
     buckets.forEach((list) => {
       list.sort((a, b) => {
-        const viewsA = Number(latestSnapshotByPostId.get(a.id)?.views) || 0;
-        const viewsB = Number(latestSnapshotByPostId.get(b.id)?.views) || 0;
-        return viewsB - viewsA;
+        const snapA = latestSnapshotByPostId.get(a.id);
+        const snapB = latestSnapshotByPostId.get(b.id);
+        const scoreA = computeYouTubeScore(snapA);
+        const scoreB = computeYouTubeScore(snapB);
+        return scoreB - scoreA;
       });
     });
-  
+
     return buckets;
   }, [postsWithData, artistById, latestSnapshotByPostId]);
-  
+
   const tiktokPostsByTier = useMemo(() => {
     const buckets = new Map();
-  
+
     tiktokPostsWithData.forEach((p) => {
       const artist = artistById.get(p.artist_id);
       const tier = getTikTokTier(artist);
       if (!buckets.has(tier)) buckets.set(tier, []);
       buckets.get(tier).push(p);
     });
-  
-    // sort each tier's posts by latest views desc
+
+    // sort each tier's posts by TikTok score desc
     buckets.forEach((list) => {
       list.sort((a, b) => {
-        const va =
-          Number(tiktokLatestSnapshotByPostId.get(a.id)?.views) || 0;
-        const vb =
-          Number(tiktokLatestSnapshotByPostId.get(b.id)?.views) || 0;
-        return vb - va;
+        const snapA = tiktokLatestSnapshotByPostId.get(a.id);
+        const snapB = tiktokLatestSnapshotByPostId.get(b.id);
+        const scoreA = computeTikTokScore(snapA);
+        const scoreB = computeTikTokScore(snapB);
+        return scoreB - scoreA;
       });
     });
-  
+
     return buckets;
   }, [tiktokPostsWithData, artistById, tiktokLatestSnapshotByPostId]);
-  
+
   async function openPostModal(post) {
     try {
 
@@ -1039,9 +1373,11 @@ const tiktokArtistAverages = useMemo(() => {
           const worstInTier = [...allTierPosts]
             .filter((p) => latestSnapshotByPostId.has(p.id))
             .sort((a, b) => {
-              const va = Number(latestSnapshotByPostId.get(a.id)?.views) || 0;
-              const vb = Number(latestSnapshotByPostId.get(b.id)?.views) || 0;
-              return va - vb;
+              const snapA = latestSnapshotByPostId.get(a.id);
+              const snapB = latestSnapshotByPostId.get(b.id);
+              const scoreA = computeYouTubeScore(snapA);
+              const scoreB = computeYouTubeScore(snapB);
+              return scoreA - scoreB;
             })
             .slice(0, 4);
 
@@ -1133,115 +1469,149 @@ const tiktokArtistAverages = useMemo(() => {
 
 
               <div className="grid gap-3 md:grid-cols-2">
-                {postsInTier.map((post) => {
-                  const artist = artistById.get(post.artist_id);
-                  const latest = latestSnapshotByPostId.get(post.id);
-                  const artistAvg = artistAverages.get(post.artist_id);
+              {postsInTier.map((post) => {
+                const artist = artistById.get(post.artist_id);
+                const latest = latestSnapshotByPostId.get(post.id);
+                const artistAvg = artistAverages.get(post.artist_id);
 
-                  const views = latest?.views;
-                  const reach = latest?.reach;
-                  const likes = latest?.likes;
-                  const comments = latest?.comments;
-                  const completion = latest?.completion_rate;
-                  const retention = latest?.retention_rate;
-                  const avgViewDur = latest?.avg_view_duration;
+                const views = latest?.views;
+                const reach = latest?.reach;
+                const likes = latest?.likes;
+                const comments = latest?.comments;
+                const completion = latest?.completion_rate;
+                const retention = latest?.retention_rate;
+                const avgViewDur = latest?.avg_view_duration;
 
-                  return (
-                    <button
-                      key={post.id}
-                      onClick={() => openPostModal(post)}
-                      className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
-                    >
+                const viewsDelta = getMetricDelta(views, artistAvg?.views);
+                const likesDelta = getMetricDelta(likes, artistAvg?.likes);
+                const commentsDelta = getMetricDelta(comments, artistAvg?.comments);
+                const retentionDelta = getMetricDelta(
+                  retention,
+                  artistAvg?.retention_rate
+                );
+                const avgViewDurDelta = getMetricDelta(
+                  avgViewDur,
+                  artistAvg?.avg_view_duration
+                );
 
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <div className="text-sm font-semibold">
-                            {post.post_name || "Untitled post"}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            {artist?.name || "Unknown artist"} •{" "}
-                            {post.post_date
-                              ? new Date(post.post_date).toLocaleDateString()
-                              : "No date"}
-                          </div>
+                return (
+                  <button
+                    key={post.id}
+                    onClick={() => openPostModal(post)}
+                    className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {post.post_name || "Untitled post"}
                         </div>
-                        <div className="text-right text-xs text-gray-600">
-                          <div>
-                            <span className="font-semibold">
-                              {formatNumber(views)}
-                            </span>{" "}
-                            views
-                          </div>
-                          <div>
-                            {formatNumber(likes)} likes •{" "}
-                            {formatNumber(comments)} comments
-                          </div>
+                        <div className="text-xs text-gray-600">
+                          {artist?.name || "Unknown artist"} •{" "}
+                          {post.post_date ? formatShortDate(post.post_date) : "No date"}
                         </div>
                       </div>
+                      <div className="text-right text-xs text-gray-600">
+                        <span className={viewsDelta.className}>
+                          <span className="font-semibold">
+                            {formatNumber(views)}
+                          </span>
+                          {viewsDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {viewsDelta.symbol}
+                            </span>
+                          )}
+                        </span>{" "}
+                        views
+                      </div>
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-700">
-                        <div>
-                          <div className="font-semibold">Completion</div>
-                          <div>
-                            Post: {formatPercent(completion)}{" "}
-                            {artistAvg?.completion_rate != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg: {formatPercent(artistAvg.completion_rate)}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="font-semibold">Retention</div>
-                          <div>
-                            Post: {formatPercent(retention)}{" "}
-                            {artistAvg?.retention_rate != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg: {formatPercent(artistAvg.retention_rate)}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="font-semibold">Reach</div>
-                          <div>
-                            Post: {formatNumber(reach)}{" "}
-                            {artistAvg?.reach != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg: {formatNumber(artistAvg.reach)}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="font-semibold">
-                            Avg view duration
-                          </div>
-                          <div>
-                            Post: {formatSecondsToHMS(avgViewDur)}{" "}
-                            {artistAvg?.avg_view_duration != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg:{" "}
-                                {formatSecondsToHMS(
-                                  artistAvg.avg_view_duration
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] text-gray-700">
+                      <div>
+                        Likes:{" "}
+                        <span className={likesDelta.className}>
+                          {formatNumber(likes)}
+                          {likesDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {likesDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.likes != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.likes).toLocaleString(undefined, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </>
+                        )}
                       </div>
 
-                      <div className="mt-1 text-[10px] text-gray-500">
-                        Click to see full timeline & variations
+                      <div>
+                        Comments:{" "}
+                        <span className={commentsDelta.className}>
+                          {formatNumber(comments)}
+                          {commentsDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {commentsDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.comments != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.comments).toLocaleString(undefined, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                          </>
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
+
+                      <div>
+                        Retention:{" "}
+                        <span className={retentionDelta.className}>
+                          {formatPercent(retention)}
+                          {retentionDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {retentionDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.retention_rate != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg: {formatPercent(artistAvg.retention_rate)}
+                          </>
+                        )}
+                      </div>
+
+                      <div>
+                        Avg view duration:{" "}
+                        <span className={avgViewDurDelta.className}>
+                          {formatSecondsToHMS(avgViewDur)}
+                          {avgViewDurDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {avgViewDurDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.avg_view_duration != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {formatSecondsToHMS(artistAvg.avg_view_duration)}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                  </button>
+                );
+              })}
+</div>
             </details>
           );
         })}
@@ -1323,15 +1693,15 @@ const tiktokArtistAverages = useMemo(() => {
           const limit = tiktokTierTopLimit[tierKey] ?? 4;
           const postsInTier = allTierPosts.slice(0, limit);
   
-          // worst 4 in tier by views
+          // worst 4 in tier (by TikTok score)
           const worstInTier = [...allTierPosts]
             .filter((p) => tiktokLatestSnapshotByPostId.has(p.id))
             .sort((a, b) => {
-              const va =
-                Number(tiktokLatestSnapshotByPostId.get(a.id)?.views) || 0;
-              const vb =
-                Number(tiktokLatestSnapshotByPostId.get(b.id)?.views) || 0;
-              return va - vb;
+              const snapA = tiktokLatestSnapshotByPostId.get(a.id);
+              const snapB = tiktokLatestSnapshotByPostId.get(b.id);
+              const scoreA = computeTikTokScore(snapA);
+              const scoreB = computeTikTokScore(snapB);
+              return scoreA - scoreB;
             })
             .slice(0, 4);
   
@@ -1433,90 +1803,159 @@ const tiktokArtistAverages = useMemo(() => {
               )}
   
               <div className="grid gap-3 md:grid-cols-2">
-                {postsInTier.map((post) => {
-                  const artist = artistById.get(post.artist_id);
-                  const latest = tiktokLatestSnapshotByPostId.get(post.id);
-                  const artistAvg = tiktokArtistAverages.get(post.artist_id);
-  
-                  const views = latest?.views;
-                  const likes = latest?.likes;
-                  const comments = latest?.comments;
-                  const shares = latest?.shares;
-                  const retentionScore = latest?.tiktok_retention_score;
-                  const shareScore = latest?.tiktok_shareability_score;
-  
-                  return (
-                    <button
-                      key={post.id}
-                      onClick={() => openPostModal(post)}
-                      className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
-                    >
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <div className="text-sm font-semibold">
-                            {post.post_name || "Untitled post"}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            {artist?.name || "Unknown artist"} •{" "}
-                            {post.post_date
-                              ? new Date(
-                                  post.post_date
-                                ).toLocaleDateString()
-                              : "No date"}
-                          </div>
+              {postsInTier.map((post) => {
+                const artist = artistById.get(post.artist_id);
+                const latest = tiktokLatestSnapshotByPostId.get(post.id);
+                const artistAvg = tiktokArtistAverages.get(post.artist_id);
+
+                const views = latest?.views;
+                const likes = latest?.likes;
+                const comments = latest?.comments;
+                const shares = latest?.shares;
+                const retentionScore = latest?.tiktok_retention_score;
+                const shareScore = latest?.tiktok_shareability_score;
+
+                const viewsDelta = getMetricDelta(views, artistAvg?.views);
+
+                const likesPerK =
+                  views && views > 0 ? (Number(likes || 0) / views) * 1000 : null;
+                const commentsPerK =
+                  views && views > 0 ? (Number(comments || 0) / views) * 1000 : null;
+
+                const artistLikesPerK =
+                  artistAvg?.views && artistAvg.views > 0
+                    ? (Number(artistAvg.likes || 0) / artistAvg.views) * 1000
+                    : null;
+                const artistCommentsPerK =
+                  artistAvg?.views && artistAvg.views > 0
+                    ? (Number(artistAvg.comments || 0) / artistAvg.views) * 1000
+                    : null;
+
+                const likesPerKDelta = getMetricDelta(likesPerK, artistLikesPerK);
+                const commentsPerKDelta = getMetricDelta(
+                  commentsPerK,
+                  artistCommentsPerK
+                );
+                const retentionDelta = getMetricDelta(
+                  retentionScore,
+                  artistAvg?.tiktok_retention_score
+                );
+                const shareDelta = getMetricDelta(
+                  shareScore,
+                  artistAvg?.tiktok_shareability_score
+                );
+
+                return (
+                  <button
+                    key={post.id}
+                    onClick={() => openPostModal(post)}
+                    className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {post.post_name || "Untitled post"}
                         </div>
-                        <div className="text-right text-xs text-gray-600">
-                          <div>
-                            <span className="font-semibold">
-                              {formatNumber(views)}
-                            </span>{" "}
-                            views
-                          </div>
-                          <div>
-                            {formatNumber(likes)} likes •{" "}
-                            {formatNumber(comments)} comments
-                          </div>
-                          <div>{formatNumber(shares)} shares</div>
-                        </div>
-                      </div>
-  
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-700">
-                        <div>
-                          <div className="font-semibold">
-                            Retention score (views/hr)
-                          </div>
-                          <div>
-                            Post: {formatHalfStep(retentionScore)}{" "}
-                            {artistAvg?.tiktok_retention_score != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg: {formatHalfStep(artistAvg.tiktok_retention_score)}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="font-semibold">
-                            Shareability (shares / 1k views)
-                          </div>
-                          <div>
-                            Post: {formatPerThousand(shareScore)}{" "}
-                            {artistAvg?.tiktok_shareability_score != null && (
-                              <>
-                                <span className="text-gray-400 mx-1">•</span>
-                                Avg: {formatPerThousand(artistAvg.tiktok_shareability_score)}
-                              </>
-                            )}
-                          </div>
+                        <div className="text-xs text-gray-600">
+                          {artist?.name || "Unknown artist"} •{" "}
+                          {post.post_date ? formatShortDate(post.post_date) : "No date"}
                         </div>
                       </div>
-  
-                      <div className="mt-1 text-[10px] text-gray-500">
-                        Click to see post details & variations
+                      <div className="text-right text-xs text-gray-600">
+                        <span className={viewsDelta.className}>
+                          <span className="font-semibold">
+                            {formatNumber(views)}
+                          </span>
+                          {viewsDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {viewsDelta.symbol}
+                            </span>
+                          )}
+                        </span>{" "}
+                        views
                       </div>
-                    </button>
-                  );
-                })}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] text-gray-700">
+                      {/* LEFT: likes/comments per 1k views */}
+                      <div>
+                        Likes / 1k views:{" "}
+                        <span className={likesPerKDelta.className}>
+                          {likesPerK != null ? likesPerK.toFixed(1) : "—"}
+                          {likesPerKDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {likesPerKDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistLikesPerK != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg: {artistLikesPerK.toFixed(1)}
+                          </>
+                        )}
+                      </div>
+
+                      {/* RIGHT: retention */}
+                      <div>
+                        Retention (views/hr):{" "}
+                        <span className={retentionDelta.className}>
+                          {formatHalfStep(retentionScore)}
+                          {retentionDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {retentionDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.tiktok_retention_score != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg: {formatHalfStep(artistAvg.tiktok_retention_score)}
+                          </>
+                        )}
+                      </div>
+
+                      <div>
+                        Comments / 1k views:{" "}
+                        <span className={commentsPerKDelta.className}>
+                          {commentsPerK != null ? commentsPerK.toFixed(1) : "—"}
+                          {commentsPerKDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {commentsPerKDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistCommentsPerK != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg: {artistCommentsPerK.toFixed(1)}
+                          </>
+                        )}
+                      </div>
+
+                      {/* RIGHT: shareability */}
+                      <div>
+                        Shareability (shares / 1k views):{" "}
+                        <span className={shareDelta.className}>
+                          {formatPerThousand(shareScore)}
+                          {shareDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {shareDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.tiktok_shareability_score != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg: {formatPerThousand(artistAvg.tiktok_shareability_score)}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+
               </div>
             </details>
           );
@@ -1580,15 +2019,15 @@ const tiktokArtistAverages = useMemo(() => {
   
           // worst 4 in tier (by latest views)
           const worstInTier = [...allTierPosts]
-            .filter((p) => instagramLatestSnapshotByPostId.has(p.id))
-            .sort((a, b) => {
-              const va =
-                Number(instagramLatestSnapshotByPostId.get(a.id)?.views) || 0;
-              const vb =
-                Number(instagramLatestSnapshotByPostId.get(b.id)?.views) || 0;
-              return va - vb;
-            })
-            .slice(0, 4);
+          .filter((p) => instagramLatestSnapshotByPostId.has(p.id))
+          .sort((a, b) => {
+            const snapA = instagramLatestSnapshotByPostId.get(a.id);
+            const snapB = instagramLatestSnapshotByPostId.get(b.id);
+            const scoreA = computeInstagramScore(snapA);
+            const scoreB = computeInstagramScore(snapB);
+            return scoreA - scoreB;
+          })
+          .slice(0, 4);
   
           if (!postsInTier.length) return null;
   
@@ -1606,71 +2045,148 @@ const tiktokArtistAverages = useMemo(() => {
               </summary>
   
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                {postsInTier.map((post) => {
-                  const artist = artistById.get(post.artist_id);
-                  const latest = instagramLatestSnapshotByPostId.get(post.id);
-  
-                  const views = latest?.views;
-                  const reach = latest?.reach;
-                  const likes = latest?.likes;
-                  const comments = latest?.comments;
-                  const saves = latest?.saves;
-                  const shares = latest?.shares;
-                  const reposts = latest?.reposts;
-  
-                  const savesPerK =
-                    views && views > 0 ? (Number(saves || 0) / views) * 1000 : null;
-                  const commentsPerK =
-                    views && views > 0
-                      ? (Number(comments || 0) / views) * 1000
-                      : null;
-  
-                  return (
-                    <button
-                      key={post.id}
-                      onClick={() => openPostModal(post)}
-                      className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
-                    >
-                      <div className="flex justify-between items-start gap-2">
-                        <div>
-                          <div className="text-sm font-semibold">
-                            {post.post_name || "Untitled post"}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            {artist?.name || "Unknown artist"} •{" "}
-                            {post.post_date
-                              ? new Date(post.post_date).toLocaleDateString()
-                              : "No date"}
-                          </div>
+              {postsInTier.map((post) => {
+                const artist = artistById.get(post.artist_id);
+                const latest = instagramLatestSnapshotByPostId.get(post.id);
+                const artistAvg = instagramArtistAverages.get(post.artist_id);
+
+                const views = latest?.views;
+                const likes = latest?.likes;
+                const comments = latest?.comments;
+                const saves = latest?.saves;
+                const shares = latest?.shares;
+
+                const viewsDelta = getMetricDelta(views, artistAvg?.views);
+                const commentsDelta = getMetricDelta(comments, artistAvg?.comments);
+                const likesDelta = getMetricDelta(likes, artistAvg?.likes);
+                const savesDelta = getMetricDelta(saves, artistAvg?.saves);
+                const sharesDelta = getMetricDelta(shares, artistAvg?.shares);
+
+                return (
+                  <button
+                    key={post.id}
+                    onClick={() => openPostModal(post)}
+                    className="text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {post.post_name || "Untitled post"}
                         </div>
-  
-                        <div className="text-[10px] text-gray-500">
-                          {views != null && `${views.toLocaleString()} views`}
+                        <div className="text-xs text-gray-600">
+                          {artist?.name || "Unknown artist"} •{" "}
+                          {post.post_date ? formatShortDate(post.post_date) : "No date"}
                         </div>
                       </div>
-  
-                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-gray-700 mt-1">
-                        <div>Reach: {reach ?? "—"}</div>
-                        <div>Likes: {likes ?? "—"}</div>
-                        <div>Comments: {comments ?? "—"}</div>
-                        <div>Saves: {saves ?? "—"}</div>
-                        <div>Shares: {shares ?? "—"}</div>
-                        <div>Reposts: {reposts ?? "—"}</div>
-                      </div>
-  
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        {savesPerK != null && (
-                          <span className="mr-3">
-                            Saves / 1k views: {savesPerK.toFixed(1)}
+                      <div className="text-right text-xs text-gray-600">
+                        <span className={viewsDelta.className}>
+                          <span className="font-semibold">
+                            {formatNumber(views)}
                           </span>
-                        )}
-                        {commentsPerK != null && (
-                          <span>Comments / 1k views: {commentsPerK.toFixed(1)}</span>
+                          {viewsDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {viewsDelta.symbol}
+                            </span>
+                          )}
+                        </span>{" "}
+                        views
+                      </div>
+                    </div>
+
+                    {/* body stats: left = comments/likes, right = shares/saves */}
+                    <div className="grid grid-cols-2 gap-1.5 text-[11px] text-gray-700 mt-1">
+                      <div>
+                        Comments:{" "}
+                        <span className={commentsDelta.className}>
+                          {formatNumber(comments)}
+                          {commentsDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {commentsDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.comments != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.comments).toLocaleString(undefined, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                          </>
                         )}
                       </div>
-                    </button>
-                  );
-                })}
+
+                      <div>
+                        Shares:{" "}
+                        <span className={sharesDelta.className}>
+                          {formatNumber(shares)}
+                          {sharesDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {sharesDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.shares != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.shares).toLocaleString(undefined, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                          </>
+                        )}
+                      </div>
+
+                      <div>
+                        Likes:{" "}
+                        <span className={likesDelta.className}>
+                          {formatNumber(likes)}
+                          {likesDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {likesDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.likes != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.likes).toLocaleString(undefined, {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 0,
+                            })}
+                          </>
+                        )}
+                      </div>
+
+                      <div>
+                        Saves:{" "}
+                        <span className={savesDelta.className}>
+                          {formatNumber(saves)}
+                          {savesDelta.symbol && (
+                            <span className="ml-1 text-[9px]">
+                              {savesDelta.symbol}
+                            </span>
+                          )}
+                        </span>
+                        {artistAvg?.saves != null && (
+                          <>
+                            <span className="text-gray-400 mx-1">•</span>
+                            avg:{" "}
+                            {Number(artistAvg.saves).toLocaleString(undefined, {
+                              minimumFractionDigits: 1,
+                              maximumFractionDigits: 1,
+                            })}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+
               </div>
   
               <div className="mt-4 flex items-center gap-2">
@@ -1783,7 +2299,7 @@ const tiktokArtistAverages = useMemo(() => {
                   key={post.id}
                   type="button"
                   onClick={() => openIgLinkModal(post)}
-                  className="text-left bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 hover:border-gray-500 hover:shadow-sm transition flex flex-col gap-2"
+                  className="w-full min-w-0 text-left bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 hover:border-gray-500 hover:shadow-sm transition flex flex-col gap-2"
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div>
@@ -1800,7 +2316,7 @@ const tiktokArtistAverages = useMemo(() => {
                   </div>
 
                   <div className="text-[11px] text-gray-700">
-                    <div className="truncate">
+                    <div className="break-all">
                       <span className="font-medium">Current link:</span>{" "}
                       {post.instagram_url || "—"}
                     </div>
@@ -1812,6 +2328,7 @@ const tiktokArtistAverages = useMemo(() => {
               );
             })}
           </div>
+
         </div>
       )}
 
@@ -1819,6 +2336,124 @@ const tiktokArtistAverages = useMemo(() => {
     );
   }
   
+  function renderStandoutTab() {
+    const isLoading = loading || tiktokLoadingData || instagramLoadingData;
+
+    if (isLoading) {
+      return <div className="text-sm text-gray-700">Loading…</div>;
+    }
+
+    if (
+      !crossStandoutsByCategory.shares.length &&
+      !crossStandoutsByCategory.comments.length &&
+      !crossStandoutsByCategory.retention.length &&
+      !crossStandoutsByCategory.views.length
+    ) {
+      return (
+        <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
+          No cross-platform standouts yet. Try collecting stats for YouTube,
+          TikTok, and Instagram first.
+        </div>
+      );
+    }
+
+    const categories = [
+      { key: "shares", label: "Shares standouts" },
+      { key: "comments", label: "Comments standouts" },
+      { key: "retention", label: "Retention standouts" },
+      { key: "views", label: "Views standouts" },
+    ];
+
+    return (
+      <div className="space-y-6">
+        {categories.map((cat) => {
+          const entries = crossStandoutsByCategory[cat.key] || [];
+          if (!entries.length) return null;
+
+          return (
+            <details
+              key={cat.key}
+              className="bg-[#eef8ea] rounded-xl p-4 shadow-inner"
+              open
+            >
+              <summary className="cursor-pointer select-none flex items-center justify-between">
+                <span className="text-lg font-semibold">
+                  {cat.label}
+                </span>
+                <span className="text-xs text-gray-600">
+                  {entries.length} posts
+                </span>
+              </summary>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {entries.slice(0, 8).map((entry) => {
+                  const post = postById.get(entry.postId);
+                  if (!post) return null;
+                  const artist = artistById.get(entry.artistId);
+
+                  const ytSnap = latestSnapshotByPostId.get(entry.postId);
+                  const ttSnap =
+                    tiktokLatestSnapshotByPostId.get(entry.postId);
+                  const igSnap =
+                    instagramLatestSnapshotByPostId.get(entry.postId);
+
+                  const totalViews =
+                    (Number(ytSnap?.views) || 0) +
+                    (Number(ttSnap?.views) || 0) +
+                    (Number(igSnap?.views) || 0);
+
+                  const percent = Math.round(entry.score * 100);
+
+                  return (
+                    <button
+                      key={entry.postId}
+                      onClick={() => openPostModal(post)}
+                      className="w-full min-w-0 text-left bg-white rounded-lg p-3 border border-gray-200 hover:border-gray-400 hover:shadow-sm transition flex flex-col gap-2"
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {post.post_name || "Untitled post"}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {artist?.name || "Unknown artist"} •{" "}
+                            {post.post_date
+                              ? formatShortDate(post.post_date)
+                              : "No date"}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-gray-600">
+                          <span className="font-semibold">
+                            {formatNumber(totalViews)}
+                          </span>{" "}
+                          total views
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-gray-700">
+                        <div>
+                          {cat.label.replace(" standouts", "")}:{" "}
+                          <span className="text-green-700 font-semibold">
+                            +{percent}%
+                          </span>{" "}
+                          vs artist average across{" "}
+                          {entry.platforms.length} platforms
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-1">
+                          Platforms: {entry.platforms.join(", ")}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // MAIN RENDER
   // ---------------------------------------------------------------------------
@@ -1899,16 +2534,9 @@ const tiktokArtistAverages = useMemo(() => {
 
             {activeTab === "instagram" && renderInstagramTab()}
 
-            {activeTab === "tiktok" && ( renderTikTokTab()
-            )}
+            {activeTab === "tiktok" && ( renderTikTokTab)}
 
-            {activeTab === "standout" && (
-              <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
-                This tab is under construction. It will highlight posts that
-                over- or under-perform on one platform vs others, plus a space
-                for notes.
-              </div>
-            )}
+            {activeTab === "standout" && renderStandoutTab()}
           </section>
         </div>
       </div>
