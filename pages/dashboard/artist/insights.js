@@ -110,6 +110,11 @@ function SectionCard({ title, note, children }) {
   );
 }
 
+function formatAvg2(n) {
+    if (n == null || Number.isNaN(Number(n))) return "—";
+    return Number(n).toFixed(2);
+  }
+  
 function StatBlock({ label, value, avg }) {
   const { className, symbol } = getMetricDelta(value, avg);
   return (
@@ -119,9 +124,9 @@ function StatBlock({ label, value, avg }) {
         {label}: {formatNumber(value)} {symbol ? <span className="ml-1">{symbol}</span> : null}
       </div>
       {/* line 2: average */}
-      <div className="text-[11px] md:text-xs opacity-70 truncate">
-        avg: {formatNumber(avg)}
-      </div>
+        <div className="text-[11px] md:text-xs opacity-70 truncate">
+        avg: {formatAvg2(avg)}
+        </div>
     </div>
   );
 }
