@@ -1,0 +1,166 @@
+/* styles/artist-theme.css */
+
+/* ===== Palette (from your screenshot) ===== */
+:root {
+    --page-bg: #a89ee4;      /* page background */
+    --panel-main: #bce1ac;   /* main panels + nav bar */
+    --panel-secondary: #eef9ea; /* secondary panels */
+    --card-white: #ffffff;   /* thumbnails / cards */
+    --text: #33296b;         /* text */
+    --btn-grey: #e6e7eb;     /* grey buttons */
+    --btn-green: #bce1ac;    /* greenlight button background */
+    --border: rgba(51, 41, 107, 0.18);
+    --shadow: 0 10px 24px rgba(51, 41, 107, 0.12);
+  }
+  
+  /* ===== Page foundation ===== */
+  .artist-page {
+    background: var(--page-bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  
+  /* Typography */
+  .artist-page h1,
+  .artist-page h2,
+  .artist-page h3,
+  .artist-page h4,
+  .artist-page h5 {
+    color: var(--text);
+  }
+  
+  .artist-muted {
+    color: rgba(51, 41, 107, 0.75);
+  }
+  
+  /* ===== Panels ===== */
+  .artist-panel {
+    background: var(--panel-main);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+  
+  .artist-panel-secondary {
+    background: var(--panel-secondary);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+  }
+  
+  .artist-card {
+    background: var(--card-white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 6px 14px rgba(51, 41, 107, 0.08);
+  }
+  
+  /* ===== Buttons ===== */
+  .artist-btn {
+    background: var(--btn-grey);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  
+  .artist-btn:hover {
+    filter: brightness(0.98);
+  }
+  
+  .artist-btn-primary {
+    background: var(--btn-grey); /* dashboard “grey button” */
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-weight: 700;
+  }
+  
+  .artist-btn-green {
+    background: var(--btn-green);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-weight: 800;
+  }
+  
+  /* ===== Inputs ===== */
+  .artist-input,
+  .artist-select,
+  .artist-textarea {
+    background: var(--card-white);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    outline: none;
+  }
+  
+  .artist-input:focus,
+  .artist-select:focus,
+  .artist-textarea:focus {
+    box-shadow: 0 0 0 3px rgba(51, 41, 107, 0.12);
+  }
+  
+  /* ===== Desktop sidebar ===== */
+  .artist-sidebar {
+    background: var(--panel-main);
+    border-right: 1px solid var(--border);
+  }
+  
+  .artist-navitem {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(51, 41, 107, 0.14);
+    border-radius: 12px;
+    color: var(--text);
+    font-weight: 700;
+  }
+  
+  .artist-navitem:hover {
+    filter: brightness(0.98);
+  }
+  
+  .artist-navitem--active {
+    background: var(--card-white);
+    border: 1px solid rgba(51, 41, 107, 0.22);
+  }
+  
+  /* ===== Mobile bottom nav (Instagram-style bar but in your palette) ===== */
+  .artist-bottomnav {
+    background: var(--panel-main);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 16px rgba(51, 41, 107, 0.10);
+  }
+  
+  .artist-iconbox {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.75);
+    border: 1px solid rgba(51, 41, 107, 0.16);
+  }
+  
+  .artist-iconbox--active {
+    background: var(--card-white);
+    border: 1px solid rgba(51, 41, 107, 0.22);
+  }
+  
+  /* ===== Sheets / modals ===== */
+  .artist-sheet {
+    background: var(--panel-secondary);
+    border-top: 1px solid var(--border);
+    color: var(--text);
+  }
+  
+  /* ===== Feed ===== */
+  .artist-feed {
+    background: #000; /* keep TikTok feed black */
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  
+  /* “More info” icon */
+  .artist-info-btn {
+    background: rgba(255,255,255,0.85);
+    border: 1px solid rgba(51, 41, 107, 0.20);
+    color: var(--text);
+  }
+  
