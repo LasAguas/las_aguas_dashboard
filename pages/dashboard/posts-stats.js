@@ -2534,7 +2534,7 @@ const crossStandoutsByCategory = useMemo(() => {
 
             {activeTab === "instagram" && renderInstagramTab()}
 
-            {activeTab === "tiktok" && ( renderTikTokTab)}
+            {activeTab === "tiktok" && renderTikTokTab()}
 
             {activeTab === "standout" && renderStandoutTab()}
           </section>

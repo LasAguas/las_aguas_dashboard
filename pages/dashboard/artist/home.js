@@ -18,7 +18,7 @@ function formatDDMMYY(dateLike) {
 }
 
 /**
- * Robust "is active now" check.
+ * Robust "is active now" check. 
  * Handles date-only strings, timestamps, and null end_date.
  */
 function isActiveNow(start_date, end_date, now = new Date()) {
@@ -33,6 +33,20 @@ function isActiveNow(start_date, end_date, now = new Date()) {
   return startOK && endOK;
 }
 
+function needsReviewForPost(postId, allVariations) {
+    const vars = (allVariations || []).filter((v) => v.post_id === postId);
+    // If there are no variations with media, nothing to review
+    if (!vars.length) return false;
+  
+    const hasGreenlight = vars.some((v) => v.greenlight === true);
+    const hasFeedback = vars.some(
+      (v) => v.feedback && v.feedback.trim() !== ""
+    );
+  
+    // Only show posts where NO variation has feedback and NONE are greenlit
+    return !hasGreenlight && !hasFeedback;
+  }
+  
 function Panel({ title, children }) {
   return (
     <div className="artist-panel p-4 md:p-5">
@@ -376,57 +390,77 @@ export default function ArtistHomePage() {
       try {
         setLoading(true);
         setErr("");
-
+  
         const { artistId } = await getMyArtistContext();
-
+  
         const todayYMD = new Date().toISOString().slice(0, 10);
-
-        // Upcoming ready posts
-        const { data: posts, error: postsErr } = await supabase
+  
+        // Upcoming posts: status MUST be 'ready' and in the future
+        const { data: postsData, error: postsErr } = await supabase
           .from("posts")
-          .select("id, artist_id, post_name, post_date, status, caption_a, caption_b, notes, song")
+          .select(
+            "id, artist_id, post_name, post_date, status, caption_a, caption_b, notes, song"
+          )
           .eq("artist_id", artistId)
-          .eq("status", "ready")
+          .eq("status", "ready") // <-- unchanged, we only READ this
           .gte("post_date", todayYMD)
           .order("post_date", { ascending: true })
           .limit(25);
-
+  
         if (postsErr) throw postsErr;
-        setReadyPosts(posts || []);
-
-        // Notifications (filter client-side using robust parsing)
+        const posts = postsData || [];
+  
+        // Notifications (same as before)
         const { data: notifs, error: notifErr } = await supabase
           .from("artist_notifications")
           .select("id, artist_id, notification, start_date, end_date")
           .eq("artist_id", artistId)
           .order("start_date", { ascending: false })
           .limit(100);
-
+  
         if (notifErr) throw notifErr;
-
+  
         const now = new Date();
-        const active = (notifs || []).filter((n) => isActiveNow(n.start_date, n.end_date, now));
+        const active = (notifs || []).filter((n) =>
+          isActiveNow(n.start_date, n.end_date, now)
+        );
         setNotifications(active);
-
-        // Preload upcoming-content cache (unchanged behavior)
-        const postIds = (posts || []).map((p) => p.id);
+  
+        // Load variations for these posts
+        const postIds = posts.map((p) => p.id);
+        let vars = [];
         if (postIds.length) {
-          const { data: vars, error: varsErr } = await supabase
+          const { data: varsData, error: varsErr } = await supabase
             .from("postvariations")
-            .select("id, post_id, file_name, test_version, platforms, length_seconds, greenlight, feedback, feedback_resolved")
+            .select(
+              "id, post_id, file_name, test_version, platforms, length_seconds, greenlight, feedback, feedback_resolved"
+            )
             .in("post_id", postIds)
             .not("file_name", "is", null);
-
-          if (!varsErr) {
-            sessionStorage.setItem(
-              "artistUpcomingCache",
-              JSON.stringify({
-                ts: Date.now(),
-                posts: posts || [],
-                variations: vars || [],
-              })
-            );
-          }
+  
+          if (varsErr) throw varsErr;
+          vars = varsData || [];
+        }
+  
+        // Filter posts: only those that still need review (no feedback & not greenlit)
+        const filteredPosts = posts.filter((p) =>
+          needsReviewForPost(p.id, vars)
+        );
+        setReadyPosts(filteredPosts);
+  
+        // Preload upcoming-content cache with only these posts + their variations
+        if (typeof window !== "undefined" && filteredPosts.length) {
+          const idSet = new Set(filteredPosts.map((p) => p.id));
+          const filteredVars = vars.filter((v) => idSet.has(v.post_id));
+  
+          sessionStorage.setItem(
+            "artistUpcomingCache",
+            JSON.stringify({
+              ts: Date.now(),
+              posts: filteredPosts,
+              variations: filteredVars,
+            })
+          );
         }
       } catch (e) {
         console.error(e);
@@ -437,6 +471,7 @@ export default function ArtistHomePage() {
     };
     run();
   }, []);
+  
 
   const readyNeedingAction = useMemo(() => readyPosts, [readyPosts]);
 

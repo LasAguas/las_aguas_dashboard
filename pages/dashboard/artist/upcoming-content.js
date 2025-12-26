@@ -367,13 +367,13 @@ function PostFeedItem({
   return (
     <div className="flex items-center justify-center w-full">
       <div
-        className="relative bg-black flex items-center justify-center rounded-2xl overflow-hidden"
+        className="relative bg-black flex items-center justify-center rounded-2xl overflow-hidden w-full max-w-[520px]"
         style={{
-          height: "90vh",
-          maxHeight: "90vh",
+          //height: "90vh",
+          //maxHeight: "90vh",
           aspectRatio: "9 / 16",
-          width: "100%",
-          maxWidth: "520px",
+          //width: "100%",
+          //maxWidth: "520px",
         }}
       >
         {/* Media (letterboxed with dark bars when aspect doesn't match) */}
@@ -493,11 +493,14 @@ export default function UpcomingContentPage() {
         const { artistId } = await getMyArtistContext();
         const todayYMD = new Date().toISOString().slice(0, 10);
 
+        // 1) Posts must be status 'ready' and in the future
         const { data: postsData, error: postsErr } = await supabase
           .from("posts")
-          .select("id, artist_id, post_name, post_date, status, caption_a, caption_b, notes, song")
+          .select(
+            "id, artist_id, post_name, post_date, status, caption_a, caption_b, notes, song"
+          )
           .eq("artist_id", artistId)
-          .eq("status", "ready")
+          .eq("status", "ready") // <- unchanged, only reading 'ready' posts
           .gte("post_date", todayYMD)
           .order("post_date", { ascending: true })
           .limit(100);
@@ -506,6 +509,8 @@ export default function UpcomingContentPage() {
 
         const postIds = (postsData || []).map((p) => p.id);
         let varRows = [];
+
+        // 2) Load variations for these posts
         if (postIds.length) {
           const { data: vars, error: varsErr } = await supabase
             .from("postvariations")
@@ -520,14 +525,38 @@ export default function UpcomingContentPage() {
           varRows = vars || [];
         }
 
-        const map = new Map();
+        // 3) Build a full map of variations by post_id
+        const fullMap = new Map();
         varRows.forEach((v) => {
-          if (!map.has(v.post_id)) map.set(v.post_id, []);
-          map.get(v.post_id).push(v);
+          if (!fullMap.has(v.post_id)) fullMap.set(v.post_id, []);
+          fullMap.get(v.post_id).push(v);
         });
 
-        setPosts(postsData || []);
-        setVariationsByPostId(map);
+        // 4) Filter posts to those that still need review:
+        //    - must have at least one variation
+        //    - no variation has feedback
+        //    - no variation is greenlit
+        const filteredPosts = (postsData || []).filter((p) => {
+          const vars = fullMap.get(p.id) || [];
+          if (!vars.length) return false;
+
+          const hasGreenlight = vars.some((v) => v.greenlight === true);
+          const hasFeedback = vars.some(
+            (v) => v.feedback && v.feedback.trim() !== ""
+          );
+
+          return !hasGreenlight && !hasFeedback;
+        });
+
+        // 5) Keep only variations for those filtered posts
+        const filteredMap = new Map();
+        filteredPosts.forEach((p) => {
+          const vars = fullMap.get(p.id) || [];
+          filteredMap.set(p.id, vars);
+        });
+
+        setPosts(filteredPosts);
+        setVariationsByPostId(filteredMap);
       } catch (e) {
         console.error(e);
         setErr(e?.message || "Failed to load upcoming content.");
@@ -631,7 +660,7 @@ export default function UpcomingContentPage() {
         <>
           <div
             id="upcoming-feed"
-            className="h-[90vh] overflow-y-scroll snap-y snap-mandatory"
+            className="min-h-[90vh] overflow-y-scroll snap-y snap-mandatory"
           >
             {posts.map((post, idx) => {
               const variations = variationsByPostId.get(post.id) || [];
