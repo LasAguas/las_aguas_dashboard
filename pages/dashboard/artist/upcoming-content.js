@@ -246,7 +246,19 @@ function VariationsList({ variations, onOpenVariation }) {
   );
 }
 
-function InfoPanel({ post, variations, onOpenVariation }) {
+function InfoPanel({ post, variations, onOpenVariation, onCaptionSaved }) {
+  const [tempCaption, setTempCaption] = useState("");
+  const [isEditingCaption, setIsEditingCaption] = useState(false);
+  const [savingCaption, setSavingCaption] = useState(false);
+  
+  useEffect(() => {
+    // keep local draft in sync when selecting a different post
+    const c = (post?.caption_a || post?.caption_b || "").trim();
+    setTempCaption(c);
+    setIsEditingCaption(false);
+  }, [post?.id, post?.caption_a, post?.caption_b]);
+  
+
   if (!post) {
     return (
       <div className="artist-panel p-4 md:p-5">
@@ -267,11 +279,87 @@ function InfoPanel({ post, variations, onOpenVariation }) {
         {post.song ? ` • ${post.song}` : ""}
       </div>
 
-      {caption && (
-        <div className="artist-panel-secondary p-3 rounded-xl mb-3 text-xs text-gray-700 whitespace-pre-wrap">
-          {caption}
+      <div className="artist-panel-secondary p-3 rounded-xl mb-3 text-xs text-gray-700 whitespace-pre-wrap">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-semibold text-[#33296b]">Caption</span>
+
+          {!isEditingCaption ? (
+            <button
+              type="button"
+              onClick={() => setIsEditingCaption(true)}
+              className="px-3 py-1.5 text-xs rounded hover:opacity-90"
+              style={{ backgroundColor: "#bbe1ac" }}
+            >
+              Edit
+            </button>
+          ) : null}
         </div>
-      )}
+
+        {isEditingCaption ? (
+          <>
+            <textarea
+              value={tempCaption}
+              onChange={(e) => setTempCaption(e.target.value)}
+              className="w-full p-2 border rounded text-xs bg-white"
+              rows={4}
+              placeholder="Write a caption…"
+            />
+
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const c = (post?.caption_a || post?.caption_b || "").trim();
+                  setTempCaption(c);
+                  setIsEditingCaption(false);
+                }}
+                className="px-3 py-1.5 text-xs bg-gray-200 rounded hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={savingCaption}
+                onClick={async () => {
+                  try {
+                    setSavingCaption(true);
+
+                    const { error } = await supabase
+                      .from("posts")
+                      .update({ caption_a: tempCaption })
+                      .eq("id", post.id);
+
+                    if (error) throw error;
+
+                    // keep UI in sync immediately
+                    if (typeof onCaptionSaved === "function") onCaptionSaved(tempCaption);
+                    setIsEditingCaption(false);
+                  } catch (err) {
+                    console.error("Error saving caption:", err);
+                    alert("Failed to save caption.");
+                  } finally {
+                    setSavingCaption(false);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs rounded hover:opacity-90 disabled:opacity-60"
+                style={{ backgroundColor: "#bbe1ac" }}
+              >
+                {savingCaption ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="min-h-[3rem] whitespace-pre-wrap break-words">
+            {tempCaption?.trim() ? (
+              tempCaption
+            ) : (
+              <span className="text-gray-400">No caption</span>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {post.notes && (
         <div className="artist-panel-secondary p-3 rounded-xl mb-3 text-xs text-gray-700 whitespace-pre-wrap">
@@ -286,7 +374,14 @@ function InfoPanel({ post, variations, onOpenVariation }) {
   );
 }
 
-function MobileInfoSheet({ open, post, variations, onClose, onOpenVariation }) {
+function MobileInfoSheet({
+  open,
+  post,
+  variations,
+  onClose,
+  onOpenVariation,
+  onCaptionSaved,
+}) {
   if (!open || !post) return null;
 
   return (
@@ -309,10 +404,12 @@ function MobileInfoSheet({ open, post, variations, onClose, onOpenVariation }) {
             Close
           </button>
         </div>
+
         <InfoPanel
           post={post}
           variations={variations}
           onOpenVariation={onOpenVariation}
+          onCaptionSaved={onCaptionSaved}
         />
       </div>
     </div>
@@ -697,6 +794,11 @@ export default function UpcomingContentPage() {
                       post={post}
                       variations={variations}
                       onOpenVariation={openVariationModal}
+                      onCaptionSaved={(nextCaption) => {
+                        setPosts((prev) =>
+                          prev.map((p) => (p.id === post.id ? { ...p, caption_a: nextCaption } : p))
+                        );
+                      }}
                     />
                   </div>
                 </div>
@@ -723,6 +825,12 @@ export default function UpcomingContentPage() {
         variations={activeVariations}
         onClose={() => setInfoOpen(false)}
         onOpenVariation={openVariationModal}
+        onCaptionSaved={(nextCaption) => {
+          if (!activePost) return;
+          setPosts((prev) =>
+            prev.map((p) => (p.id === activePost.id ? { ...p, caption_a: nextCaption } : p))
+          );
+        }}
       />
 
       {/* Media player modal */}

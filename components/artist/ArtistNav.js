@@ -10,22 +10,22 @@ import { getMyArtistContext } from "./artistData";
 const NAV = [
   {
     href: "/dashboard/artist/artist-calendar",
-    label: "artist-calendar",
+    label: "Artist Calendar",
     icon: "/icons/artist-nav/calendar-icon.png",
   },
   {
     href: "/dashboard/artist/upcoming-content",
-    label: "upcoming-content",
+    label: "Upcoming Content",
     icon: "/icons/artist-nav/Videos-icon.png",
   },
   {
     href: "/dashboard/artist/home",
-    label: "home",
+    label: "Home",
     icon: "/icons/artist-nav/Home-icon.png",
   },
   {
     href: "/dashboard/artist/insights",
-    label: "insights",
+    label: "Insights",
     icon: "/icons/artist-nav/Insights-icon.png",
   },
   {
@@ -140,7 +140,7 @@ export default function ArtistNav({ forceDesktopOpen = false, desktopOpen, setDe
           <div className="flex items-center justify-between px-6 py-3">
             {NAV.map((item) => {
               const active = path.startsWith(item.href);
-              const showBadge = item.label === "home" && pendingCount > 0;
+              const showBadge = item.label === "Home" && pendingCount > 0;
 
               return (
                 <Link
@@ -187,7 +187,7 @@ export default function ArtistNav({ forceDesktopOpen = false, desktopOpen, setDe
           <div className="px-2 pb-3">
             {NAV.map((item) => {
               const active = path.startsWith(item.href);
-              const showBadge = item.label === "home" && pendingCount > 0;
+              const showBadge = item.label === "Home" && pendingCount > 0;
 
               return (
                 <Link
