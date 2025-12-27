@@ -1174,7 +1174,7 @@ export default function EditNextPage() {
     { href: "/dashboard/calendar", label: "Calendar" },
     { href: "/dashboard/edit-next", label: "Edit Next" },
     { href: "/dashboard/leads", label: "Leads" },
-    { href: "/dashboard/stats-view", label: "Stats" },
+    /*{ href: "/dashboard/stats-view", label: "Stats" },*/
     { href: "/dashboard/audio-database", label: "Audio Database" },
     { href: "/dashboard/menu", label: "Home" },
     { href: "/dashboard/posts-stats", label: "Posts Stats" },
