@@ -565,49 +565,48 @@ export default function OnboardingAdminPage() {
     extraFields = {},
   }) {
     if (!artistId || !files || !files.length) return;
-
+  
     const pending = [];
-    for (const file of files) {
+  
+    for (const file of Array.from(files)) {
       const path = `${artistId}/${folder}/${Date.now()}-${file.name}`;
+  
       const { error: upErr } = await supabase.storage
         .from(BUCKET)
         .upload(path, file, { upsert: false });
-
+  
       if (upErr) {
         console.error("STORAGE UPLOAD ERROR FULL:", upErr);
         alert(upErr.message);
         continue;
       }
-
-      const { data: publicRes } = supabase.storage
-        .from(BUCKET)
-        .getPublicUrl(path);
-
+  
+      // ONLY insert columns that actually exist on the target table.
+      // For artist_photo_assets / artist_old_posts this is:
+      //   artist_id, file_path, description, created_at (id is auto).
       pending.push({
         artist_id: artistId,
         file_path: path,
-        public_url: publicRes?.publicUrl || "",
-        file_name: file.name,
-        file_size: file.size,
-        ...extraFields,
+        ...extraFields, // e.g. { description: "" } if you ever pass it
       });
     }
-
+  
     if (!pending.length) return;
-
+  
     const { data: inserted, error: insertErr } = await supabase
       .from(table)
       .insert(pending)
       .select("*");
-
+  
     if (insertErr) {
       console.error(insertErr);
       alert(insertErr.message);
       return;
     }
-
+  
     return inserted || [];
   }
+  
 
   function toggleSelectedPhoto(id) {
     setSelectedPhotoIds((prev) => {
