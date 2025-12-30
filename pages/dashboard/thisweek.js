@@ -570,7 +570,7 @@ export default function ThisWeek() {
     { href: "/dashboard/calendar", label: "Calendar" },
     { href: "/dashboard/edit-next", label: "Edit Next" },
     { href: "/dashboard/leads", label: "Leads" },
-    { href: "/dashboard/stats-view", label: "Stats" },
+    { href: "/dashboard/onboarding-admin", label: "Onboarding" },
     { href: "/dashboard/audio-database", label: "Audio DB" },
     { href: "/dashboard/menu", label: "Home" },
     { href: "/dashboard/posts-stats", label: "Posts Stats" },

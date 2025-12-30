@@ -292,6 +292,13 @@ export default function OnboardingAdminPage() {
   const [websiteRefs, setWebsiteRefs] = useState([]);
   const [releaseNotes, setReleaseNotes] = useState([]);
 
+  // Admin – notifications for selected artist
+  const [notifications, setNotifications] = useState([]);
+  const [newNotifText, setNewNotifText] = useState("");
+  const [newNotifStart, setNewNotifStart] = useState("");
+  const [newNotifEnd, setNewNotifEnd] = useState("");
+  const [sendingNotif, setSendingNotif] = useState(false);  
+
   // Photo gallery UI state (same as artist onboarding)
   const [photoMode, setPhotoMode] = useState("view"); // "view" | "add" | "edit"
   const [pendingPhotoFiles, setPendingPhotoFiles] = useState([]); // File[]
@@ -303,7 +310,13 @@ export default function OnboardingAdminPage() {
   const [uploadingSongId, setUploadingSongId] = useState(null);
 
   // socials auth status
-  const [socialStatus, setSocialStatus] = useState([]);  
+  const [socialStatus, setSocialStatus] = useState([]); 
+  
+  // Are all socials tokens healthy? (same logic as artist onboarding)
+  const socialsComplete = useMemo(() => {
+    const rows = Array.isArray(socialStatus) ? socialStatus : [];
+    return SOCIALS.every((s) => isTokenHealthy(findPlatformRow(rows, s.key)));
+  }, [socialStatus]);
 
   // section storage usage estimates
   const [photoBytes, setPhotoBytes] = useState(0);
@@ -390,6 +403,7 @@ export default function OnboardingAdminPage() {
           releaseRes,
           audioRes,
           socialsRes,
+          notifRes,
         ] = await Promise.all([
           supabase
             .from("artist_photo_assets")
@@ -430,6 +444,11 @@ export default function OnboardingAdminPage() {
             .from("artist_social_auth_status")
             .select("*")
             .eq("artist_id", artistId),
+          supabase
+            .from("artist_notifications")
+            .select("id, artist_id, notification, start_date, end_date")
+            .eq("artist_id", artistId)
+            .order("start_date", { ascending: false }),
         ]);
 
         if (photosRes.error) throw photosRes.error;
@@ -440,6 +459,7 @@ export default function OnboardingAdminPage() {
         if (releaseRes.error) throw releaseRes.error;
         if (audioRes.error) throw audioRes.error;
         if (socialsRes.error) throw socialsRes.error;
+        if (notifRes.error) throw notifRes.error;
 
         setPhotoAssets(photosRes.data || []);
         setOldPosts(oldRes.data || []);
@@ -449,6 +469,7 @@ export default function OnboardingAdminPage() {
         setReleaseNotes(releaseRes.data || []);
         setAudioRows(audioRes.data || []);
         setSocialStatus(socialsRes.data || []);
+        setNotifications(notifRes.data || []);
 
         const [pb, ob] = await Promise.all([
           estimateFolderBytes(`${artistId}/bio-photos`),
@@ -652,90 +673,177 @@ export default function OnboardingAdminPage() {
     setSelectedPhotoIds(new Set());
   }
 
+  // Completion rules (weighted) — identical to artist onboarding
   const completion = useMemo(() => {
-    // mirrors your weighted completion logic:
-    // Bio 4%, pronouns 4%, photos 8%, music 20% (masters+lyrics across songs),
-    // funding 4%, EPK 4%, moodboard 4%, press 8%, shows 8%,
-    // old posts 4%, website refs 8%, socials 4%, YouTube 4%.
+    const clamp01 = (n) => Math.max(0, Math.min(1, n));
 
-    let pct = 0;
+    const checks = [];
 
-    const bioDone = !!bio?.trim();
-    const pronounsDone = !!preferredPronouns?.trim();
-    const photosDone = (photoAssets || []).length > 0;
-    const oldDone = (oldPosts || []).length > 0;
-    const epkDone = !!epkPath;
-    const moodDone = !!moodboardPath;
-    const pressDone = (pressLinks || []).length >= 2;
-    const showsDone = (showLinks || []).length >= 2;
-    const webDone = (websiteRefs || []).length >= 2;
+    // --- Socials connections (4%) ---
+    checks.push({
+      key: "socials",
+      label: "Socials connections",
+      weight: 4,
+      ratio: socialsComplete ? 1 : 0,
+    });
 
-    const fundingCount =
-      (funding.ksk ? 1 : 0) +
-      (funding.gema ? 1 : 0) +
-      (funding.musicDegree ? 1 : 0) +
-      (funding.gvl ? 1 : 0) +
-      (funding.labelOrPublisher ? 1 : 0);
-    const fundingDone = fundingCount >= 3;
+    // --- Artist Bio (4%) ---
+    const bioDone = Boolean((bio ?? "").trim());
+    checks.push({
+      key: "bio_text",
+      label: "Artist Bio",
+      weight: 4,
+      ratio: bioDone ? 1 : 0,
+    });
 
-    const socialsRows = Array.isArray(socialStatus) ? socialStatus : [];
-    const hasTikTok = isTokenHealthy(findPlatformRow(socialsRows, "tiktok"));
-    const hasYouTube = isTokenHealthy(findPlatformRow(socialsRows, "youtube"));
-    const hasInstagram = isTokenHealthy(findPlatformRow(socialsRows, "instagram"));
-    const socialsDone = hasTikTok && hasYouTube && hasInstagram;
+    // --- Preferred pronouns (4%) ---
+    const pronounsDone = Boolean((preferredPronouns ?? "").trim());
+    checks.push({
+      key: "pronouns",
+      label: "Preferred pronouns",
+      weight: 4,
+      ratio: pronounsDone ? 1 : 0,
+    });
 
+    // --- Photo assets (8%) ---
+    const photosDone = (photoAssets?.length || 0) > 0;
+    checks.push({
+      key: "photos",
+      label: "Photo assets",
+      weight: 8,
+      ratio: photosDone ? 1 : 0,
+    });
+
+    // --- Music (20%) ---
+    // Each song is worth equal value. Within each song:
+    //   master = 0.5, lyrics = 0.5
     const songs = Array.isArray(audioRows) ? audioRows : [];
-    let musicFraction = 0;
+    let songCount = 0;
+    let musicRatio = 0;
+
     if (songs.length > 0) {
-      let totalPieces = 0;
-      let completedPieces = 0;
+      songCount = songs.length;
+      let totalSongPoints = 0;
+
       for (const s of songs) {
-        totalPieces += 2;
-        if (s.file_path) completedPieces += 1;
-        if (s.lyrics && s.lyrics.trim() !== "") completedPieces += 1;
+        const hasMaster = hasAnyAudioFile(s.file_path);
+        const lyricsText = (s.lyrics ?? "").trim();
+        const hasLyrics = lyricsText.length > 0;
+
+        totalSongPoints += (hasMaster ? 0.5 : 0) + (hasLyrics ? 0.5 : 0);
       }
-      musicFraction = totalPieces > 0 ? completedPieces / totalPieces : 0;
+
+      musicRatio = clamp01(totalSongPoints / songCount);
     }
-    const musicPct = musicFraction * 20;
 
-    if (bioDone) pct += 4;
-    if (pronounsDone) pct += 4;
-    if (photosDone) pct += 8;
-    pct += musicPct;
-    if (fundingDone) pct += 4;
-    if (epkDone) pct += 4;
-    if (moodDone) pct += 4;
-    if (pressDone) pct += 8;
-    if (showsDone) pct += 8;
-    if (oldDone) pct += 4;
-    if (webDone) pct += 8;
-    if (socialsDone) pct += 4;
-    if (youtubeVerified) pct += 4;
+    checks.push({
+      key: "music",
+      label: "Music",
+      weight: 20,
+      ratio: musicRatio,
+    });
 
-    if (pct > 100) pct = 100;
+    // --- Funding checklist (4%) ---
+    const fundingTrueCount =
+      (funding?.ksk ? 1 : 0) +
+      (funding?.gema ? 1 : 0) +
+      (funding?.musicDegree ? 1 : 0) +
+      (funding?.gvl ? 1 : 0) +
+      (funding?.labelOrPublisher ? 1 : 0);
 
-    const socialsKeyDone = socialsDone;
-    const musicDone = musicFraction >= 1;
+    checks.push({
+      key: "funding",
+      label: "Funding checklist",
+      weight: 4,
+      ratio: fundingTrueCount >= 3 ? 1 : 0,
+    });
 
-    const checks = [
-      { key: "socials", ok: socialsKeyDone },
-      { key: "bio", ok: bioDone && pronounsDone && photosDone },
-      { key: "music", ok: musicDone },
-      { key: "youtube", ok: youtubeVerified },
-      { key: "funding", ok: fundingDone },
-      { key: "epk", ok: epkDone && moodDone },
-      { key: "press", ok: pressDone && showsDone },
-      { key: "old", ok: oldDone },
-      { key: "web", ok: webDone },
-    ];
+    // --- EPK (4%) ---
+    const epkDone = Boolean((epkPath ?? "").trim());
+    checks.push({
+      key: "epk",
+      label: "EPK",
+      weight: 4,
+      ratio: epkDone ? 1 : 0,
+    });
 
-    return { pct, checks };
+    // --- Mood Board (4%) ---
+    const moodDone = Boolean((moodboardPath ?? "").trim());
+    checks.push({
+      key: "moodboard",
+      label: "Mood Board",
+      weight: 4,
+      ratio: moodDone ? 1 : 0,
+    });
+
+    // --- Press (8%) ---
+    // Completed when >=2 rows have url OR description (same as artist onboarding)
+    const pressCount = (pressLinks || []).filter((r) =>
+      Boolean((r?.url ?? "").trim()) || Boolean((r?.description ?? "").trim())
+    ).length;
+    checks.push({
+      key: "press",
+      label: "Press",
+      weight: 8,
+      ratio: pressCount >= 2 ? 1 : 0,
+    });
+
+    // --- Shows (8%) ---
+    const showCount = (showLinks || []).filter((r) =>
+      Boolean((r?.url ?? "").trim()) || Boolean((r?.description ?? "").trim())
+    ).length;
+    checks.push({
+      key: "shows",
+      label: "Shows",
+      weight: 8,
+      ratio: showCount >= 2 ? 1 : 0,
+    });
+
+    // --- Old posts that didn’t make it (4%) ---
+    const oldPostsDone = (oldPosts?.length || 0) > 0;
+    checks.push({
+      key: "old_posts",
+      label: "Old posts",
+      weight: 4,
+      ratio: oldPostsDone ? 1 : 0,
+    });
+
+    // --- Website references (8%) ---
+    const webCount = (websiteRefs || []).filter((r) =>
+      Boolean((r?.url ?? "").trim()) || Boolean((r?.description ?? "").trim())
+    ).length;
+    checks.push({
+      key: "web",
+      label: "Website references",
+      weight: 8,
+      ratio: webCount >= 2 ? 1 : 0,
+    });
+
+    // --- YouTube verification (4%) ---
+    const ytDone = youtubeVerified === true;
+    checks.push({
+      key: "youtube",
+      label: "YouTube verification",
+      weight: 4,
+      ratio: ytDone ? 1 : 0,
+    });
+
+    // Aggregate
+    const total = checks.reduce((sum, c) => sum + c.weight, 0);
+    const earned = checks.reduce(
+      (sum, c) => sum + c.weight * clamp01(c.ratio),
+      0
+    );
+
+    const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
+
+    return { pct, checks, earned, total, songCount, musicRatio };
   }, [
+    socialsComplete,
     bio,
     preferredPronouns,
     photoAssets,
     audioRows,
-    youtubeVerified,
     funding,
     epkPath,
     moodboardPath,
@@ -743,8 +851,9 @@ export default function OnboardingAdminPage() {
     showLinks,
     oldPosts,
     websiteRefs,
-    socialStatus,
+    youtubeVerified,
   ]);
+
 
   // ⬇️ NEW: group audioRows by release for the Music section
   const releases = useMemo(() => {
@@ -758,55 +867,56 @@ export default function OnboardingAdminPage() {
     return Array.from(byRelease.entries());
   }, [audioRows]);
 
+  // Sort: incomplete first, completed at bottom — same grouping as artist onboarding
   const sections = useMemo(() => {
+    const findRatio = (key) =>
+      completion.checks.find((c) => c.key === key)?.ratio ?? 0;
+
+    // Grouped "done" rules for collapsibles
+    const socialsDone = findRatio("socials") === 1;
+
+    // Bio section = bio text + pronouns + photos
+    const bioSectionDone =
+      findRatio("bio_text") === 1 &&
+      findRatio("pronouns") === 1 &&
+      findRatio("photos") === 1;
+
+    // Music section: only "done" if there are songs and ratio is 1
+    const musicDone =
+      completion.songCount > 0 && completion.musicRatio === 1;
+
+    const youtubeDone = findRatio("youtube") === 1;
+    const fundingDone = findRatio("funding") === 1;
+
+    // EPK section = epk + moodboard
+    const epkMoodDone =
+      findRatio("epk") === 1 && findRatio("moodboard") === 1;
+
+    // Press and Shows section = both done
+    const pressShowsDone =
+      findRatio("press") === 1 && findRatio("shows") === 1;
+
+    const oldPostsDone = findRatio("old_posts") === 1;
+    const webDone = findRatio("web") === 1;
+
     const list = [
-      {
-        key: "socials",
-        title: "Socials connections",
-        done: completion.checks.find((c) => c.key === "socials")?.ok,
-      },
-      {
-        key: "bio",
-        title: "Bio + Photo assets",
-        done: completion.checks.find((c) => c.key === "bio")?.ok,
-      },
-      {
-        key: "music",
-        title: "Music",
-        done: completion.checks.find((c) => c.key === "music")?.ok,
-      },
-      {
-        key: "youtube",
-        title: "YouTube verification",
-        done: completion.checks.find((c) => c.key === "youtube")?.ok,
-      },
-      {
-        key: "funding",
-        title: "Funding checklist",
-        done: completion.checks.find((c) => c.key === "funding")?.ok,
-      },
-      {
-        key: "epk",
-        title: "EPK and mood board",
-        done: completion.checks.find((c) => c.key === "epk")?.ok,
-      },
-      {
-        key: "press",
-        title: "Press and Shows",
-        done: completion.checks.find((c) => c.key === "press")?.ok,
-      },
+      { key: "socials", title: "Socials connections", done: socialsDone },
+      { key: "bio", title: "Bio + Photo assets", done: bioSectionDone },
+      { key: "music", title: "Music", done: musicDone },
+      { key: "youtube", title: "YouTube verification", done: youtubeDone },
+      { key: "funding", title: "Funding checklist", done: fundingDone },
+      { key: "epk", title: "EPK and mood board", done: epkMoodDone },
+      { key: "press", title: "Press and Shows", done: pressShowsDone },
       {
         key: "old",
         title: "Old posts that didn’t make it to IG",
-        done: completion.checks.find((c) => c.key === "old")?.ok,
+        done: oldPostsDone,
       },
-      {
-        key: "web",
-        title: "Website References",
-        done: completion.checks.find((c) => c.key === "web")?.ok,
-      },
+      { key: "web", title: "Website References", done: webDone },
     ];
-    return [...list].sort((a, b) => Number(a.done) - Number(b.done));
+
+    // incomplete first
+    return list.sort((a, b) => Number(a.done) - Number(b.done));
   }, [completion]);
 
   const descriptionUpdates = {
@@ -933,6 +1043,46 @@ export default function OnboardingAdminPage() {
     );
   }  
 
+  async function sendNotification() {
+    if (!artistId) {
+      alert("No artist selected.");
+      return;
+    }
+    if (!newNotifText.trim()) {
+      alert("Please enter a notification message.");
+      return;
+    }
+
+    const payload = {
+      artist_id: artistId,
+      notification: newNotifText.trim(),
+      start_date: newNotifStart || new Date().toISOString().slice(0, 10),
+      end_date: newNotifEnd || null,
+    };
+
+    try {
+      setSendingNotif(true);
+      const { data, error } = await supabase
+        .from("artist_notifications")
+        .insert(payload)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      // Prepend new notification in local state
+      setNotifications((prev) => [data, ...prev]);
+      setNewNotifText("");
+      setNewNotifStart("");
+      setNewNotifEnd("");
+    } catch (e) {
+      console.error("Failed to send notification", e);
+      alert(e?.message || "Failed to send notification.");
+    } finally {
+      setSendingNotif(false);
+    }
+  }
+
   function hasAnyAudioFile(filePath) {
     if (!filePath || typeof filePath !== "string") return false;
     const lower = filePath.toLowerCase();
@@ -973,6 +1123,72 @@ export default function OnboardingAdminPage() {
         <div className="text-sm text-gray-600">Loading…</div>
       ) : (
         <div className="space-y-4">
+          {/* Send notification panel */}
+          <div className="artist-panel p-4 md:p-5">
+            <h2 className="text-sm font-semibold mb-3">Send notification</h2>
+            <div className="space-y-3">
+              <textarea
+                className="w-full border border-gray-300 rounded-xl p-2 text-sm"
+                rows={3}
+                placeholder="Write a notification for this artist…"
+                value={newNotifText}
+                onChange={(e) => setNewNotifText(e.target.value)}
+              />
+              <div className="flex flex-wrap gap-3 items-center text-xs">
+                <div className="flex items-center gap-1">
+                  <label className="font-semibold">Start date</label>
+                  <input
+                    type="date"
+                    className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                    value={newNotifStart}
+                    onChange={(e) => setNewNotifStart(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <label className="font-semibold">End date</label>
+                  <input
+                    type="date"
+                    className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                    value={newNotifEnd}
+                    onChange={(e) => setNewNotifEnd(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={sendNotification}
+                  disabled={sendingNotif}
+                  className="ml-auto px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                >
+                  {sendingNotif ? "Sending…" : "Send notification"}
+                </button>
+              </div>
+
+              {notifications.length > 0 && (
+                <div className="mt-3 border-t border-gray-200 pt-3">
+                  <div className="text-xs font-semibold mb-2 text-[#33296b]">
+                    Recent notifications
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {notifications.slice(0, 5).map((n) => (
+                      <div
+                        key={n.id}
+                        className="artist-secondary-panel p-2 rounded-xl text-xs"
+                      >
+                        <div className="text-[11px] text-gray-600 mb-1">
+                          {n.start_date || "no start date"}
+                          {n.end_date ? ` → ${n.end_date}` : ""}
+                        </div>
+                        <div className="whitespace-pre-wrap text-[#33296b]">
+                          {n.notification}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        
           <div className="artist-panel">
             <ProgressDial pct={completion.pct} />
           </div>

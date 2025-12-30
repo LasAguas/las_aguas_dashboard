@@ -545,7 +545,7 @@ export default function OnboardingPage() {
     {
       key: "tiktok",
       label: "TikTok",
-      href: "/api/tiktok/tiktok-auth-start.js",
+      href: "/pages/api/tiktok/tiktok-auth-start.js",
     },
     {
       key: "instagram",
@@ -555,7 +555,7 @@ export default function OnboardingPage() {
     {
       key: "youtube",
       label: "YouTube",
-      href: "/api/youtube/auth-start.js",
+      href: "/pages/api/youtube/auth-start.js",
     },
   ];
   
