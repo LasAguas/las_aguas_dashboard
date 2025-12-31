@@ -621,25 +621,26 @@ export default function InsightsAdminPage() {
           setTotalsByPostId(new Map());
         }
 
-        // Load notes for this artist
+        // Load notes for this artist (same shape as artist-side insights)
         try {
-          const { data: notesRows, error: notesErr } = await supabase
-            .from("artist_insights_notes")
-            .select("section_key, note")
+            const { data: notesRows, error: notesErr } = await supabase
+            .from("artist_insight_notes")
+            .select("section, note")
             .eq("artist_id", artistId);
-
-          if (notesErr) {
-            console.error("Supabase error (artist_insights_notes):", notesErr);
-          } else {
+        
+            if (notesErr) {
+            console.error("Supabase error (artist_insight_notes):", notesErr);
+            } else {
             const map = {};
             (notesRows || []).forEach((r) => {
-              map[r.section_key] = r.note || "";
+                map[r.section] = r.note || "";
             });
             setNotesBySection(map);
-          }
+            }
         } catch (e) {
-          console.error("Failed to load insight notes", e);
+            console.error("Failed to load insight notes", e);
         }
+  
       } catch (e) {
         console.error(e);
         setErr(e?.message || "Failed to load insights.");
@@ -709,21 +710,40 @@ export default function InsightsAdminPage() {
   async function saveNote(sectionKey) {
     if (!artistId) return;
     const note = notesBySection[sectionKey] || "";
-
+  
     setSavingSections((prev) => ({ ...prev, [sectionKey]: true }));
     try {
-      const { error } = await supabase
-        .from("artist_insights_notes")
-        .upsert(
-          {
+      // First, see if a note already exists for this artist + section
+      const { data: existingRows, error: fetchErr } = await supabase
+        .from("artist_insight_notes")
+        .select("id")
+        .eq("artist_id", artistId)
+        .eq("section", sectionKey)
+        .limit(1);
+  
+      if (fetchErr) throw fetchErr;
+  
+      if (existingRows && existingRows.length > 0) {
+        // Update existing row
+        const id = existingRows[0].id;
+        const { error: updateErr } = await supabase
+          .from("artist_insight_notes")
+          .update({ note })
+          .eq("id", id);
+  
+        if (updateErr) throw updateErr;
+      } else {
+        // Insert a new row
+        const { error: insertErr } = await supabase
+          .from("artist_insight_notes")
+          .insert({
             artist_id: artistId,
-            section_key: sectionKey,
+            section: sectionKey,
             note,
-          },
-          { onConflict: "artist_id,section_key" }
-        );
-
-      if (error) throw error;
+          });
+  
+        if (insertErr) throw insertErr;
+      }
     } catch (e) {
       console.error("Failed to save insight note", e);
       alert(e?.message || "Failed to save note.");
@@ -731,6 +751,7 @@ export default function InsightsAdminPage() {
       setSavingSections((prev) => ({ ...prev, [sectionKey]: false }));
     }
   }
+  
 
   return (
     <ArtistLayout title="Insights (admin)">

@@ -173,7 +173,7 @@ export default function ArtistNavAdmin({ forceDesktopOpen = false, desktopOpen, 
           ].join(" ")}
         >
           <div className="p-3 flex items-center justify-between">
-            <div className={(forceDesktopOpen || desktopOpen) ? "text-sm font-semibold" : "sr-only"}>Artist</div>
+            <div className={(forceDesktopOpen || desktopOpen) ? "text-sm font-semibold" : "sr-only"}>Admin View</div>
             {!forceDesktopOpen && (
               <button
                 onClick={() => setDesktopOpen?.((v) => !v)}
