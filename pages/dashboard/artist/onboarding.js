@@ -212,6 +212,12 @@ export default function OnboardingPage() {
   const [epkPath, setEpkPath] = useState("");
   const [moodboardPath, setMoodboardPath] = useState("");
 
+  // pending PDFs + saving state for EPK / mood board
+  const [pendingEpkFile, setPendingEpkFile] = useState(null);
+  const [pendingMoodboardFile, setPendingMoodboardFile] = useState(null);
+  const [savingEpk, setSavingEpk] = useState(false);
+  const [savingMoodboard, setSavingMoodboard] = useState(false);
+
   // onboarding tables
   const [photoAssets, setPhotoAssets] = useState([]);
   const [oldPosts, setOldPosts] = useState([]);
@@ -390,6 +396,48 @@ export default function OnboardingPage() {
     });
   }
 
+  async function handleSaveEpk() {
+    if (!artistId) {
+      alert("Missing artist id.");
+      return;
+    }
+    if (!pendingEpkFile) {
+      alert("Please choose an EPK PDF first.");
+      return;
+    }
+    try {
+      setSavingEpk(true);
+      await uploadPdf("epk", pendingEpkFile);
+      setPendingEpkFile(null);
+    } catch (e) {
+      console.error("Failed to save EPK PDF", e);
+      alert(e?.message || "Failed to save EPK PDF.");
+    } finally {
+      setSavingEpk(false);
+    }
+  }
+
+  async function handleSaveMoodboard() {
+    if (!artistId) {
+      alert("Missing artist id.");
+      return;
+    }
+    if (!pendingMoodboardFile) {
+      alert("Please choose a mood board PDF first.");
+      return;
+    }
+    try {
+      setSavingMoodboard(true);
+      await uploadPdf("moodboard", pendingMoodboardFile);
+      setPendingMoodboardFile(null);
+    } catch (e) {
+      console.error("Failed to save mood board PDF", e);
+      alert(e?.message || "Failed to save mood board PDF.");
+    } finally {
+      setSavingMoodboard(false);
+    }
+  }
+
   async function uploadManyWithDbRow({ folder, files, limitGB, table }) {
     const { data: userData } = await supabase.auth.getUser();
     const { data: sessionData } = await supabase.auth.getSession();
@@ -545,7 +593,7 @@ export default function OnboardingPage() {
     {
       key: "tiktok",
       label: "TikTok",
-      href: "/pages/api/tiktok/tiktok-auth-start.js",
+      href: "/api/tiktok/tiktok-auth-start.js",
     },
     {
       key: "instagram",
@@ -555,7 +603,7 @@ export default function OnboardingPage() {
     {
       key: "youtube",
       label: "YouTube",
-      href: "/pages/api/youtube/auth-start.js",
+      href: "/api/youtube/auth-start.js",
     },
   ];
   
@@ -1341,32 +1389,89 @@ if (s.key === "music") {
             // 6) EPK + moodboard PDFs
             if (s.key === "epk") {
               return (
-                <Collapsible key={s.key} title="EPK and mood board" completed={Boolean(s.done)} defaultOpen={!s.done}>
+                <Collapsible
+                  key={s.key}
+                  title="EPK and mood board"
+                  completed={Boolean(s.done)}
+                  defaultOpen={!s.done}
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* EPK */}
                     <div className="artist-panel-secondary p-4">
                       <div className="text-sm font-semibold mb-2">EPK (PDF)</div>
-                      <input type="file" accept="application/pdf" onChange={(e) => uploadPdf("epk", e.target.files?.[0])} />
-                      {epkPath && (
-                        <a className="mt-2 inline-block text-sm underline" href={publicOnboardingUrl(epkPath)} target="_blank" rel="noreferrer">
-                          open epk
-                        </a>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) => setPendingEpkFile(e.target.files?.[0] || null)}
+                      />
+                      {pendingEpkFile && (
+                        <div className="mt-1 text-[11px] text-gray-600">
+                          Selected: {pendingEpkFile.name}
+                        </div>
                       )}
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveEpk}
+                          disabled={!pendingEpkFile || savingEpk}
+                          className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                        >
+                          {savingEpk ? "Saving…" : "Save EPK"}
+                        </button>
+                        {epkPath && (
+                          <a
+                            className="text-xs underline"
+                            href={publicOnboardingUrl(epkPath)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            open epk
+                          </a>
+                        )}
+                      </div>
                     </div>
-
+            
+                    {/* Mood board */}
                     <div className="artist-panel-secondary p-4">
                       <div className="text-sm font-semibold mb-2">Mood board (PDF)</div>
-                      <input type="file" accept="application/pdf" onChange={(e) => uploadPdf("moodboard", e.target.files?.[0])} />
-                      {moodboardPath && (
-                        <a className="mt-2 inline-block text-sm underline" href={publicOnboardingUrl(moodboardPath)} target="_blank" rel="noreferrer">
-                          open mood board
-                        </a>
+                      <input
+                        type="file"
+                        accept="application/pdf"
+                        onChange={(e) =>
+                          setPendingMoodboardFile(e.target.files?.[0] || null)
+                        }
+                      />
+                      {pendingMoodboardFile && (
+                        <div className="mt-1 text-[11px] text-gray-600">
+                          Selected: {pendingMoodboardFile.name}
+                        </div>
                       )}
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveMoodboard}
+                          disabled={!pendingMoodboardFile || savingMoodboard}
+                          className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                        >
+                          {savingMoodboard ? "Saving…" : "Save mood board"}
+                        </button>
+                        {moodboardPath && (
+                          <a
+                            className="text-xs underline"
+                            href={publicOnboardingUrl(moodboardPath)}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            open mood board
+                          </a>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Collapsible>
               );
             }
-
+            
             // 7) Press & Shows (separate lists)
             if (s.key === "press") {
               return (

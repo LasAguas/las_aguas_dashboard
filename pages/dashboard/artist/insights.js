@@ -60,7 +60,6 @@ function performanceScoreTotals(t) {
   return views + 10 * comments + 3 * likes + 5 * shares + 5 * saves;
 }
 
-// merge per-platform series by day (YYYY-MM-DD)
 function buildMergedSeriesByDay(platformSnaps, metricKey) {
   const byDay = new Map();
 
@@ -77,11 +76,60 @@ function buildMergedSeriesByDay(platformSnaps, metricKey) {
     });
   };
 
+  // fill per-platform values into byDay
   ingest("instagram", platformSnaps.instagram);
   ingest("tiktok", platformSnaps.tiktok);
   ingest("youtube", platformSnaps.youtube);
 
-  return Array.from(byDay.values()).sort((a, b) => (a.t > b.t ? 1 : -1));
+  // turn the map into a time-ordered array
+  const series = Array.from(byDay.values()).sort((a, b) =>
+    a.t > b.t ? 1 : -1
+  );
+
+  // ----- backfill late-starting platforms with 0 at earliest day -----
+  const platformKeys = ["instagram", "tiktok", "youtube"];
+
+  // find the earliest index where ANY platform has data
+  let globalFirstIdx = null;
+  for (let i = 0; i < series.length; i++) {
+    const row = series[i];
+    const hasAny = platformKeys.some((k) => row[k] != null);
+    if (hasAny) {
+      globalFirstIdx = i;
+      break;
+    }
+  }
+
+  if (globalFirstIdx != null) {
+    for (const key of platformKeys) {
+      // first index where this platform has data
+      let firstIdx = -1;
+      for (let i = 0; i < series.length; i++) {
+        if (series[i][key] != null) {
+          firstIdx = i;
+          break;
+        }
+      }
+
+      // no data at all for this platform → skip
+      if (firstIdx === -1) continue;
+
+      // if this platform already starts on the earliest day, nothing to do
+      if (firstIdx <= globalFirstIdx) continue;
+
+      // otherwise, backfill a 0 at the earliest day so the line runs from 0
+      // on that day up to its first real datapoint
+      const baseRow = series[globalFirstIdx];
+
+      // clone row if you want to avoid mutating map values elsewhere
+      // but this function owns the objects, so mutation is fine
+      if (baseRow[key] == null) {
+        baseRow[key] = 0;
+      }
+    }
+  }
+
+  return series;
 }
 
 function seriesHasVariance(series, keys) {
@@ -352,9 +400,28 @@ function PostModal({ open, onClose, post, platformSnapsByPostId }) {
                           <XAxis dataKey="t" />
                           <YAxis />
                           <Tooltip />
-                          <Line type="monotone" dataKey="youtube" dot={false} stroke="#ff0000" />
-                          <Line type="monotone" dataKey="instagram" dot={false} stroke="#ffd400" />
-                          <Line type="monotone" dataKey="tiktok" dot={false} stroke="#8000ff" />
+                          <Line
+                            type="monotone"
+                            dataKey="youtube"
+                            dot={false}
+                            stroke="#ff0000"
+                            connectNulls={true}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="instagram"
+                            dot={false}
+                            stroke="#ffd400"
+                            connectNulls={true}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="tiktok"
+                            dot={false}
+                            stroke="#8000ff"
+                            connectNulls={true}
+                          />
+
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
