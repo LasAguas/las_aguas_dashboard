@@ -38,7 +38,7 @@ export default function LoginPage() {
       
             // 🎯 Redirect based on role
             if (profile.role === "artist") {
-              router.push("/dashboard/artist-dashboard")
+              router.push("/dashboard/artist/home")
             } else if (profile.role === "las_aguas") {
               router.push("/dashboard/menu")
             } else {
