@@ -862,7 +862,7 @@ export default function OnboardingPage() {
       { key: "funding", title: "Funding checklist", done: fundingDone },
       { key: "epk", title: "EPK and mood board", done: epkMoodDone },
       { key: "press", title: "Press and Shows", done: pressShowsDone },
-      { key: "old", title: "Old posts that didn’t make it to IG", done: oldPostsDone },
+      { key: "old", title: "Old posts that didn’t make it to YouTube", done: oldPostsDone },
       { key: "web", title: "Website References", done: webDone },
     ];
 
@@ -1638,7 +1638,7 @@ export default function OnboardingPage() {
             // 8) Old posts upload (videos, per-file description)
             if (s.key === "old") {
               return (
-                <Collapsible key={s.key} title="Old posts that didn’t make it to IG" completed={Boolean(s.done)} defaultOpen={!s.done}>
+                <Collapsible key={s.key} title="Old posts that didn’t make it to YouTube" completed={Boolean(s.done)} defaultOpen={!s.done}>
                   <div className="text-sm text-gray-700 mb-3">
                     please upload any posts that you made and posted to one platform (e.g. Instagram) but not others (e.g. TikTok or YouTube Shorts)
                   </div>
