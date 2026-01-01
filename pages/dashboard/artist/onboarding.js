@@ -819,7 +819,7 @@ export default function OnboardingPage() {
                     defaultOpen={!s.done}
                 >
                     <div className="text-sm text-gray-700 mb-3">
-                    Connect your TikTok, YouTube, and Instagram accounts so stats can load correctly.
+                    Connect your TikTok and Instagram accounts so stats can load correctly. Note: YouTube May Not Work Yet
                     </div>
             
                     {/* Always show all 3 */}
