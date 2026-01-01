@@ -290,6 +290,12 @@ export default function OnboardingPage() {
 
         if (aErr) throw aErr;
 
+        // DEBUG: Log the entire artist object
+        console.log("[DEBUG] Full artist data from DB:", artist);
+        console.log("[DEBUG] Artist ID:", artistId);
+        console.log("[DEBUG] EPK path raw value:", artist?.epk_pdf_path, "type:", typeof artist?.epk_pdf_path);
+        console.log("[DEBUG] Moodboard path raw value:", artist?.moodboard_pdf_path, "type:", typeof artist?.moodboard_pdf_path);
+
         setBio(artist?.bio || "");
         setPreferredPronouns(artist?.preferred_pronouns || "");
         setYoutubeVerified(Boolean(artist?.youtube_verification_complete));
@@ -300,8 +306,15 @@ export default function OnboardingPage() {
           gvl: Boolean(artist?.funding_gvl_membership),
           labelOrPublisher: Boolean(artist?.funding_label_or_publisher_contract),
         });
-        setEpkPath(artist?.epk_pdf_path || "");
-        setMoodboardPath(artist?.moodboard_pdf_path || "");
+        
+        // Handle EPK/Moodboard paths - only use truthy values
+        const epkValue = artist?.epk_pdf_path;
+        const moodValue = artist?.moodboard_pdf_path;
+        setEpkPath(epkValue && typeof epkValue === 'string' && epkValue.trim() ? epkValue.trim() : "");
+        setMoodboardPath(moodValue && typeof moodValue === 'string' && moodValue.trim() ? moodValue.trim() : "");
+        
+        console.log("[DEBUG] Loaded EPK path:", epkValue, "-> setState:", epkValue && typeof epkValue === 'string' && epkValue.trim() ? epkValue.trim() : "");
+        console.log("[DEBUG] Loaded Moodboard path:", moodValue, "-> setState:", moodValue && typeof moodValue === 'string' && moodValue.trim() ? moodValue.trim() : "");
 
         const [
           photosRes,
@@ -361,8 +374,11 @@ export default function OnboardingPage() {
   }, []);
 
   async function saveArtistFields(patch = {}) {
-    if (!artistId) return;
-
+    if (!artistId) {
+      console.error("[saveArtistFields] No artistId!");
+      return;
+    }
+  
     const merged = {
       bio,
       preferred_pronouns: preferredPronouns,
@@ -376,24 +392,89 @@ export default function OnboardingPage() {
       moodboard_pdf_path: moodboardPath,
       ...patch,
     };
-
-    const { error } = await supabase.from("artists").update(merged).eq("id", artistId);
-    if (error) alert(error.message);
+  
+    console.log("[saveArtistFields] Attempting update for artist ID:", artistId);
+    console.log("[saveArtistFields] Update payload:", merged);
+  
+    // First, try the update
+    const { error: updateError, count } = await supabase
+      .from("artists")
+      .update(merged)
+      .eq("id", artistId);
+  
+    console.log("[saveArtistFields] Update result:", { updateError, count });
+  
+    if (updateError) {
+      console.error("[saveArtistFields] Update failed:", updateError);
+      alert(`Update failed: ${updateError.message}`);
+      return;
+    }
+  
+    // Then verify it was saved by re-fetching
+    const { data: verifyData, error: verifyError } = await supabase
+      .from("artists")
+      .select("epk_pdf_path, moodboard_pdf_path")
+      .eq("id", artistId)
+      .single();
+  
+    console.log("[saveArtistFields] Verification query result:", { verifyData, verifyError });
+  
+    if (verifyError) {
+      console.error("[saveArtistFields] Verification failed:", verifyError);
+    } else {
+      console.log("[saveArtistFields] Confirmed data in DB:", verifyData);
+      
+      // Update local state to match what's actually in the DB
+      if (verifyData.epk_pdf_path !== undefined) {
+        setEpkPath(verifyData.epk_pdf_path || "");
+      }
+      if (verifyData.moodboard_pdf_path !== undefined) {
+        setMoodboardPath(verifyData.moodboard_pdf_path || "");
+      }
+    }
   }
 
+  const PDF_BUCKET = "artist-onboarding";
   async function uploadPdf(kind, file) {
     if (!artistId || !file) return;
-    const targetPath = `${artistId}/${kind}.pdf`;
-    const { error } = await uploadFileToBucket({ path: targetPath, file, upsert: true });
-    if (error) return alert(error.message);
-
-    if (kind === "epk") setEpkPath(targetPath);
-    if (kind === "moodboard") setMoodboardPath(targetPath);
-
-    await saveArtistFields({
-      epk_pdf_path: kind === "epk" ? targetPath : epkPath,
-      moodboard_pdf_path: kind === "moodboard" ? targetPath : moodboardPath,
-    });
+  
+    // store just "4/epk.pdf" / "4/moodboard.pdf" in DB
+    const filePath = `${artistId}/${kind}.pdf`;
+    
+    console.log("[uploadPdf] Uploading:", { kind, filePath, artistId });
+  
+    const { error } = await supabase
+      .storage
+      .from(PDF_BUCKET)
+      .upload(filePath, file, { upsert: true });
+  
+    if (error) {
+      console.error("uploadPdf error", error);
+      alert(error.message);
+      return;
+    }
+    
+    console.log("[uploadPdf] Upload successful, updating DB with path:", filePath);
+  
+    // update artist row
+    const updatePayload = {
+      epk_pdf_path: kind === "epk" ? filePath : epkPath,
+      moodboard_pdf_path: kind === "moodboard" ? filePath : moodboardPath,
+    };
+    
+    console.log("[uploadPdf] Saving to DB:", updatePayload);
+    
+    await saveArtistFields(updatePayload);
+  
+    // update local state
+    if (kind === "epk") {
+      console.log("[uploadPdf] Setting epkPath state to:", filePath);
+      setEpkPath(filePath);
+    }
+    if (kind === "moodboard") {
+      console.log("[uploadPdf] Setting moodboardPath state to:", filePath);
+      setMoodboardPath(filePath);
+    }
   }
 
   async function handleSaveEpk() {
@@ -1101,216 +1182,216 @@ export default function OnboardingPage() {
               );
             }
 
-// 3) Music (release notes + one audio per song + lyrics in audio_library.lyrics)
-if (s.key === "music") {
-    return (
-    <Collapsible key={s.key} title="Music" completed={Boolean(s.done)} defaultOpen={!s.done}>
-        <div className="text-sm text-[#33296b] mb-3">
-        View your releases and songs. Add a note per release, upload one <b>mp3 or wav</b> per song, and add lyrics.
-        </div>
-
-        {releases.map(([release, tracks]) => {
-        const noteRow = releaseNotes.find((n) => n.release === release);
-
-        // completion for header display
-        const total = tracks.length || 0;
-        const audioDone = tracks.filter((t) => hasAnyAudioFile(t.file_path)).length;
-        const lyricsDone = tracks.filter((t) => typeof t.lyrics === "string" && t.lyrics.trim().length > 0).length;
-
-        return (
-            <details key={release} open className="mb-4 artist-panel-secondary p-4 rounded-2xl overflow-hidden">
-            <summary className="cursor-pointer list-none select-none">
-                <div className="flex items-start justify-between gap-3 min-w-0">
-                <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#33296b] truncate">
-                    {release || "Untitled release"}
+            // 3) Music (release notes + one audio per song + lyrics in audio_library.lyrics)
+            if (s.key === "music") {
+                return (
+                <Collapsible key={s.key} title="Music" completed={Boolean(s.done)} defaultOpen={!s.done}>
+                    <div className="text-sm text-[#33296b] mb-3">
+                    View your releases and songs. Add a note per release, upload one <b>mp3 or wav</b> per song, and add lyrics.
                     </div>
-                    <div className="text-xs text-[#33296b]/80">
-                    audio: {audioDone}/{total} • lyrics: {lyricsDone}/{total}
-                    </div>
-                </div>
 
-                {/*<div className="shrink-0 text-xs text-[#33296b]/70">▾</div>*/}
-                </div>
-            </summary>
+                    {releases.map(([release, tracks]) => {
+                    const noteRow = releaseNotes.find((n) => n.release === release);
 
-            <div className="mt-3">
-                {/* Release note */}
-                <div className="flex items-start justify-between gap-3 mb-2 min-w-0">
-                <div className="text-xs font-semibold text-[#33296b]">Release note</div>
-
-                {!noteRow && (
-                    <button
-                    type="button"
-                    onClick={async () => {
-                        if (!artistId) return;
-                        const { data, error } = await supabase
-                        .from("artist_release_notes")
-                        .insert({ artist_id: artistId, release, note: "" })
-                        .select("*")
-                        .single();
-
-                        if (error) return alert(error.message);
-                        setReleaseNotes((prev) => [...prev, data]);
-                    }}
-                    className="text-xs rounded-lg px-2 py-1 bg-[#e6e7eb] text-[#33296b] font-semibold"
-                    >
-                    add release note
-                    </button>
-                )}
-                </div>
-
-                {noteRow && (
-                <div className="mb-3">
-                    <textarea
-                    value={noteRow.note || ""}
-                    onChange={(e) => {
-                        const next = e.target.value;
-                        setReleaseNotes((prev) =>
-                        prev.map((n) => (n.id === noteRow.id ? { ...n, note: next } : n))
-                        );
-                    }}
-                    rows={3}
-                    className="w-full rounded-xl border border-black/10 p-3 text-sm outline-none text-[#33296b] bg-white"
-                    placeholder="Write something about this release…"
-                    />
-                    <button
-                    type="button"
-                    onClick={() =>
-                        updateRow("artist_release_notes", noteRow.id, { note: noteRow.note || "" }, setReleaseNotes)
-                    }
-                    className="mt-2 rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
-                    >
-                    save release note
-                    </button>
-                </div>
-                )}
-
-                {/* Tracks */}
-                <div className="space-y-2">
-                {tracks.map((t) => {
-                    const title = t.title || t.song_name || `Song ${t.id}`;
-                    const hasAudio = hasAnyAudioFile(t.file_path);
-                    const hasLyrics = typeof t.lyrics === "string" && t.lyrics.trim().length > 0;
+                    // completion for header display
+                    const total = tracks.length || 0;
+                    const audioDone = tracks.filter((t) => hasAnyAudioFile(t.file_path)).length;
+                    const lyricsDone = tracks.filter((t) => typeof t.lyrics === "string" && t.lyrics.trim().length > 0).length;
 
                     return (
-                    <details key={t.id} className="bg-white rounded-2xl p-3 overflow-hidden">
+                        <details key={release} open className="mb-4 artist-panel-secondary p-4 rounded-2xl overflow-hidden">
                         <summary className="cursor-pointer list-none select-none">
-                        <div className="flex items-start justify-between gap-3 min-w-0">
+                            <div className="flex items-start justify-between gap-3 min-w-0">
                             <div className="min-w-0">
-                            <div className="text-sm font-semibold text-[#33296b] truncate">{title}</div>
-                            <div className="text-xs text-[#33296b]/80">
-                                audio: {hasAudio ? "✅" : "❌"} • lyrics: {hasLyrics ? "✅" : "❌"}
+                                <div className="text-sm font-semibold text-[#33296b] truncate">
+                                {release || "Untitled release"}
+                                </div>
+                                <div className="text-xs text-[#33296b]/80">
+                                audio: {audioDone}/{total} • lyrics: {lyricsDone}/{total}
+                                </div>
                             </div>
+
+                            {/*<div className="shrink-0 text-xs text-[#33296b]/70">▾</div>*/}
                             </div>
-                            {/*<div className="shrink-0 text-xs text-[#33296b]/70">▸</div>*/}
-                        </div>
                         </summary>
 
                         <div className="mt-3">
-                        <div className="flex flex-wrap gap-2">
-                            <label className="rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold cursor-pointer">
-                            {uploadingSongId === t.id ? "Uploading…" : "upload audio"}
-                            <input
-                                type="file"
-                                accept="audio/*,.mp3,.wav"
-                                className="hidden"
-                                disabled={uploadingSongId === t.id}
-                                onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file || !artistId) return;
+                            {/* Release note */}
+                            <div className="flex items-start justify-between gap-3 mb-2 min-w-0">
+                            <div className="text-xs font-semibold text-[#33296b]">Release note</div>
 
-                                const lower = (file.name || "").toLowerCase();
-                                if (!lower.endsWith(".mp3") && !lower.endsWith(".wav")) {
-                                    alert("Please upload an .mp3 or .wav file for this song.");
-                                    e.target.value = "";
-                                    return;
-                                }
+                            {!noteRow && (
+                                <button
+                                type="button"
+                                onClick={async () => {
+                                    if (!artistId) return;
+                                    const { data, error } = await supabase
+                                    .from("artist_release_notes")
+                                    .insert({ artist_id: artistId, release, note: "" })
+                                    .select("*")
+                                    .single();
 
-                                setUploadingSongId(t.id);
-                                try {
-                                    const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-                                    const path = `audio-library/${artistId}/${Date.now()}-${safeName}`;
-
-                                    const { error: upErr } = await supabase.storage
-                                    .from("post-variations")
-                                    .upload(path, file, { upsert: true });
-
-                                    if (upErr) throw upErr;
-
-                                    const { error: dbErr } = await supabase
-                                    .from("audio_library")
-                                    .update({ file_path: path })
-                                    .eq("id", t.id);
-
-                                    if (dbErr) throw dbErr;
-
-                                    setAudioRows((prev) =>
-                                    prev.map((r) => (r.id === t.id ? { ...r, file_path: path } : r))
-                                    );
-                                } catch (err) {
-                                    console.error(err);
-                                    alert(err?.message || "Upload failed");
-                                } finally {
-                                    setUploadingSongId(null);
-                                    e.target.value = "";
-                                }
+                                    if (error) return alert(error.message);
+                                    setReleaseNotes((prev) => [...prev, data]);
                                 }}
-                            />
-                            </label>
-
-                            {t.file_path && (
-                            <a
-                                href={supabase.storage.from("post-variations").getPublicUrl(t.file_path).data.publicUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
-                            >
-                                open audio
-                            </a>
+                                className="text-xs rounded-lg px-2 py-1 bg-[#e6e7eb] text-[#33296b] font-semibold"
+                                >
+                                add release note
+                                </button>
                             )}
-                        </div>
+                            </div>
 
-                        <div className="mt-3">
-                            <div className="text-xs font-semibold mb-1 text-[#33296b]">Lyrics</div>
-                            <textarea
-                            value={t.lyrics || ""}
-                            onChange={(e) => {
-                                const next = e.target.value;
-                                setAudioRows((prev) => prev.map((r) => (r.id === t.id ? { ...r, lyrics: next } : r)));
-                            }}
-                            rows={5}
-                            className="w-full rounded-xl border border-black/10 p-3 text-sm outline-none text-[#33296b] bg-white"
-                            placeholder="Paste lyrics here…"
-                            />
-                            <button
-                            type="button"
-                            onClick={async () => {
-                                const { error: dbErr } = await supabase
-                                .from("audio_library")
-                                .update({ lyrics: (t.lyrics || "").trim() })
-                                .eq("id", t.id);
-                                if (dbErr) alert(dbErr.message);
-                            }}
-                            className="mt-2 rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
-                            >
-                            save lyrics
-                            </button>
+                            {noteRow && (
+                            <div className="mb-3">
+                                <textarea
+                                value={noteRow.note || ""}
+                                onChange={(e) => {
+                                    const next = e.target.value;
+                                    setReleaseNotes((prev) =>
+                                    prev.map((n) => (n.id === noteRow.id ? { ...n, note: next } : n))
+                                    );
+                                }}
+                                rows={3}
+                                className="w-full rounded-xl border border-black/10 p-3 text-sm outline-none text-[#33296b] bg-white"
+                                placeholder="Write something about this release…"
+                                />
+                                <button
+                                type="button"
+                                onClick={() =>
+                                    updateRow("artist_release_notes", noteRow.id, { note: noteRow.note || "" }, setReleaseNotes)
+                                }
+                                className="mt-2 rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
+                                >
+                                save release note
+                                </button>
+                            </div>
+                            )}
+
+                            {/* Tracks */}
+                            <div className="space-y-2">
+                            {tracks.map((t) => {
+                                const title = t.title || t.song_name || `Song ${t.id}`;
+                                const hasAudio = hasAnyAudioFile(t.file_path);
+                                const hasLyrics = typeof t.lyrics === "string" && t.lyrics.trim().length > 0;
+
+                                return (
+                                <details key={t.id} className="bg-white rounded-2xl p-3 overflow-hidden">
+                                    <summary className="cursor-pointer list-none select-none">
+                                    <div className="flex items-start justify-between gap-3 min-w-0">
+                                        <div className="min-w-0">
+                                        <div className="text-sm font-semibold text-[#33296b] truncate">{title}</div>
+                                        <div className="text-xs text-[#33296b]/80">
+                                            audio: {hasAudio ? "✅" : "❌"} • lyrics: {hasLyrics ? "✅" : "❌"}
+                                        </div>
+                                        </div>
+                                        {/*<div className="shrink-0 text-xs text-[#33296b]/70">▸</div>*/}
+                                    </div>
+                                    </summary>
+
+                                    <div className="mt-3">
+                                    <div className="flex flex-wrap gap-2">
+                                        <label className="rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold cursor-pointer">
+                                        {uploadingSongId === t.id ? "Uploading…" : "upload audio"}
+                                        <input
+                                            type="file"
+                                            accept="audio/*,.mp3,.wav"
+                                            className="hidden"
+                                            disabled={uploadingSongId === t.id}
+                                            onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file || !artistId) return;
+
+                                            const lower = (file.name || "").toLowerCase();
+                                            if (!lower.endsWith(".mp3") && !lower.endsWith(".wav")) {
+                                                alert("Please upload an .mp3 or .wav file for this song.");
+                                                e.target.value = "";
+                                                return;
+                                            }
+
+                                            setUploadingSongId(t.id);
+                                            try {
+                                                const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+                                                const path = `audio-library/${artistId}/${Date.now()}-${safeName}`;
+
+                                                const { error: upErr } = await supabase.storage
+                                                .from("post-variations")
+                                                .upload(path, file, { upsert: true });
+
+                                                if (upErr) throw upErr;
+
+                                                const { error: dbErr } = await supabase
+                                                .from("audio_library")
+                                                .update({ file_path: path })
+                                                .eq("id", t.id);
+
+                                                if (dbErr) throw dbErr;
+
+                                                setAudioRows((prev) =>
+                                                prev.map((r) => (r.id === t.id ? { ...r, file_path: path } : r))
+                                                );
+                                            } catch (err) {
+                                                console.error(err);
+                                                alert(err?.message || "Upload failed");
+                                            } finally {
+                                                setUploadingSongId(null);
+                                                e.target.value = "";
+                                            }
+                                            }}
+                                        />
+                                        </label>
+
+                                        {t.file_path && (
+                                        <a
+                                            href={supabase.storage.from("post-variations").getPublicUrl(t.file_path).data.publicUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
+                                        >
+                                            open audio
+                                        </a>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-3">
+                                        <div className="text-xs font-semibold mb-1 text-[#33296b]">Lyrics</div>
+                                        <textarea
+                                        value={t.lyrics || ""}
+                                        onChange={(e) => {
+                                            const next = e.target.value;
+                                            setAudioRows((prev) => prev.map((r) => (r.id === t.id ? { ...r, lyrics: next } : r)));
+                                        }}
+                                        rows={5}
+                                        className="w-full rounded-xl border border-black/10 p-3 text-sm outline-none text-[#33296b] bg-white"
+                                        placeholder="Paste lyrics here…"
+                                        />
+                                        <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const { error: dbErr } = await supabase
+                                            .from("audio_library")
+                                            .update({ lyrics: (t.lyrics || "").trim() })
+                                            .eq("id", t.id);
+                                            if (dbErr) alert(dbErr.message);
+                                        }}
+                                        className="mt-2 rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold"
+                                        >
+                                        save lyrics
+                                        </button>
+                                    </div>
+                                    </div>
+                                </details>
+                                );
+                            })}
+                            </div>
                         </div>
-                        </div>
-                    </details>
+                        </details>
                     );
-                })}
-                </div>
-            </div>
-            </details>
-        );
-        })}
+                    })}
 
-        {audioRows.length === 0 && <div className="text-sm text-[#33296b]">No songs found yet.</div>}
-    </Collapsible>
-    );
-}
+                    {audioRows.length === 0 && <div className="text-sm text-[#33296b]">No songs found yet.</div>}
+                </Collapsible>
+                );
+          }
   
             // 4) YouTube verification
             if (s.key === "youtube") {
@@ -1386,8 +1467,29 @@ if (s.key === "music") {
               );
             }
 
-            // 6) EPK + moodboard PDFs
+            // EPK + moodboard PDFs
             if (s.key === "epk") {
+              // derive public URLs directly from Supabase Storage
+              console.log("epkPath from state:", epkPath);
+              console.log("moodboardPath from state:", moodboardPath);
+
+              const epkPublicUrl =
+                epkPath && epkPath.trim()
+                  ? supabase.storage
+                      .from("artist-onboarding")
+                      .getPublicUrl(epkPath.trim()).data.publicUrl
+                  : "";
+
+              const moodboardPublicUrl =
+                moodboardPath && moodboardPath.trim()
+                  ? supabase.storage
+                      .from("artist-onboarding")
+                      .getPublicUrl(moodboardPath.trim()).data.publicUrl
+                  : "";
+
+              console.log("epkPublicUrl generated:", epkPublicUrl);
+              console.log("moodboardPublicUrl generated:", moodboardPublicUrl);
+
               return (
                 <Collapsible
                   key={s.key}
@@ -1418,10 +1520,10 @@ if (s.key === "music") {
                         >
                           {savingEpk ? "Saving…" : "Save EPK"}
                         </button>
-                        {epkPath && (
+                        {epkPublicUrl && (
                           <a
                             className="text-xs underline"
-                            href={publicOnboardingUrl(epkPath)}
+                            href={epkPublicUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -1430,7 +1532,7 @@ if (s.key === "music") {
                         )}
                       </div>
                     </div>
-            
+
                     {/* Mood board */}
                     <div className="artist-panel-secondary p-4">
                       <div className="text-sm font-semibold mb-2">Mood board (PDF)</div>
@@ -1455,10 +1557,10 @@ if (s.key === "music") {
                         >
                           {savingMoodboard ? "Saving…" : "Save mood board"}
                         </button>
-                        {moodboardPath && (
+                        {moodboardPublicUrl && (
                           <a
                             className="text-xs underline"
-                            href={publicOnboardingUrl(moodboardPath)}
+                            href={moodboardPublicUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -1471,7 +1573,7 @@ if (s.key === "music") {
                 </Collapsible>
               );
             }
-            
+
             // 7) Press & Shows (separate lists)
             if (s.key === "press") {
               return (
