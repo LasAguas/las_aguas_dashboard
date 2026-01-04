@@ -230,7 +230,7 @@ function AddPostModal({ artistId, defaultDate, onClose, onPostAdded }) {
 }
 
 // Media Player Function
-function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, onPlatformsUpdated }) {
+function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, onPlatformsUpdated, onGreenlightUpdated, }) {
   const [mediaUrls, setMediaUrls] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -247,6 +247,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   const audioRef = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
+
+   // ✅ NEW: greenlight local state + saver
+   const [localGreenlight, setLocalGreenlight] = useState(!!variation?.greenlight);
+   const [savingGreenlight, setSavingGreenlight] = useState(false);
 
   // 🔊 snippet state for THIS player
   const [snippetStart, setSnippetStart] = useState(
@@ -433,6 +437,31 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     if (typeof onRefreshPost === "function") onRefreshPost(variation.id, next);
   }
 
+  async function toggleGreenlight() {
+    if (!variation || savingGreenlight) return;
+    setSavingGreenlight(true);
+    const next = !localGreenlight;
+
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ greenlight: next })
+      .eq("id", variation.id);
+
+    setSavingGreenlight(false);
+
+    if (error) {
+      console.error(error);
+      alert("Could not update greenlight status.");
+      return;
+    }
+
+    setLocalGreenlight(next);
+    variation.greenlight = next;
+
+    if (typeof onGreenlightUpdated === "function") {
+      onGreenlightUpdated(variation.id, next);
+    }
+  }
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this variation?")) return;
     try {
@@ -772,28 +801,37 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
             )}
 
             {/* Action buttons */}
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
               <button
                 onClick={handleDelete}
-                className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors text-sm"
+                className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors text-sm min-w-[180px]"
               >
                 Delete Variation
               </button>
+
               <button
-                onClick={() =>
-                  onReplaceRequested && onReplaceRequested(variation)
-                }
-                className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors text-sm"
+                onClick={() => onReplaceRequested && onReplaceRequested(variation)}
+                className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors text-sm min-w-[180px]"
               >
                 Replace Variation
               </button>
+
+              {/* ✅ NEW: Greenlight toggle */}
+              <button
+                onClick={toggleGreenlight}
+                disabled={savingGreenlight}
+                className={`flex-1 py-2 rounded text-white transition-colors text-sm min-w-[180px] ${
+                  localGreenlight ? "bg-green-600 hover:bg-green-700" : "bg-gray-500 hover:bg-gray-600"
+                } ${savingGreenlight ? "opacity-70 cursor-not-allowed" : ""}`}
+              >
+                {savingGreenlight ? "Saving…" : localGreenlight ? "Greenlit ✅ (click to undo)" : "Not greenlit (click to greenlight)"}
+              </button>
+
               <button
                 onClick={toggleResolve}
                 disabled={saving || !variation.feedback}
-                className={`flex-1 py-2 rounded text-white transition-colors text-sm ${
-                  localResolved
-                    ? "bg-gray-500 hover:bg-gray-600"
-                    : "bg-green-600 hover:bg-green-700"
+                className={`flex-1 py-2 rounded text-white transition-colors text-sm min-w-[180px] ${
+                  localResolved ? "bg-gray-500 hover:bg-gray-600" : "bg-green-600 hover:bg-green-700"
                 } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
               >
                 {saving
@@ -803,6 +841,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                   : "Mark feedback as resolved"}
               </button>
             </div>
+
           </div>
         </div>
 
@@ -1734,6 +1773,24 @@ function handleVariationResolvedChange(variationId, nextResolved) {
   );
 }
 
+// ✅ NEW: keep greenlight state in sync for bubbles + modal list
+function handleVariationGreenlightChange(variationId, nextGreenlight) {
+  setAllVariations((prev) =>
+    prev.map((v) => (v.id === variationId ? { ...v, greenlight: nextGreenlight } : v))
+  );
+
+  setPostDetails((prev) =>
+    prev
+      ? {
+          ...prev,
+          variations: prev.variations.map((v) =>
+            v.id === variationId ? { ...v, greenlight: nextGreenlight } : v
+          ),
+        }
+      : prev
+  );
+}
+
 function handleVariationPlatformsChange(variationId, nextPlatforms) {
   setAllVariations((prev) =>
     prev.map((v) => (v.id === variationId ? { ...v, platforms: nextPlatforms } : v))
@@ -2035,14 +2092,16 @@ useEffect(() => {
 
     const { data: variations, error: varError } = await supabase
       .from("postvariations")
-      .select(`
-        id,
-        variation_post_date,
-        post_id,
-        platforms,
-        feedback,
-        feedback_resolved
-      `)
+        .select(`
+          id,
+          variation_post_date,
+          post_id,
+          platforms,
+          feedback,
+          feedback_resolved,
+          greenlight
+        `)
+  
       .in("post_id", postIds)
       .gte("variation_post_date", from)
       .lte("variation_post_date", to);
@@ -2291,18 +2350,20 @@ async function openPostDetails(postId) {
      // 2) Fetch variations for that post (removed caption_a and caption_b)
      const { data: variations, error: varErr } = await supabase
       .from('postvariations')
-      .select(`
-        id,
-        platforms,
-        test_version,
-        file_name,
-        length_seconds,
-        feedback,
-        feedback_resolved,
-        audio_file_name,
-        audio_start_seconds,
-        carousel_files
-      `)    
+        .select(`
+          id,
+          platforms,
+          test_version,
+          file_name,
+          length_seconds,
+          feedback,
+          feedback_resolved,
+          greenlight,
+          audio_file_name,
+          audio_start_seconds,
+          carousel_files
+        `)
+   
       .eq('post_id', postId)
       .order('test_version', { ascending: true })
       
@@ -2590,6 +2651,11 @@ return (
                                   !v.feedback_resolved
                               ).length;
 
+                              // ✅ Count variations that have been greenlit
+                              const greenlitCount = allVariations.filter(
+                                (v) => v.post_id === post.id && !!v.greenlight
+                              ).length;
+
                               const postPlatforms = Array.from(
                                 new Set(
                                   allVariations
@@ -2598,6 +2664,7 @@ return (
                                     .filter(Boolean)
                                 )
                               );
+
 
                               // 🟡 Missing links indicator: only for posts marked as 'posted' with no social URLs
                               const hasAnySocialLink =
@@ -2664,12 +2731,39 @@ return (
                                         )}
                                       </div>
 
-                                      {/* 🔴 Feedback notification bubble */}
-                                      {feedbackCount > 0 && (
-                                        <span className="absolute...ed-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                          {feedbackCount}
-                                        </span>
-                                      )}
+                                      {/* 🔔 Notification bubble (feedback / greenlight) */}
+                                      {(() => {
+                                        const hasFeedback = feedbackCount > 0;
+                                        const hasGreenlit = greenlitCount > 0;
+
+                                        const bgClass = hasFeedback
+                                          ? "bg-red-500"
+                                          : hasGreenlit
+                                          ? "bg-green-500"
+                                          : "bg-gray-400";
+
+                                        const label = hasFeedback ? String(feedbackCount) : "G";
+
+                                        return (
+                                          <span
+                                            className={[
+                                              "absolute top-0 right-0 translate-x-1/3 -translate-y-1/3",
+                                              bgClass,
+                                              "text-white text-[10px] rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center",
+                                            ].join(" ")}
+                                            title={
+                                              hasFeedback
+                                                ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                                : hasGreenlit
+                                                ? "Has greenlit variation(s)"
+                                                : "Not greenlit yet"
+                                            }
+                                          >
+                                            {label}
+                                          </span>
+                                        );
+                                      })()}
+
 
                                       {/* 🟡 Missing social links indicator (for posted posts) */}
                                       {showMissingLinksIndicator && (
@@ -2896,10 +2990,11 @@ return (
     >
       <div className="flex items-center justify-between text-sm">
         <div>
-          <span className="font-medium">
-            {(v.platforms && v.platforms.length ? v.platforms : ['—']).join(', ')}
-          </span>{' '}
-          — {v.test_version || "—"}<span className="font-medium">{v.platform}</span> — {v.test_version || "—"}
+        <span className="font-medium">{postDetails?.post?.post_name || "Post"}</span>{" "}
+          {v.test_version || "—"} —{" "}
+          <span className={v.greenlight ? "text-green-600 font-medium" : "text-gray-500"}>
+            {v.greenlight ? "Greenlit" : "Not Greenlit"}
+          </span>
         </div>
 
         {/* Download icon button */}
@@ -3028,9 +3123,10 @@ return (
           setReplaceVariation(v);
           setShowUploadModal(true);
         }}
-        onPlatformsUpdated={handleVariationPlatformsChange}  // NEW
+        onPlatformsUpdated={handleVariationPlatformsChange}
+        onGreenlightUpdated={handleVariationGreenlightChange} // ✅ NEW
       />
-)}
+    )}
 
 {showAddPostModal && (
   <AddPostModal
