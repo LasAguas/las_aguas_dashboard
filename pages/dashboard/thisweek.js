@@ -638,10 +638,22 @@ async function savePostName() {
         if (postIds.length) {
           const { data: vData } = await supabase
             .from("postvariations")
-            .select("*")
-            .in("post_id", postIds)
-            .gte("variation_post_date", from)
-            .lte("variation_post_date", to);
+            .select(`
+              id,
+              variation_post_date,
+              post_id,
+              platforms,
+              test_version,
+              file_name,
+              length_seconds,
+              feedback,
+              feedback_resolved,
+              greenlight,
+              audio_file_name,
+              audio_start_seconds,
+              carousel_files
+            `)
+            .in("post_id", postIds);
           varData = vData || [];
         }
         setPosts(postData || []);
@@ -658,10 +670,22 @@ async function savePostName() {
           if (postIds.length) {
             const { data: vData } = await supabase
               .from("postvariations")
-              .select("*")
-              .in("post_id", postIds)
-              .gte("variation_post_date", from)
-              .lte("variation_post_date", to);
+              .select(`
+                id,
+                variation_post_date,
+                post_id,
+                platforms,
+                test_version,
+                file_name,
+                length_seconds,
+                feedback,
+                feedback_resolved,
+                greenlight,
+                audio_file_name,
+                audio_start_seconds,
+                carousel_files
+              `)
+              .in("post_id", postIds);
             varData = vData || [];
           }
           setNextWeekPosts(postData || []);
@@ -704,10 +728,22 @@ async function savePostName() {
         if (postIds.length > 0) {
           const { data: vData } = await supabase
             .from("postvariations")
-            .select("*")
-            .in("post_id", postIds)
-            .gte("variation_post_date", from)
-            .lte("variation_post_date", to);
+            .select(`
+              id,
+              variation_post_date,
+              post_id,
+              platforms,
+              test_version,
+              file_name,
+              length_seconds,
+              feedback,
+              feedback_resolved,
+              greenlight,
+              audio_file_name,
+              audio_start_seconds,
+              carousel_files
+            `)
+            .in("post_id", postIds);
           varData = vData;
         }
   
@@ -739,10 +775,22 @@ async function savePostName() {
           if (nextPostIds.length > 0) {
             const { data: vData } = await supabase
               .from("postvariations")
-              .select("*")
-              .in("post_id", nextPostIds)
-              .gte("variation_post_date", nextFrom)
-              .lte("variation_post_date", nextTo);
+              .select(`
+                id,
+                variation_post_date,
+                post_id,
+                platforms,
+                test_version,
+                file_name,
+                length_seconds,
+                feedback,
+                feedback_resolved,
+                greenlight,
+                audio_file_name,
+                audio_start_seconds,
+                carousel_files
+              `)
+              .in("post_id", postIds);
             nextVarData = vData;
           }
   
@@ -784,6 +832,7 @@ async function savePostName() {
           test_version,
           file_name,
           length_seconds,
+          greenlight,
           feedback,
           feedback_resolved,
           audio_file_name,
@@ -983,14 +1032,19 @@ async function savePostName() {
                         if (item.type === "post") {
                           const post = item.data;
                         
+                          // 🔹 Variations for this post (used for bubbles)
+                          const postVariations = variations.filter((v) => v.post_id === post.id);
+
                           // 🔹 Count how many variations for this post have feedback
-                          const feedbackCount = variations.filter(
+                          const feedbackCount = postVariations.filter(
                             (v) =>
-                              v.post_id === post.id &&
                               v.feedback &&
                               v.feedback.trim() !== "" &&
                               !v.feedback_resolved
                           ).length;
+
+                          // Count how many variations for this post have been greenlit
+                          const greenlitCount = postVariations.filter((v) => v.greenlight === true || v.greenlight === 'true').length;
                         
                           return (
                             <Draggable
@@ -1013,12 +1067,38 @@ async function savePostName() {
                                   {/* Post name + artist */}
                                   {post.post_name} — {artistMap.get(post.artist_id)}
                         
-                                  {/* 🔴 Notification bubble */}
-                                  {feedbackCount > 0 && (
-                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                      {feedbackCount}
-                                    </span>
-                                  )}
+                                  {/* 🔔 Notification bubble (feedback / greenlight) */}
+                                  {postVariations.length > 0 && (() => {
+                                    const hasFeedback = feedbackCount > 0;
+                                    const hasGreenlit = greenlitCount > 0;
+
+                                    const bgClass = hasFeedback
+                                      ? "bg-red-500"
+                                      : hasGreenlit
+                                      ? "bg-green-500"
+                                      : "bg-gray-400";
+
+                                    const label = hasFeedback ? String(feedbackCount) : "G";
+
+                                    return (
+                                      <span
+                                        className={[
+                                          "absolute -top-1 -right-1",
+                                          bgClass,
+                                          "text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center",
+                                        ].join(" ")}
+                                        title={
+                                          hasFeedback
+                                            ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                            : hasGreenlit
+                                            ? "Has greenlit variation(s)"
+                                            : "Not greenlit yet"
+                                        }
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </Draggable>
@@ -1058,240 +1138,309 @@ async function savePostName() {
             ))}
           </div>
         </div>
-      
-
+    
         {showNextWeek && nextWeekDays.length >= 14 && (
-  <div className="mt-10 space-y-8">
-    {/* Heading only */}
-    <h2 className="text-xl font-semibold">Next 2 Weeks</h2>
+        <div className="mt-10 space-y-8">
+          {/* Heading only */}
+          <h2 className="text-xl font-semibold">Next 2 Weeks</h2>
 
-    {/* Week 1 */}
-    <div>
-      <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-            <div key={d} className="px-3 py-2">
-              {d}
+          {/* Week 1 */}
+          <div>
+            <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
+              <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                  <div key={d} className="px-3 py-2">
+                    {d}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {nextWeekDays.slice(0, 7).map((day) => (
+                  <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
+                    {(dropProvided) => (
+                      <div
+                        ref={dropProvided.innerRef}
+                        {...dropProvided.droppableProps}
+                        className="min-h-[140px] border-l first:border-l-0 p-2"
+                      >
+                        {/* Date only: DD Mon */}
+                        <div className="text-xs text-gray-500 mb-1">
+                          {day.date.toLocaleDateString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </div>
+                        <div className="space-y-1">
+                          {nextWeekPosts
+                            .filter(
+                              (p) => toYMD(new Date(p.post_date)) === day.ymd
+                            )
+                            .map((post, index) => {
+                              // 🔹 ALL variations for this post (not filtered by date)
+                              const postVariations = nextWeekVariations.filter((v) => v.post_id === post.id);
+
+                              // 🔹 Count unresolved feedback
+                              const feedbackCount = postVariations.filter(
+                                (v) =>
+                                  v.feedback &&
+                                  v.feedback.trim() !== "" &&
+                                  !v.feedback_resolved
+                              ).length;
+
+                              // 🔹 Count greenlit variations
+                              const greenlitCount = postVariations.filter(
+                                (v) => v.greenlight === true || v.greenlight === 'true'
+                              ).length;
+
+                              return (
+                                <Draggable
+                                  key={`post-${post.id}`}
+                                  draggableId={`post-${post.id}`}
+                                  index={index}
+                                >
+                                  {(dragProvided) => (
+                                    <div
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      {...dragProvided.dragHandleProps}
+                                      className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                      style={{
+                                        backgroundColor: statusColor(post.status),
+                                        ...dragProvided.draggableProps.style,
+                                      }}
+                                      onClick={() => openPostDetails(post.id)}
+                                    >
+                                      {post.post_name} – {artistMap.get(post.artist_id)}
+                                      
+                                      {/* 🔔 Notification bubble */}
+                                      {postVariations.length > 0 && (() => {
+                                        const hasFeedback = feedbackCount > 0;
+                                        const hasGreenlit = greenlitCount > 0;
+
+                                        const bgClass = hasFeedback
+                                          ? "bg-red-500"
+                                          : hasGreenlit
+                                          ? "bg-green-500"
+                                          : "bg-gray-400";
+
+                                        const label = hasFeedback ? String(feedbackCount) : "G";
+
+                                        return (
+                                          <span
+                                            className={[
+                                              "absolute -top-1 -right-1",
+                                              bgClass,
+                                              "text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center",
+                                            ].join(" ")}
+                                            title={
+                                              hasFeedback
+                                                ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                                : hasGreenlit
+                                                ? "Has greenlit variation(s)"
+                                                : "Not greenlit yet"
+                                            }
+                                          >
+                                            {label}
+                                          </span>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </Draggable>
+                              );
+                            })}
+
+                          {nextWeekVariations
+                            .filter(
+                              (v) =>
+                                toYMD(new Date(v.variation_post_date)) === day.ymd
+                            )
+                            .map((v, vIndex) => {
+                              const parent = nextWeekPosts.find(
+                                (p) => p.id === v.post_id
+                              );
+                              return (
+                                <Draggable
+                                  key={`var-${v.id}`}
+                                  draggableId={`var-${v.id}`}
+                                  index={nextWeekPosts.length + vIndex}
+                                >
+                                  {(dragProvided) => (
+                                    <div
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      {...dragProvided.dragHandleProps}
+                                      className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
+                                      style={dragProvided.draggableProps.style}
+                                      onClick={() =>
+                                        openPostDetails(v.post_id)
+                                      }
+                                    >
+                                      {parent?.post_name} (var)
+                                    </div>
+                                  )}
+                                </Draggable>
+                              );
+                            })}
+                          {dropProvided.placeholder}
+                        </div>
+                      </div>
+                    )}
+                  </Droppable>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {nextWeekDays.slice(0, 7).map((day) => (
-            <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
-              {(dropProvided) => (
-                <div
-                  ref={dropProvided.innerRef}
-                  {...dropProvided.droppableProps}
-                  className="min-h-[140px] border-l first:border-l-0 p-2"
-                >
-                  {/* Date only: DD Mon */}
-                  <div className="text-xs text-gray-500 mb-1">
-                    {day.date.toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                    })}
+          </div>
+
+          {/* Week 2 */}
+          <div>
+            <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
+              <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+                  <div key={d} className="px-3 py-2">
+                    {d}
                   </div>
-                  <div className="space-y-1">
-                    {nextWeekPosts
-                      .filter(
-                        (p) => toYMD(new Date(p.post_date)) === day.ymd
-                      )
-                      .map((post, index) => {
-                        const feedbackCount = nextWeekVariations.filter(
-                          (v) =>
-                            v.post_id === post.id &&
-                            v.feedback &&
-                            v.feedback.trim() !== ""
-                        ).length;
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {nextWeekDays.slice(7, 14).map((day) => (
+                  <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
+                    {(dropProvided) => (
+                      <div
+                        ref={dropProvided.innerRef}
+                        {...dropProvided.droppableProps}
+                        className="min-h-[140px] border-l first:border-l-0 p-2"
+                      >
+                        {/* Date only: DD Mon */}
+                        <div className="text-xs text-gray-500 mb-1">
+                          {day.date.toLocaleDateString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </div>
+                        <div className="space-y-1">
+                          {nextWeekPosts
+                            .filter(
+                              (p) => toYMD(new Date(p.post_date)) === day.ymd
+                            )
+                            .map((post, index) => {
+                              // 🔹 ALL variations for this post (not filtered by date)
+                              const postVariations = nextWeekVariations.filter((v) => v.post_id === post.id);
 
-                        return (
-                          <Draggable
-                            key={`post-${post.id}`}
-                            draggableId={`post-${post.id}`}
-                            index={index}
-                          >
-                            {(dragProvided) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                {...dragProvided.dragHandleProps}
-                                className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
-                                style={{
-                                  backgroundColor: statusColor(post.status),
-                                  ...dragProvided.draggableProps.style,
-                                }}
-                                onClick={() => openPostDetails(post.id)}
-                              >
-                                {post.post_name} —{" "}
-                                {artistMap.get(post.artist_id)}
-                                {feedbackCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 bg-red-600 text-[9px] leading-none text-white rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                    {feedbackCount}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
+                              // 🔹 Count unresolved feedback
+                              const feedbackCount = postVariations.filter(
+                                (v) =>
+                                  v.feedback &&
+                                  v.feedback.trim() !== "" &&
+                                  !v.feedback_resolved
+                              ).length;
 
-                    {nextWeekVariations
-                      .filter(
-                        (v) =>
-                          toYMD(new Date(v.variation_post_date)) === day.ymd
-                      )
-                      .map((v, vIndex) => {
-                        const parent = nextWeekPosts.find(
-                          (p) => p.id === v.post_id
-                        );
-                        return (
-                          <Draggable
-                            key={`var-${v.id}`}
-                            draggableId={`var-${v.id}`}
-                            index={nextWeekPosts.length + vIndex}
-                          >
-                            {(dragProvided) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                {...dragProvided.dragHandleProps}
-                                className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
-                                style={dragProvided.draggableProps.style}
-                                onClick={() =>
-                                  openPostDetails(v.post_id)
-                                }
-                              >
-                                {parent?.post_name} (var)
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
-                    {dropProvided.placeholder}
-                  </div>
-                </div>
-              )}
-            </Droppable>
-          ))}
-        </div>
-      </div>
-    </div>
+                              // 🔹 Count greenlit variations
+                              const greenlitCount = postVariations.filter(
+                                (v) => v.greenlight === true || v.greenlight === 'true'
+                              ).length;
 
-    {/* Week 2 */}
-    <div>
-      <div className="border rounded-lg overflow-hidden bg-white shadow-sm">
-        <div className="grid grid-cols-7 text-xs font-semibold text-gray-600 border-b">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-            <div key={d} className="px-3 py-2">
-              {d}
+                              return (
+                                <Draggable
+                                  key={`post-${post.id}`}
+                                  draggableId={`post-${post.id}`}
+                                  index={index}
+                                >
+                                  {(dragProvided) => (
+                                    <div
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      {...dragProvided.dragHandleProps}
+                                      className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
+                                      style={{
+                                        backgroundColor: statusColor(post.status),
+                                        ...dragProvided.draggableProps.style,
+                                      }}
+                                      onClick={() => openPostDetails(post.id)}
+                                    >
+                                      {post.post_name} – {artistMap.get(post.artist_id)}
+                                      
+                                      {/* 🔔 Notification bubble */}
+                                      {postVariations.length > 0 && (() => {
+                                        const hasFeedback = feedbackCount > 0;
+                                        const hasGreenlit = greenlitCount > 0;
+
+                                        const bgClass = hasFeedback
+                                          ? "bg-red-500"
+                                          : hasGreenlit
+                                          ? "bg-green-500"
+                                          : "bg-gray-400";
+
+                                        const label = hasFeedback ? String(feedbackCount) : "G";
+
+                                        return (
+                                          <span
+                                            className={[
+                                              "absolute -top-1 -right-1",
+                                              bgClass,
+                                              "text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center",
+                                            ].join(" ")}
+                                            title={
+                                              hasFeedback
+                                                ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                                : hasGreenlit
+                                                ? "Has greenlit variation(s)"
+                                                : "Not greenlit yet"
+                                            }
+                                          >
+                                            {label}
+                                          </span>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </Draggable>
+                              );
+                            })}
+
+                          {nextWeekVariations
+                            .filter(
+                              (v) =>
+                                toYMD(new Date(v.variation_post_date)) === day.ymd
+                            )
+                            .map((v, vIndex) => {
+                              const parent = nextWeekPosts.find(
+                                (p) => p.id === v.post_id
+                              );
+                              return (
+                                <Draggable
+                                  key={`var-${v.id}`}
+                                  draggableId={`var-${v.id}`}
+                                  index={nextWeekPosts.length + vIndex}
+                                >
+                                  {(dragProvided) => (
+                                    <div
+                                      ref={dragProvided.innerRef}
+                                      {...dragProvided.draggableProps}
+                                      {...dragProvided.dragHandleProps}
+                                      className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
+                                      style={dragProvided.draggableProps.style}
+                                      onClick={() =>
+                                        openPostDetails(v.post_id)
+                                      }
+                                    >
+                                      {parent?.post_name} (var)
+                                    </div>
+                                  )}
+                                </Draggable>
+                              );
+                            })}
+                          {dropProvided.placeholder}
+                        </div>
+                      </div>
+                    )}
+                  </Droppable>
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
         </div>
-        <div className="grid grid-cols-7">
-          {nextWeekDays.slice(7, 14).map((day) => (
-            <Droppable droppableId={day.ymd} key={day.ymd} type="POST">
-              {(dropProvided) => (
-                <div
-                  ref={dropProvided.innerRef}
-                  {...dropProvided.droppableProps}
-                  className="min-h-[140px] border-l first:border-l-0 p-2"
-                >
-                  {/* Date only: DD Mon */}
-                  <div className="text-xs text-gray-500 mb-1">
-                    {day.date.toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </div>
-                  <div className="space-y-1">
-                    {nextWeekPosts
-                      .filter(
-                        (p) => toYMD(new Date(p.post_date)) === day.ymd
-                      )
-                      .map((post, index) => {
-                        const feedbackCount = nextWeekVariations.filter(
-                          (v) =>
-                            v.post_id === post.id &&
-                            v.feedback &&
-                            v.feedback.trim() !== ""
-                        ).length;
-
-                        return (
-                          <Draggable
-                            key={`post-${post.id}`}
-                            draggableId={`post-${post.id}`}
-                            index={index}
-                          >
-                            {(dragProvided) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                {...dragProvided.dragHandleProps}
-                                className="relative text-xs px-2 py-1 rounded text-white cursor-pointer"
-                                style={{
-                                  backgroundColor: statusColor(post.status),
-                                  ...dragProvided.draggableProps.style,
-                                }}
-                                onClick={() => openPostDetails(post.id)}
-                              >
-                                {post.post_name} —{" "}
-                                {artistMap.get(post.artist_id)}
-                                {feedbackCount > 0 && (
-                                  <span className="absolute -top-1 -right-1 bg-red-600 text-[9px] leading-none text-white rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">
-                                    {feedbackCount}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
-
-                    {nextWeekVariations
-                      .filter(
-                        (v) =>
-                          toYMD(new Date(v.variation_post_date)) === day.ymd
-                      )
-                      .map((v, vIndex) => {
-                        const parent = nextWeekPosts.find(
-                          (p) => p.id === v.post_id
-                        );
-                        return (
-                          <Draggable
-                            key={`var-${v.id}`}
-                            draggableId={`var-${v.id}`}
-                            index={nextWeekPosts.length + vIndex}
-                          >
-                            {(dragProvided) => (
-                              <div
-                                ref={dragProvided.innerRef}
-                                {...dragProvided.draggableProps}
-                                {...dragProvided.dragHandleProps}
-                                className="text-xs px-2 py-1 rounded cursor-pointer bg-[#dcd9f4] border border-gray-300"
-                                style={dragProvided.draggableProps.style}
-                                onClick={() =>
-                                  openPostDetails(v.post_id)
-                                }
-                              >
-                                {parent?.post_name} (var)
-                              </div>
-                            )}
-                          </Draggable>
-                        );
-                      })}
-                    {dropProvided.placeholder}
-                  </div>
-                </div>
-              )}
-            </Droppable>
-          ))}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-
-
+      )}
       </DragDropContext>
       {/* Post Detail Modal */}
       {selectedPostId && postDetails && (
