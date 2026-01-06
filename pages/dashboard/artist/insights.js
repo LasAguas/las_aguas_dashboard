@@ -476,8 +476,16 @@ export default function InsightsPage() {
 
         if (postsErr) throw postsErr;
 
-        const filteredPosts = postsData || [];
+        // Only keep posts that have at least one platform link
+        const filteredPosts = (postsData || []).filter((p) => {
+          const ig = (p.instagram_url || "").trim();
+          const tt = (p.tiktok_url || "").trim();
+          const yt = (p.youtube_url || "").trim();
+          return ig || tt || yt;
+        });
+
         setPosts(filteredPosts);
+
 
         const postIds = filteredPosts.map((p) => p.id).filter(Boolean);
 
