@@ -345,6 +345,9 @@ export default function PostsStatsPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("youtube");
 
+  const [artistOptions, setArtistOptions] = useState([]);
+  const [selectedArtistId, setSelectedArtistId] = useState("");
+
   const [artists, setArtists] = useState([]);
   const [posts, setPosts] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
@@ -584,7 +587,7 @@ async function runInstagramManualCollect() {
     if (activeTab === "tiktok" || activeTab === "standout") {
       loadTikTokData();
     }
-  }, [activeTab]);
+  }, [activeTab, selectedArtistId]);
 
   async function loadTikTokData() {
     try {
@@ -592,14 +595,18 @@ async function runInstagramManualCollect() {
       setTiktokErrorMsg("");
   
       // 1) Load posted posts that have a TikTok URL
-      const { data: postRows, error: postErr } = await supabase
-        .from("posts")
-        .select(
-          "id, post_name, post_date, status, artist_id, tiktok_url, notes"
-        )
-        .eq("status", "posted")
-        .not("tiktok_url", "is", null);
-  
+      const { data: postRows, error: postErr } = selectedArtistId
+        ? await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes")
+            .eq("status", "posted")
+            .not("tiktok_url", "is", null)
+            .eq("artist_id", Number(selectedArtistId))
+        : await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes")
+            .eq("status", "posted")
+            .not("tiktok_url", "is", null);
       if (postErr) throw postErr;
   
       const postIds = (postRows || []).map((p) => p.id);
@@ -636,7 +643,7 @@ async function runInstagramManualCollect() {
     if (activeTab === "instagram" || activeTab === "standout") {
       loadInstagramData();
     }
-  }, [activeTab]);
+  }, [activeTab, selectedArtistId]);
 
   async function loadInstagramData() {
     try {
@@ -644,14 +651,18 @@ async function runInstagramManualCollect() {
       setInstagramErrorMsg("");
 
       // 1) Load posted posts that have an Instagram URL
-      const { data: postRows, error: postErr } = await supabase
-        .from("posts")
-        .select(
-          "id, post_name, post_date, status, artist_id, instagram_url, notes"
-        )
-        .eq("status", "posted")
-        .not("instagram_url", "is", null);
-
+      const { data: postRows, error: postErr } = selectedArtistId
+        ? await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, instagram_url, notes")
+            .eq("status", "posted")
+            .not("instagram_url", "is", null)
+            .eq("artist_id", Number(selectedArtistId))
+        : await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, instagram_url, notes")
+            .eq("status", "posted")
+            .not("instagram_url", "is", null);
       if (postErr) throw postErr;
 
       const postIds = (postRows || []).map((p) => p.id);
@@ -682,6 +693,27 @@ async function runInstagramManualCollect() {
     }
   }
 
+  useEffect(() => {
+    const loadArtists = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("artists")
+          .select("id, name")
+          .not("id", "in", "(1, 2, 3)")
+          .order("name", { ascending: true });
+  
+        if (error) {
+          console.error("Supabase error (artists):", error);
+          return;
+        }
+        setArtistOptions(data || []);
+        
+      } catch (e) {
+        console.error("Failed to load artists list", e);
+      }
+    };
+    loadArtists();
+  }, []);
 
   // ---- load overview data ----
   useEffect(() => {
@@ -697,13 +729,18 @@ async function runInstagramManualCollect() {
         if (artistErr) throw artistErr;
 
         // load YT posts only for now (status posted & has youtube_url)
-        const { data: postRows, error: postErr } = await supabase
-          .from("posts")
-          .select(
-            "id, post_name, post_date, status, artist_id, youtube_url, notes"
-          )
-          .eq("status", "posted")
-          .not("youtube_url", "is", null);
+        const { data: postRows, error: postErr } = selectedArtistId 
+        ? await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, youtube_url, notes")
+            .eq("status", "posted")
+            .not("youtube_url", "is", null)
+            .eq("artist_id", Number(selectedArtistId))
+        : await supabase
+            .from("posts")
+            .select("id, post_name, post_date, status, artist_id, youtube_url, notes")
+            .eq("status", "posted")
+            .not("youtube_url", "is", null);
         if (postErr) throw postErr;
 
         const postIds = (postRows || []).map((p) => p.id);
@@ -733,7 +770,7 @@ async function runInstagramManualCollect() {
     }
 
     loadData();
-  }, []);
+  }, [selectedArtistId]);
 
   // helpful maps
   const artistById = useMemo(() => {
@@ -2506,6 +2543,22 @@ const crossStandoutsByCategory = useMemo(() => {
             <h1 className="text-xl md:text-2xl font-bold mb-4">
               Posts Stats
             </h1>
+            {/* Artist Dropdown */}
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <div className="text-sm font-semibold">Artist:</div>
+              <select
+                className="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white"
+                value={selectedArtistId || ""}
+                onChange={(e) => setSelectedArtistId(e.target.value || "")}
+              >
+                <option value="">All artists</option>
+                {artistOptions.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || `Artist ${a.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* tabs */}
             <div className="flex gap-2 mb-4 text-sm">
