@@ -571,7 +571,15 @@ export default function InsightsPage() {
           comments: Number(totals.comments ?? 0),
         };
       })
-      .filter(Boolean);
+      .filter((row) => {
+        // Filter out null rows and rows where all metrics are zero
+        if (!row) return false;
+        const hasMetrics = 
+          Number(row.totals.views ?? 0) > 0 ||
+          Number(row.totals.likes ?? 0) > 0 ||
+          Number(row.totals.comments ?? 0) > 0;
+        return hasMetrics;
+      });
   }, [posts, totalsByPostId]);
 
   const avgs = useMemo(() => {
