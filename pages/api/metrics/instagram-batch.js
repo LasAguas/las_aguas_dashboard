@@ -325,12 +325,16 @@ export default async function handler(req, res) {
 
     // GET: batch over recent posts
     if (req.method === "GET") {
+      // Calculate date 60 days ago
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
       const { data: posts, error: postErr } = await supabaseAdmin
         .from("posts")
         .select("id")
         .eq("status", "posted")
         .not("instagram_url", "is", null)
-        .limit(200);
+        .gte("post_date", sixtyDaysAgo.toISOString());
 
       if (postErr) {
         return res

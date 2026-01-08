@@ -312,7 +312,7 @@ export default async function handler(req, res) {
       const eligible = (posts || []).filter((post) => {
         if (post.status !== "posted") return false;
         const ageDays = getAgeInDays(post.post_date);
-        if (ageDays > 45) return false;
+        if (ageDays > 60) return false;
         return true;
       });
 
@@ -376,9 +376,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // cap per run
-      const MAX_PER_RUN = 20;
-      const slice = toRefresh.slice(0, MAX_PER_RUN);
+      const slice = toRefresh;
 
       let successCount = 0;
       const errors = [];
