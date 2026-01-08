@@ -400,7 +400,6 @@ export default function LeadsPage() {
       { href: "/dashboard/edit-next", label: "Edit Next" },
       { href: "/dashboard/leads", label: "Leads" },
       { href: "/dashboard/onboarding-admin", label: "Onboarding" },
-      { href: "/dashboard/audio-database", label: "Audio Database" },
       { href: "/dashboard/posts-stats", label: "Posts Stats" },
     ],
     []

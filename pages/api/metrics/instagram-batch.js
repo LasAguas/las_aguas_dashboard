@@ -89,7 +89,7 @@ async function findInstagramMediaByUrl({ accessToken, postUrl, facebookPageId })
   // 2) Walk that IG user's media looking for a matching permalink
   let url =
     `https://graph.facebook.com/v21.0/${encodeURIComponent(igUserId)}/media` +
-    "?fields=id,permalink,media_type,timestamp,like_count,comments_count" +
+    "?fields=id,permalink,media_type,media_product_type,timestamp,like_count,comments_count" +
     "&limit=50" +
     `&access_token=${encodeURIComponent(accessToken)}`;
 
@@ -121,42 +121,85 @@ async function findInstagramMediaByUrl({ accessToken, postUrl, facebookPageId })
 }
 
 // Fetch insights for a single media
-async function fetchInstagramInsights({ accessToken, mediaId }) {
-  const url =
-    `https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}/insights` +
-    "?metric=reposts" +
-    `&access_token=${encodeURIComponent(accessToken)}`;
+// Fetch insights for a single media (Reels + feed videos)
+async function fetchInstagramInsights({ accessToken, mediaId, mediaType, mediaProductType }) {
+  const mt = String(mediaType || "").toUpperCase();
+  const mpt = String(mediaProductType || "").toUpperCase();
 
-  console.log("IG insights URL:", url); // <– helps confirm what is actually called
-
-  const resp = await fetch(url);
-  const json = await resp.json();
-
-  if (!resp.ok) {
-    return { ok: false, reason: "IG insights error", detail: json };
+  // Only target Reels + feed videos
+  const isVideo = mt === "VIDEO" || mt === "REELS";
+  if (!isVideo) {
+    return { ok: false, reason: `Not a video media_type (${mt})`, detail: { mediaType: mt, mediaProductType: mpt } };
   }
 
-  const metricsArray = json.data || [];
-  const metricsMap = {};
-  for (const m of metricsArray) {
-    const name = m.name;
-    const values = m.values || [];
-    const first = values[0];
-    metricsMap[name] = first ? first.value : null;
+  // v22+ uses "views" as the universal metric (plays/video_views are deprecated/limited).
+  // Request a richer set first, then fall back if IG rejects for this product type.
+  const metricAttempts = [
+    ["views", "reach", "reposts", "saved", "shares"], // best effort
+    ["views", "reach"],                               // common supported subset
+    ["reach"],                                        // last resort
+  ];
+
+  for (const metrics of metricAttempts) {
+    const url =
+      `https://graph.facebook.com/v21.0/${encodeURIComponent(mediaId)}/insights` +
+      `?metric=${encodeURIComponent(metrics.join(","))}` +
+      `&access_token=${encodeURIComponent(accessToken)}`;
+
+    console.log("IG insights URL:", url);
+
+    const resp = await fetch(url);
+    const json = await resp.json();
+
+    if (!resp.ok) {
+      // If it's an unsupported-metric error (#100), try the next fallback set
+      const msg = json?.error?.message || "";
+      const code = json?.error?.code;
+
+      const looksLikeUnsupportedMetric =
+        code === 100 && (
+          msg.includes("metric is no longer supported") ||
+          msg.includes("does not support") ||
+          msg.includes("Please refer to the documentation") ||
+          msg.includes("not supported")
+        );
+
+      if (looksLikeUnsupportedMetric) continue;
+
+      // Otherwise, it's a real failure (auth/permissions/etc.)
+      return { ok: false, reason: "IG insights error", detail: json };
+    }
+
+    // Parse metrics
+    const metricsArray = json.data || [];
+    const metricsMap = {};
+    for (const m of metricsArray) {
+      const name = m.name;
+      const first = (m.values || [])[0];
+      metricsMap[name] = first ? first.value : null;
+    }
+
+    return {
+      ok: true,
+      data: {
+        // keep all the other metrics you already store if returned
+        reach: metricsMap.reach ?? null,
+        reposts: metricsMap.reposts ?? null,
+        saved: metricsMap.saved ?? null,
+        shares: metricsMap.shares ?? null,
+
+        // ✅ this is the key change
+        views: metricsMap.views ?? null,
+      },
+      raw: json,
+    };
   }
 
-  const reposts = metricsMap.reposts ?? null;
-
-  // Keep the same shape so the rest of your code doesn’t break
+  // If all attempts failed due to unsupported metrics
   return {
-    ok: true,
-    data: {
-      reposts,         // filled
-      reach: null,         // not requested yet
-      engagement: null,    // not computed yet
-      reposts: null,         // not requested yet
-    },
-    raw: json,
+    ok: false,
+    reason: "IG insights unsupported for this media",
+    detail: { mediaType: mt, mediaProductType: mpt },
   };
 }
 
@@ -280,6 +323,8 @@ async function snapshotOneInstagramPost({ postId }) {
   const insightsResult = await fetchInstagramInsights({
     accessToken,
     mediaId: media.id,
+    mediaType: media.media_type,
+    mediaProductType: media.media_product_type,
   });
   if (!insightsResult.ok) return insightsResult;
 

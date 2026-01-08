@@ -1175,7 +1175,6 @@ export default function EditNextPage() {
     { href: "/dashboard/edit-next", label: "Edit Next" },
     { href: "/dashboard/leads", label: "Leads" },
     { href: "/dashboard/onboarding-admin", label: "Onboarding" },
-    { href: "/dashboard/audio-database", label: "Audio Database" },
     { href: "/dashboard/menu", label: "Home" },
     { href: "/dashboard/posts-stats", label: "Posts Stats" },
   ];
