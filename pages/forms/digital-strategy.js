@@ -347,17 +347,17 @@ export default function DigitalStrategyLeadPage() {
                     {/* 195€ at 195 / 1200 ≈ 16.25% */}
                     <span
                     className="absolute -translate-x-1/2"
-                    style={{ left: "16.25%" }}
+                    style={{ left: "14.25%" }}
                     >
-                    195€
+                    195
                     </span>
 
                     {/* 280€ at 280 / 1200 ≈ 23.3% */}
                     <span
                     className="absolute -translate-x-1/2"
-                    style={{ left: "23.3%" }}
+                    style={{ left: "24.3%" }}
                     >
-                    280€
+                    280
                     </span>
 
                     {/* 750€ at 750 / 1200 = 62.5% */}
@@ -365,11 +365,11 @@ export default function DigitalStrategyLeadPage() {
                     className="absolute -translate-x-1/2"
                     style={{ left: "62.5%" }}
                     >
-                    750€
+                    750
                     </span>
 
                     {/* 1200€ at 100% */}
-                    <span className="absolute right-0 translate-x-1/2">1200€</span>
+                    <span className="absolute right-0 translate-x-1/2">1200</span>
                 </div>
                 </div>
 
