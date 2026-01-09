@@ -342,7 +342,7 @@ export default function DigitalStrategyLeadPage() {
                 {/* Tick labels aligned to actual values on 0–1200 scale */}
                 <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 text-xs text-[#33296b]">
                     {/* 0€ at 0% */}
-                    <span className="absolute left-0 -translate-x-1/2">0€</span>
+                    <span className="absolute left-0 -translate-x-1/2"></span>
 
                     {/* 195€ at 195 / 1200 ≈ 16.25% */}
                     <span
