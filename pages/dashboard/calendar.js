@@ -11,6 +11,67 @@ import { useRouter } from "next/router";
 const pad = (n) => String(n).padStart(2, '0')
 const toYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
+const getPathname = (url) => {
+  const s = String(url || "");
+  try {
+    return new URL(s, window.location.origin).pathname;
+  } catch {
+    // fallback for weird/relative strings
+    return s.split("#")[0].split("?")[0];
+  }
+};
+
+const mediaUrlCache = new Map(); // path -> string OR { url, expires }
+
+const preloadVideoBytes = async (url, bytes = 256 * 1024) => {
+  try {
+    const res = await fetch(url, {
+      headers: { Range: `bytes=0-${bytes - 1}` },
+      cache: "force-cache",
+    });
+    console.log("📦 range preload", res.status, url);
+  } catch (e) {
+    console.log("📦 range preload failed", url, e);
+  }
+};
+
+// Always return a string URL (no matter what shape got cached)
+function cacheGetUrl(path) {
+  const v = mediaUrlCache.get(path);
+  if (!v) return null;
+  return typeof v === "string" ? v : v.url || null;
+}
+
+function cacheSetUrl(path, url, expiresMs = Number.POSITIVE_INFINITY) {
+  // store consistently as {url, expires}
+  mediaUrlCache.set(path, { url, expires: expiresMs });
+}
+
+function cacheHasValidUrl(path) {
+  const v = mediaUrlCache.get(path);
+  if (!v) return false;
+  if (typeof v === "string") return true;
+  return !!v.url && (v.expires ?? 0) > Date.now();
+}
+
+
+  async function getOptimizedMediaUrl(path) {
+  const now = Date.now();
+
+  if (cacheHasValidUrl(path)) {
+    return cacheGetUrl(path);
+  }
+
+  const { data, error } = await supabase.storage
+    .from("post-variations")
+    .createSignedUrl(path, 7200);
+
+  if (error) throw error;
+
+  cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
+  return data.signedUrl;
+}
+
 const PLATFORM_OPTIONS = [
   { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
   { value: 'TikTok',      label: 'TikTok',      short: 'TT' },
@@ -308,62 +369,64 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     setLocalResolved(!!variation?.feedback_resolved);
   }, [variation?.feedback_resolved]);
 
-  // Load media URLs (single file or carousel)
-  useEffect(() => {
-    if (!variation) {
-      setMediaUrls([]);
-      setLoading(false);
-      return;
-    }
+  // Then in MediaPlayer's useEffect where you load media URLs, replace with:
+useEffect(() => {
+  if (!variation) {
+    setMediaUrls([]);
+    setLoading(false);
+    return;
+  }
 
-    const pathsRaw =
-      Array.isArray(variation.carousel_files) && variation.carousel_files.length > 0
-        ? variation.carousel_files
-        : variation.file_name
-        ? [variation.file_name]
-        : [];
+  const pathsRaw =
+    Array.isArray(variation.carousel_files) && variation.carousel_files.length > 0
+      ? variation.carousel_files
+      : variation.file_name
+      ? [variation.file_name]
+      : [];
 
-    const paths = [...pathsRaw].sort((a, b) => {
-      const oa = getCarouselOrder(a);
-      const ob = getCarouselOrder(b);
-      if (oa !== ob) return oa - ob;
+  const paths = [...pathsRaw].sort((a, b) => {
+    const oa = getCarouselOrder(a);
+    const ob = getCarouselOrder(b);
+    if (oa !== ob) return oa - ob;
+    return getFileName(a).localeCompare(getFileName(b), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
 
-      return getFileName(a).localeCompare(getFileName(b), undefined, {
-        numeric: true,
-        sensitivity: "base",
-      });
+  if (!paths.length) {
+    setMediaUrls([]);
+    setLoading(false);
+    return;
+  }
+
+  try {
+    const urls = paths.map((path) => {
+      // ✅ CHECK CACHE FIRST
+      const cachedUrl = cacheGetUrl(path);
+      if (cachedUrl) return cachedUrl;
+
+      const { data, error } = supabase.storage
+        .from("post-variations")
+        .getPublicUrl(path);
+
+      if (error) throw error;
+
+      cacheSetUrl(path, data.publicUrl); // no expiry
+      return data.publicUrl;
     });
 
-    if (!paths.length) {
-      setMediaUrls([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const urls = paths.map((path) => {
-        const { data, error } = supabase.storage
-          .from("post-variations")
-          .getPublicUrl(path);
-        if (error) {
-          console.error("Error fetching media URL:", error);
-          throw error;
-        }
-        return data.publicUrl;
-      });
-
-      setMediaUrls(urls);
-      setCurrentIndex(0);
-      setError("");
-    } catch (err) {
-      console.error("Error loading media URLs:", err);
-      setMediaUrls([]);
-      setError("Could not load media.");
-    } finally {
-      setLoading(false);
-    }
-  }, [variation]);
-  
+    setMediaUrls(urls);
+    setCurrentIndex(0);
+    setError("");
+  } catch (err) {
+    console.error("Error loading media URLs:", err);
+    setMediaUrls([]);
+    setError("Could not load media.");
+  } finally {
+    setLoading(false);
+  }
+}, [variation]);
 
   // Load audio snippet URL if present
   useEffect(() => {
@@ -371,29 +434,58 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
       setAudioUrl(null);
       return;
     }
-    const { data, error } = supabase.storage
-      .from("post-variations")
-      .getPublicUrl(variation.audio_file_name);
-    if (error) {
-      console.error("Error fetching audio URL:", error);
-      setAudioUrl(null);
-    } else {
-      setAudioUrl(data.publicUrl);
-    }
+
+    // ✅ CHECK CACHE FIRST
+    const cachedAudio = cacheGetUrl(variation.audio_file_name);
+      if (cachedAudio) {
+        setAudioUrl(cachedAudio);
+        return;
+      }
+
+      const { data, error } = supabase.storage
+        .from("post-variations")
+        .getPublicUrl(variation.audio_file_name);
+
+      if (error) {
+        console.error("Error fetching audio URL:", error);
+        setAudioUrl(null);
+      } else {
+        cacheSetUrl(variation.audio_file_name, data.publicUrl);
+        setAudioUrl(data.publicUrl);
+      }
   }, [variation?.audio_file_name]);
 
   if (!variation) return null;
 
   const hasMedia = mediaUrls.length > 0;
   const hasCarousel = mediaUrls.length > 1;
+
   const activeUrl = hasMedia ? mediaUrls[currentIndex] : null;
 
+useEffect(() => {
+  if (!hasMedia) return;
+
+  const pathGuess =
+    (Array.isArray(variation?.carousel_files) && variation.carousel_files[currentIndex]) ||
+    (currentIndex === 0 ? variation?.file_name : null);
+
+  const cached = pathGuess ? mediaUrlCache.get(pathGuess) : undefined;
+
+  console.log("[media debug]", {
+    currentIndex,
+    activeUrl,
+    activeUrlType: typeof activeUrl,
+    pathGuess,
+    cached,
+    cachedType: typeof cached,
+  });
+}, [hasMedia, currentIndex, activeUrl, variation?.file_name, variation?.carousel_files]);
+
   const isImageFile = (url) =>
-    /\.(jpe?g|png|gif|webp)$/i.test(url || "");
-  
+    /\.(jpe?g|png|gif|webp)$/i.test(getPathname(url));
+
   const isVideoFile = (url) =>
-    /\.(mp4|mov|webm|ogg)$/i.test(url || "");
-  
+    /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
 
   async function handleSavePlatforms() {
     if (!variation || savingPlatforms) return;
@@ -2163,6 +2255,103 @@ useEffect(() => {
     }
 
     setWeeks(weeksArr)
+    
+    // ✅ SMART PRELOADING: Actually download media files for likely-to-be-viewed posts
+    const preloadVariations = async () => {
+      const today = new Date();
+      const thisWeekStart = startOfWeekMonday(today);
+      const thisWeekEnd = addDays(thisWeekStart, 12);
+      
+      // Find posts in current week OR with unresolved feedback OR recently uploaded
+      const priorityPosts = posts.filter(post => {
+        // ✅ Skip currently open post (it's being preloaded separately with higher priority)
+        if (selectedPostId && post.id === selectedPostId) return false;
+        
+        const postDate = new Date(post.post_date);
+        const isThisWeek = postDate >= thisWeekStart && postDate < thisWeekEnd;
+        const isRecentStatus = ['uploaded', 'ready'].includes(post.status?.toLowerCase());
+        const hasUnresolvedFeedback = (variations || []).some(v => 
+          v.post_id === post.id && 
+          v.feedback && 
+          v.feedback.trim() !== "" && 
+          !v.feedback_resolved
+        );
+        
+        return isThisWeek || isRecentStatus || hasUnresolvedFeedback;
+      });
+
+      // Get variations for these priority posts
+      const priorityVariationIds = new Set(
+        priorityPosts.map(p => p.id)
+      );
+      
+      const variationsToPreload = (variations || []).filter(v => 
+        priorityVariationIds.has(v.post_id)
+      );
+
+      console.log(`Background preloading ${variationsToPreload.length} priority variations (excluding currently open post)`);
+
+      // Helper to actually preload media into browser cache
+      const preloadMediaFile = (url) => {
+        preloadVideoBytes(url);
+        const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
+
+        if (isVideo) {
+          const video = document.createElement("video");
+          video.preload = "metadata";
+          video.muted = true; // helps some browsers allow loading behavior
+
+          video.onloadedmetadata = () => console.log("🎥 preload metadata ok", url);
+          video.oncanplay = () => console.log("🎥 preload canplay", url);
+          video.onerror = (e) => console.log("🎥 preload error", url, video.error, e);
+
+          video.src = url;
+          video.load();
+        } else {
+          const img = new Image();
+          img.onload = () => console.log("🖼️ preload ok", url);
+          img.onerror = (e) => console.log("🖼️ preload error", url, e);
+          img.src = url;
+        }
+      };
+
+
+      // Preload up to 15 variations (increased from 10 since we're skipping open post)
+      const preloadPromises = variationsToPreload
+        .slice(0, 15)
+        .map(async (v) => {
+          const paths = Array.isArray(v.carousel_files) && v.carousel_files.length > 0
+            ? v.carousel_files
+            : v.file_name ? [v.file_name] : [];
+          
+          // Only preload first image/video of each variation
+          const firstPath = paths[0];
+          if (!firstPath) return;
+          
+          try {
+            // Get the URL
+            const url = await getOptimizedMediaUrl(firstPath);
+            
+            // Tell browser to download it (lower priority)
+            preloadMediaFile(url);
+            
+            // Skip audio for background preload (save bandwidth for priority content)
+          } catch (err) {
+            // Silent fail - preloading is optional
+          }
+        });
+
+      // Execute all preloads in background
+      Promise.all(preloadPromises).then(() => {
+        console.log(`✅ Background preload complete`);
+      });
+    };
+
+    // Start preloading after calendar renders (increased delay to let priority preload finish first)
+    setTimeout(preloadVariations, 1000);
+
+    // Start preloading after calendar renders
+    setTimeout(preloadVariations, 500);
   }
   loadPosts()
 }, [selectedArtistId, viewMode, selectedMonth, refreshCounter, platformFilter])
@@ -2333,56 +2522,103 @@ async function updatePostDate(newDate) {
 
 // Open modal + fetch details (post + variations) in two queries
 async function openPostDetails(postId) {
-  setSelectedPostId(postId)
-  setPostLoading(true)
-  setPostError('')
-  setPostDetails(null)
-   try {
-    // 1) Fetch the post (use * to avoid column mismatches)
+  setSelectedPostId(postId);
+  setPostLoading(true);
+  setPostError('');
+  setPostDetails(null);
+
+  try {
     const { data: post, error: postErr } = await supabase
       .from('posts')
       .select('*')
       .eq('id', postId)
-      .single()
-    if (postErr) throw postErr
-     // 2) Fetch variations for that post (removed caption_a and caption_b)
-     const { data: variations, error: varErr } = await supabase
+      .single();
+    if (postErr) throw postErr;
+
+    const { data: variations, error: varErr } = await supabase
       .from('postvariations')
-        .select(`
-          id,
-          platforms,
-          test_version,
-          file_name,
-          length_seconds,
-          feedback,
-          feedback_resolved,
-          greenlight,
-          audio_file_name,
-          audio_start_seconds,
-          carousel_files
-        `)
-   
+      .select(`
+        id,
+        platforms,
+        test_version,
+        file_name,
+        length_seconds,
+        feedback,
+        feedback_resolved,
+        greenlight,
+        audio_file_name,
+        audio_start_seconds,
+        carousel_files
+      `)
       .eq('post_id', postId)
-      .order('test_version', { ascending: true })
-      
-     if (varErr) throw varErr
-     setPostDetails({
+      .order('test_version', { ascending: true });
+    
+    if (varErr) throw varErr;
+
+    // ✅ PRIORITY PRELOAD: Aggressively preload ALL media for this post
+    const priorityPreload = async () => {
+      const preloadMediaFile = (url) => {
+        const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
+        
+        if (isVideo) {
+          const video = document.createElement('video');
+          video.preload = 'auto';
+          video.src = url;
+          video.load();
+        } else {
+          const img = new Image();
+          img.src = url;
+        }
+      };
+
+      for (const v of variations || []) {
+        const paths = Array.isArray(v.carousel_files) && v.carousel_files.length > 0
+          ? v.carousel_files
+          : v.file_name ? [v.file_name] : [];
+        
+        // Preload ALL media for this post (not just first)
+        for (const path of paths) {
+          try {
+            const url = await getOptimizedMediaUrl(path);
+            preloadMediaFile(url);
+          } catch (err) {
+            console.log('Priority preload failed for', path, err);
+          }
+        }
+
+        // Also preload audio
+        if (v.audio_file_name) {
+          try {
+            const audioUrl = await getOptimizedMediaUrl(v.audio_file_name);
+            const audio = new Audio();
+            audio.preload = 'auto';
+            audio.src = audioUrl;
+            audio.load();
+          } catch (err) {
+            console.log('Audio preload failed');
+          }
+        }
+      }
+    };
+
+    // Start aggressive preload immediately (don't wait)
+    priorityPreload();
+
+    setPostDetails({
       post,
       variations: variations || [],
-      // Include captions from the post in the details
       captions: {
         a: post.caption_a,
         b: post.caption_b
       }
-    })
+    });
   } catch (e) {
-    console.error('Error loading post details:', e)
-    setPostError('Could not load post details. See console for more info.')
+    console.error('Error loading post details:', e);
+    setPostError('Could not load post details. See console for more info.');
   } finally {
-    setPostLoading(false)
+    setPostLoading(false);
   }
 }
-
 function closeModal() {
   setSelectedPostId(null)
   setPostDetails(null)
