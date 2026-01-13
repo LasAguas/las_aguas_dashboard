@@ -4,9 +4,6 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-// -----------------------------------------------------------------------------
-// Config: replace these URLs with Las Aguas real links
-// -----------------------------------------------------------------------------
 const LAS_AGUAS = {
   name: "Las Aguas",
   //tagline: "Links",
@@ -14,7 +11,7 @@ const LAS_AGUAS = {
     instagram: "https://instagram.com/lasaguas", // TODO
     //tiktok: "https://tiktok.com/@lasaguas", // TODO
     youtube: "https://www.youtube.com/@LasAguasProductions", // TODO
-    website: "https://open.spotify.com/", // optional TODO
+    website: "https://lasaguasproductions.com", // optional TODO
   },
   forms: {
     DigitalStrategy: "/forms/digital-strategy", // TODO (or external form URL)
@@ -207,7 +204,7 @@ export default function LinksPage() {
       { key: "instagram", label: "Instagram", href: LAS_AGUAS.socials.instagram, icon: <InstagramIcon /> },
       { key: "tiktok", label: "TikTok", href: LAS_AGUAS.socials.tiktok, icon: <TikTokIcon /> },
       { key: "youtube", label: "YouTube", href: LAS_AGUAS.socials.youtube, icon: <YouTubeIcon /> },
-      { key: "spotify", label: "Spotify", href: LAS_AGUAS.socials.spotify, icon: <WebsiteIcon /> },
+      { key: "website", label: "Website", href: LAS_AGUAS.socials.website, icon: <WebsiteIcon /> },
     ],
     []
   );
