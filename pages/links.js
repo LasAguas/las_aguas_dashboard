@@ -8,7 +8,7 @@ const LAS_AGUAS = {
   name: "Las Aguas",
   //tagline: "Links",
   socials: {
-    instagram: "https://instagram.com/lasaguas", // TODO
+    instagram: "https://www.instagram.com/lasaguas.productions/", // TODO
     //tiktok: "https://tiktok.com/@lasaguas", // TODO
     youtube: "https://www.youtube.com/@LasAguasProductions", // TODO
     website: "https://lasaguasproductions.com", // optional TODO
