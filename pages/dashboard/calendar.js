@@ -56,21 +56,21 @@ function cacheHasValidUrl(path) {
 
 
   async function getOptimizedMediaUrl(path) {
-  const now = Date.now();
+    const now = Date.now();
 
-  if (cacheHasValidUrl(path)) {
-    return cacheGetUrl(path);
+    if (cacheHasValidUrl(path)) {
+      return cacheGetUrl(path);
+    }
+
+    const { data, error } = await supabase.storage
+      .from("post-variations")
+      .createSignedUrl(path, 7200);
+
+    if (error) throw error;
+
+    cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
+    return data.signedUrl;
   }
-
-  const { data, error } = await supabase.storage
-    .from("post-variations")
-    .createSignedUrl(path, 7200);
-
-  if (error) throw error;
-
-  cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
-  return data.signedUrl;
-}
 
 const PLATFORM_OPTIONS = [
   { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
