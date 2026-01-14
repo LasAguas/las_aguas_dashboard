@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 const LAS_AGUAS = {
-  name: "Las Aguas",
+  name: "Las Aguas Productions",
   //tagline: "Links",
   socials: {
     instagram: "https://www.instagram.com/lasaguas.productions/", // TODO
