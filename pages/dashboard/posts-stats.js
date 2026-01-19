@@ -2592,7 +2592,7 @@ const recentPosts = useMemo(() => {
                     <button
                       key={post.id}
                       onClick={() => openPostModal(post)}
-                      className="flex-shrink-0 w-48 bg-white rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-md transition overflow-hidden"
+                      className="flex-shrink-0 w-48 bg-white rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-md transition overflow-hidden flex flex-col"
                     >
                       <RecentPostThumbnail post={post} />
                       <div className="p-2">
