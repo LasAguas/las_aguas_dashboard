@@ -172,6 +172,111 @@ function computeInstagramScore(snapshot) {
   ]);
 }
 
+// Thumbnail component for recent posts carousel
+function RecentPostThumbnail({ post }) {
+  const [thumbnailUrl, setThumbnailUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadThumbnail() {
+      try {
+        setLoading(true);
+        
+        // Fetch the first variation for this post
+        const { data: variations, error: varErr } = await supabase
+          .from("postvariations")
+          .select("*")
+          .eq("post_id", post.id)
+          .order("test_version", { ascending: true })
+          .limit(1);
+
+        if (varErr || !variations || variations.length === 0) {
+          setThumbnailUrl(null);
+          setLoading(false);
+          return;
+        }
+
+        const variation = variations[0];
+        let path = null;
+        
+        if (Array.isArray(variation.carousel_files) && variation.carousel_files.length > 0) {
+          path = variation.carousel_files[0];
+        } else if (variation.file_name) {
+          path = variation.file_name;
+        }
+
+        if (!path) {
+          setThumbnailUrl(null);
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = supabase.storage
+          .from("post-variations")
+          .getPublicUrl(path);
+
+        if (error) {
+          console.error("Error getting thumbnail URL", error);
+          setThumbnailUrl(null);
+        } else {
+          setThumbnailUrl(data.publicUrl);
+        }
+      } catch (e) {
+        console.error(e);
+        setThumbnailUrl(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadThumbnail();
+  }, [post.id]);
+
+  if (loading) {
+    return (
+      <div className="w-full aspect-[9/16] bg-gray-100 flex items-center justify-center overflow-hidden">
+        <div className="text-[10px] text-gray-400">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!thumbnailUrl) {
+    return (
+      <div className="w-full aspect-[9/16] bg-gray-100 flex items-center justify-center overflow-hidden">
+        <div className="text-[10px] text-gray-400">No media</div>
+      </div>
+    );
+  }
+
+  const isImage = /\.(jpe?g|png|gif|webp)$/i.test(thumbnailUrl);
+  const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(thumbnailUrl);
+
+  return (
+    <div className="w-full aspect-[9/16] bg-black overflow-hidden">
+      {isImage && (
+        <img
+          src={thumbnailUrl}
+          alt={post.post_name || "post thumbnail"}
+          className="w-full h-full object-cover"
+        />
+      )}
+      {isVideo && (
+        <video
+          src={thumbnailUrl}
+          className="w-full h-full object-cover"
+          muted
+          playsInline
+        />
+      )}
+      {!isImage && !isVideo && (
+        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">
+          Preview unavailable
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Very small inline line chart, no external libs.
 function MiniLineChart({ points, avgValue, height = 120, labelFormatter }) {
   if (!points || points.length === 0) {
@@ -515,6 +620,7 @@ async function runInstagramManualCollect() {
 
   // Modal state
   const [selectedPost, setSelectedPost] = useState(null);
+  const [recentPostsDays, setRecentPostsDays] = useState(7);
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [igLinkModalPost, setIgLinkModalPost] = useState(null);
@@ -1191,6 +1297,56 @@ const crossStandoutsByCategory = useMemo(() => {
   tiktokArtistAverages,
   instagramArtistAverages,
 ]);
+
+const recentPosts = useMemo(() => {
+    const allPostIds = new Set();
+    (posts || []).forEach((p) => allPostIds.add(p.id));
+    (tiktokPosts || []).forEach((p) => allPostIds.add(p.id));
+    (instagramPosts || []).forEach((p) => allPostIds.add(p.id));
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - recentPostsDays);
+
+    const filtered = [];
+    allPostIds.forEach((postId) => {
+      const post = postById.get(postId);
+      if (!post || !post.post_date) return;
+      
+      const postDate = new Date(post.post_date);
+      if (postDate >= cutoffDate) {
+        const ytSnap = latestSnapshotByPostId.get(postId);
+        const ttSnap = tiktokLatestSnapshotByPostId.get(postId);
+        const igSnap = instagramLatestSnapshotByPostId.get(postId);
+
+        const totalViews =
+          (Number(ytSnap?.views) || 0) +
+          (Number(ttSnap?.views) || 0) +
+          (Number(igSnap?.views) || 0);
+
+        if (totalViews > 0) {
+          filtered.push({
+            post,
+            totalViews,
+            ytSnap,
+            ttSnap,
+            igSnap,
+          });
+        }
+      }
+    });
+
+    filtered.sort((a, b) => b.totalViews - a.totalViews);
+    return filtered;
+  }, [
+    posts,
+    tiktokPosts,
+    instagramPosts,
+    postById,
+    latestSnapshotByPostId,
+    tiktokLatestSnapshotByPostId,
+    instagramLatestSnapshotByPostId,
+    recentPostsDays,
+  ]);
 
   // YT group posts by channel size tier (based on artist.youtube_followers or "Unknown")
   function getArtistTier(artist) {
@@ -2383,7 +2539,8 @@ const crossStandoutsByCategory = useMemo(() => {
       !crossStandoutsByCategory.shares.length &&
       !crossStandoutsByCategory.comments.length &&
       !crossStandoutsByCategory.retention.length &&
-      !crossStandoutsByCategory.views.length
+      !crossStandoutsByCategory.views.length &&
+      !recentPosts.length
     ) {
       return (
         <div className="text-sm text-gray-800 bg-[#eef8ea] rounded-xl p-4">
@@ -2402,6 +2559,91 @@ const crossStandoutsByCategory = useMemo(() => {
 
     return (
       <div className="space-y-6">
+        {/* Recent Posts Carousel */}
+        {recentPosts.length > 0 && (
+          <div className="bg-[#eef8ea] rounded-xl p-4 shadow-inner">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">Recent Posts</h3>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-600">Time period:</label>
+                <select
+                  className="border border-gray-300 rounded-lg px-2 py-1 text-xs bg-white"
+                  value={recentPostsDays}
+                  onChange={(e) => setRecentPostsDays(Number(e.target.value))}
+                >
+                  <option value={7}>Last 7 days</option>
+                  <option value={14}>Last 14 days</option>
+                  <option value={28}>Last 28 days</option>
+                  <option value={90}>Last 90 days</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto w-full max-w-full"> 
+              <div className="flex gap-3 pb-2 w-max">
+                {recentPosts.map(({ post, totalViews, ytSnap, ttSnap, igSnap }) => {
+                  const artist = artistById.get(post.artist_id);
+                  const platforms = [];
+                  if (ytSnap) platforms.push('YT');
+                  if (ttSnap) platforms.push('TT');
+                  if (igSnap) platforms.push('IG');
+
+                  return (
+                    <button
+                      key={post.id}
+                      onClick={() => openPostModal(post)}
+                      className="flex-shrink-0 w-48 bg-white rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-md transition overflow-hidden"
+                    >
+                      <RecentPostThumbnail post={post} />
+                      <div className="p-2">
+                        <div className="text-xs font-semibold line-clamp-2 mb-1">
+                          {post.post_name || "Untitled post"}
+                        </div>
+                        <div className="text-[10px] text-gray-600 mb-1">
+                          {artist?.name || "Unknown"}
+                        </div>
+                        <div className="text-[10px] text-gray-700">
+                          <div className="space-y-0.5">
+                            <div>
+                              <span className="text-gray-500">Shares:</span>{" "}
+                              <span className="font-semibold">
+                                {formatNumber(
+                                  (Number(ytSnap?.shares) || 0) +
+                                  (Number(ttSnap?.shares) || 0) +
+                                  (Number(igSnap?.shares) || 0)
+                                )}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Comments:</span>{" "}
+                              <span className="font-semibold">
+                                {formatNumber(
+                                  (Number(ytSnap?.comments) || 0) +
+                                  (Number(ttSnap?.comments) || 0) +
+                                  (Number(igSnap?.comments) || 0)
+                                )}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">Views:</span>{" "}
+                              <span className="font-semibold">
+                                {formatNumber(totalViews)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-gray-500 mt-1">
+                            {platforms.join(' • ')}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {categories.map((cat) => {
           const entries = crossStandoutsByCategory[cat.key] || [];
           if (!entries.length) return null;
@@ -2537,7 +2779,7 @@ const crossStandoutsByCategory = useMemo(() => {
         </div>
 
         {/* MAIN CONTENT */}
-        <div className="flex-1 flex flex-col gap-4">
+        <div className="flex-1 flex flex-col gap-4 min-w-0"> {/* <--- Added min-w-0 here */}
           <section className="bg-[#bbe1ac] rounded-2xl shadow-lg p-4 md:p-6 flex-1">
             <h1 className="text-xl md:text-2xl font-bold mb-4">
               Posts Stats
