@@ -68,22 +68,68 @@ function cacheHasValidUrl(path) {
   
   return true;
 }
-  async function getOptimizedMediaUrl(path) {
-    const now = Date.now();
 
-    if (cacheHasValidUrl(path)) {
-      return cacheGetUrl(path);
-    }
+// Single file URL fetch (for priorityPreload and background preloading)
+async function getOptimizedMediaUrl(path) {
+  const now = Date.now();
 
-    const { data, error } = await supabase.storage
-      .from("post-variations")
-      .createSignedUrl(path, 7200);
-
-    if (error) throw error;
-
-    cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
-    return data.signedUrl;
+  if (cacheHasValidUrl(path)) {
+    return cacheGetUrl(path);
   }
+
+  const { data, error } = await supabase.storage
+    .from("post-variations")
+    .createSignedUrl(path, 7200);
+
+  if (error) throw error;
+
+  cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
+  return data.signedUrl;
+}
+
+  // ✅ NEW: Batch fetch signed URLs for multiple files at once
+async function getBatchOptimizedMediaUrls(paths) {
+  if (!paths || paths.length === 0) return [];
+  
+  const now = Date.now();
+  const uncachedPaths = [];
+  const cachedResults = [];
+
+  // Step 1: Check cache for each path
+  for (const path of paths) {
+    if (cacheHasValidUrl(path)) {
+      cachedResults.push({
+        path,
+        signedUrl: cacheGetUrl(path)
+      });
+    } else {
+      uncachedPaths.push(path);
+    }
+  }
+
+  // Step 2: If all cached, return immediately
+  if (uncachedPaths.length === 0) {
+    return cachedResults;
+  }
+
+  // Step 3: Batch fetch uncached URLs in ONE API call
+  const { data, error } = await supabase.storage
+    .from("post-variations")
+    .createSignedUrls(uncachedPaths, 7200);  // Note: createSignedUrls (plural)
+
+  if (error) throw error;
+
+  // Step 4: Cache the new URLs
+  const newResults = (data || []).map((item) => {
+    if (item.signedUrl) {
+      cacheSetUrl(item.path, item.signedUrl, now + 7200 * 1000);
+    }
+    return item;
+  });
+
+  // Step 5: Combine cached + newly fetched
+  return [...cachedResults, ...newResults];
+}
 
 const PLATFORM_OPTIONS = [
   { value: 'Instagram',   label: 'Instagram',   short: 'IG' },
@@ -261,27 +307,41 @@ useEffect(() => {
     return;
   }
 
-  // ✅ Async function to fetch ALL URLs in parallel (not sequentially)
+  // ✅ Async function to fetch ALL URLs using batch API
+  // ✅ Progressive loading: Load first item immediately, then rest in background
   async function loadAllMediaUrls() {
       try {
-        // Create promises for all paths at once
-        const urlPromises = paths.map(async (path) => {
-          // Check cache first
-          const cachedUrl = cacheGetUrl(path);
-          if (cachedUrl) {
-            return { path, url: cachedUrl, type: detectType(path) };
-          }
+        // Step 1: Load ONLY the first item immediately
+        const firstResult = await getBatchOptimizedMediaUrls([paths[0]]);
+        
+        // Step 2: Display the first item right away (don't wait for others)
+        if (firstResult.length > 0) {
+          const firstItem = {
+            path: firstResult[0].path,
+            url: firstResult[0].signedUrl,
+            type: detectType(firstResult[0].path)
+          };
+          setMediaItems([firstItem]);
+          setCurrentIndex(0);
+        }
 
-          // If not cached, get signed URL from Supabase
-          const url = await getOptimizedMediaUrl(path); // This caches internally
-          return { path, url, type: detectType(path) };
-        });
-
-        // ✅ Wait for ALL URLs to resolve in parallel (much faster than sequential)
-        const items = await Promise.all(urlPromises);
-
-        setMediaItems(items);
-        setCurrentIndex(0);
+        // Step 3: Load remaining items in background (only if there are more)
+        if (paths.length > 1) {
+          const restResults = await getBatchOptimizedMediaUrls(paths.slice(1));
+          
+          // Step 4: Combine first item + rest and update state
+          const allItems = [
+            ...firstResult,
+            ...restResults
+          ].map((result) => ({
+            path: result.path,
+            url: result.signedUrl,
+            type: detectType(result.path)
+          }));
+          
+          setMediaItems(allItems);
+          // Note: currentIndex stays 0, so user stays on first item
+        }
       } catch (err) {
         console.error("Error loading media URLs:", err);
         setMediaItems([]);
@@ -306,17 +366,19 @@ useEffect(() => {
     return;
   }
 
-  const { data, error } = supabase.storage
-    .from("post-variations")
-    .getPublicUrl(variation.audio_file_name);
-
-  if (error) {
-    console.error("Error fetching audio URL:", error);
-    setAudioUrl(null);
-  } else {
-    cacheSetUrl(variation.audio_file_name, data.publicUrl); // cache it
-    setAudioUrl(data.publicUrl);
-  }
+  (async () => {
+    const { data, error } = await supabase.storage
+      .from("post-variations")
+      .getPublicUrl(variation.audio_file_name);
+    
+    if (error) {
+      console.error("Error fetching audio URL:", error);
+      setAudioUrl(null);
+    } else {
+      cacheSetUrl(variation.audio_file_name, data.publicUrl);
+      setAudioUrl(data.publicUrl);
+    }
+  })();
 }, [variation?.audio_file_name]);
 
 // ✅ Derive active FIRST (so hooks can safely use it)
@@ -1079,13 +1141,13 @@ async function preloadPostVariations(postId, allVariations) {
   
   console.log(`🔄 Preloading ${postVariations.length} variations for post ${postId}`);
   
-  // Preload each variation's media (first item only for speed)
-  for (const variation of postVariations) {
+  // ✅ Preload each variation's media in PARALLEL (first item only for speed)
+  const preloadPromises = postVariations.map(async (variation) => {
     const paths = Array.isArray(variation.carousel_files) && variation.carousel_files.length
       ? variation.carousel_files
       : variation.file_name ? [variation.file_name] : [];
     
-    if (!paths.length) continue;
+    if (!paths.length) return;
     
     try {
       // Only preload first item (most likely to be viewed)
@@ -1107,7 +1169,10 @@ async function preloadPostVariations(postId, allVariations) {
     } catch (err) {
       console.log("Preload failed for variation", variation.id, err);
     }
-  }
+  });
+
+  // Wait for all preloads to complete
+  await Promise.all(preloadPromises);
 }
 
 function ArtistCalendarInner() {
@@ -1135,13 +1200,13 @@ function ArtistCalendarInner() {
 
     // small local helper (kept inside to avoid global ref issues)
     const preloadMediaUrl = (url) => {
-      // warm cache with a small range request (helps MP4 start time)
-      preloadVideoBytes(url);
+      // ✅ FIX: Removed preloadVideoBytes - unnecessary bandwidth usage
+      // The video element with preload="metadata" is sufficient
 
       const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
       if (isVideo) {
         const video = document.createElement("video");
-        video.preload = "metadata";
+        video.preload = "metadata";  // Only loads metadata, not 256KB
         video.muted = true;
         video.src = url;
         video.load();
@@ -1151,15 +1216,16 @@ function ArtistCalendarInner() {
       }
     };
 
-    // preload first item ASAP, then the rest
-    for (let i = 0; i < paths.length; i++) {
-      const path = paths[i];
+    // ✅ FIX: Only preload FIRST item for instant display
+    // MediaPlayer will handle loading the rest when it mounts
+    if (paths.length > 0) {
       try {
-        const cached = cacheGetUrl(path);
-        const url = cached || (await getOptimizedMediaUrl(path)); // caches signed URL internally
+        const firstPath = paths[0];
+        const cached = cacheGetUrl(firstPath);
+        const url = cached || (await getOptimizedMediaUrl(firstPath));
         preloadMediaUrl(url);
       } catch (err) {
-        console.log("Priority preload failed for", path, err);
+        console.log("Priority preload failed for first item", err);
       }
     }
   };
@@ -1468,28 +1534,65 @@ function ArtistCalendarInner() {
   }, [selectedArtistId, viewMode, selectedMonth, platformFilter])
 
    // Smart preloading: Load media when posts become visible in viewport
+  // Smart preloading: Load media when posts become visible in viewport (with throttling)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!weeks.length || !allVariations.length) return;
+    
+    // Queue system to prevent too many simultaneous preloads
+    const preloadQueue = new Set();
+    const preloadedPosts = new Set();
+    let isPreloading = false;
+    
+    // Process preloads one at a time to avoid network congestion
+    async function processPreloadQueue() {
+      if (isPreloading || preloadQueue.size === 0) return;
+      
+      isPreloading = true;
+      
+      // Get first item from queue
+      const postId = Array.from(preloadQueue)[0];
+      preloadQueue.delete(postId);
+      
+      // Skip if already preloaded
+      if (preloadedPosts.has(postId)) {
+        isPreloading = false;
+        processPreloadQueue(); // Continue to next
+        return;
+      }
+      
+      try {
+        await preloadPostVariations(postId, allVariations);
+        preloadedPosts.add(postId);
+      } catch (err) {
+        console.log('Background preload failed for post', postId, err);
+      }
+      
+      isPreloading = false;
+      
+      // Process next item in queue after a small delay
+      setTimeout(() => processPreloadQueue(), 100);
+    }
     
     // Create observer that watches when post elements enter viewport
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
-            // Post is visible - start preloading its media
+            // Post is visible - add to preload queue
             const postId = entry.target.dataset.postId;
-            if (postId) {
-              preloadPostVariations(parseInt(postId), allVariations);
+            if (postId && !preloadedPosts.has(parseInt(postId))) {
+              preloadQueue.add(parseInt(postId));
+              processPreloadQueue(); // Start processing if not already running
             }
           }
         });
       },
       { 
-        // ✅ Start loading 200px BEFORE post enters viewport
-        rootMargin: '200px',
-        // ✅ Only trigger when at least 10% of post is visible
-        threshold: 0.1
+        // Reduced from 200px to 100px - less aggressive
+        rootMargin: '100px',
+        // Increased from 0.1 to 0.2 - post must be more visible before preloading
+        threshold: 0.2
       }
     );
     
@@ -1793,7 +1896,6 @@ function ArtistCalendarInner() {
         onClick={() => {
           setSelectedVariation(v)
           setShowMediaPlayer(true)
-          priorityPreload(v);
         }}
       >
       <div className="text-sm">
