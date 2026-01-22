@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/metrics/youtube-batch?cron=1&secret=***REMOVED***",
+      "path": "/api/metrics/youtube",
       "schedule": "0 1 * * *"
     },
     {

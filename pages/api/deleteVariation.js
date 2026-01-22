@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
     'https://gtccctajvobfvhlonaot.supabase.co', // <-- comma here
-    '***REMOVED***' // safer than hardcoding
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd0Y2NjdGFqdm9iZnZobG9uYW90Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDk5Mjc3MCwiZXhwIjoyMDcwNTY4NzcwfQ.Ztx1bFawe5CvBeHOlDaE03N3MsOQF5SALFgG3tHu4s0' // safer than hardcoding
   );
 
 export default async function handler(req, res) {
