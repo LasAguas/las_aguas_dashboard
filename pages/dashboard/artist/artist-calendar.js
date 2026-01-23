@@ -6,6 +6,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import Link from "next/link";
 import ArtistLayout from "../../../components/artist/ArtistLayout";
 import { mediaUrlCache, cacheGetUrl, cacheSetUrl } from '../../../hooks/usePreloadPriorityPosts';
+import { useFeedbackComments } from '../../../hooks/useFeedbackComments';
 
 // Helpers
 const pad = (n) => String(n).padStart(2, '0')
@@ -252,8 +253,24 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onOpenCaptions }) {
   const [audioUrl, setAudioUrl] = useState(null);
   const audioRef = useRef(null);
 
-  const [feedback, setFeedback] = useState("");
-  const [savingFeedback, setSavingFeedback] = useState(false);
+  // ✅ NEW: Use feedback comments hook instead of single feedback field
+  const {
+    comments,
+    loading: commentsLoading,
+    unresolvedCount,
+    addComment,
+    resolveComment,
+    unresolveComment,
+    deleteComment
+  } = useFeedbackComments(variation?.id);
+
+  // ✅ NEW: New Feedback System w Feedback
+  const [newCommentText, setNewCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // ✅ ADD caption editing state
   const [isEditingCaptions, setIsEditingCaptions] = useState(false);
@@ -303,7 +320,7 @@ async function toggleGreenlight() {
   // Keep local state in sync when opening a different variation
   useEffect(() => {
     if (!variation) return;
-    setFeedback(variation.feedback || "");
+    // ✅ Removed old setFeedback - now using comment system
     setSnippetStart(Number(variation.audio_start_seconds) || 0);
     
     // ✅ Sync caption editing state
@@ -526,27 +543,117 @@ if (!variation) return null;
     if (typeof onRefreshPost === "function") onRefreshPost();
   };
 
-  const handleSaveFeedback = async () => {
-    if (!variation?.id) return;
-    setSavingFeedback(true);
+  // ✅ NEW: Handler to submit new comment
+  async function handleSubmitComment() {
+    if (!newCommentText.trim()) return;
 
-    const { error } = await supabase
-      .from("postvariations")
-      .update({ feedback })
-      .eq("id", variation.id);
+    setSubmittingComment(true);
+    try {
+      await addComment(newCommentText);
+      setNewCommentText("");
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      alert("Could not add comment. See console for details.");
+    } finally {
+      setSubmittingComment(false);
+    }
+  }
 
-    setSavingFeedback(false);
+  // ✅ NEW: Handler to resolve/unresolve comment
+  async function handleToggleResolve(comment) {
+    try {
+      if (comment.resolved) {
+        await unresolveComment(comment.id);
+      } else {
+        await resolveComment(comment.id);
+      }
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to toggle resolve:", err);
+      alert("Could not update comment. See console for details.");
+    }
+  }
 
-    if (error) {
-      console.error("Error saving feedback:", error);
-      alert("Could not save feedback: " + error.message);
+  // ✅ NEW: Handler to delete comment
+  async function handleDeleteComment(commentId) {
+    if (!confirm("Delete this comment? This cannot be undone.")) return;
+
+    try {
+      await deleteComment(commentId);
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert("Could not delete comment. See console for details.");
+    }
+  }
+
+  // ✅ NEW: Start editing a comment
+  function handleStartEdit(comment) {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.comment_text);
+  }
+
+  // ✅ NEW: Cancel editing
+  function handleCancelEdit() {
+    setEditingCommentId(null);
+    setEditingCommentText("");
+  }
+
+  // ✅ NEW: Save edited comment
+  async function handleSaveEdit(commentId) {
+    if (!editingCommentText.trim()) {
+      alert("Comment cannot be empty");
       return;
     }
 
-    variation.feedback = feedback; // keep local in sync
-    if (typeof onRefreshPost === "function") onRefreshPost();
-    alert("Feedback saved!");
-  };
+    setSavingEdit(true);
+    try {
+      // Update comment in database with edited timestamp
+      const { error } = await supabase
+        .from('feedback_comments')
+        .update({ 
+          comment_text: editingCommentText.trim(),
+          edited_at: new Date().toISOString()  // ✅ NEW: Track when edited
+        })
+        .eq('id', commentId);
+
+      if (error) throw error;
+
+      // Update local state in the hook (force reload)
+      if (typeof onRefreshPost === "function") onRefreshPost();
+      
+      // Reset edit state
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (err) {
+      console.error("Failed to save edit:", err);
+      alert("Could not save changes. See console for details.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  // ✅ NEW: Format timestamp for display
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  }
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
@@ -787,42 +894,213 @@ if (!variation) return null;
               </div>
             )}
 
-            {/* Feedback (artist allowed) */}
-            <div className="text-sm font-semibold mb-2">Feedback</div>
-            <textarea
-              className="w-full border rounded p-2 min-h-[180px]"
-              placeholder="Leave feedback here…"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-            />
-            <button
-              onClick={handleSaveFeedback}
-              disabled={savingFeedback}
-              className="mt-3 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400"
-            >
-              {savingFeedback ? "Saving..." : "Save Feedback"}
-            </button>
-            {/* ✅ Greenlight button */}
-            <button
-              type="button"
-              onClick={toggleGreenlight}
-              disabled={savingGreenlight}
-              className={[
-                "mt-2 w-full py-2 rounded transition-colors disabled:opacity-60",
-                localGreenlight
-                  ? "bg-green-600 hover:bg-green-700 text-white"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-900",
-              ].join(" ")}
-            >
-              {savingGreenlight
-                ? "Saving…"
-                : localGreenlight
-                  ? "Greenlit ✅"
-                  : "Greenlight"}
-            </button>
-          </div>
-        </div>
+            {/* ============================================================================ */}
+            {/* ✅ FEEDBACK SECTION - Editable, oldest first, resolved collapsible */}
+            {/* ============================================================================ */}
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold">
+                  Feedback {unresolvedCount > 0 && (
+                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                      {unresolvedCount} unresolved
+                    </span>
+                  )}
+                </h3>
+              </div>
 
+              {commentsLoading ? (
+                <div className="text-sm text-gray-500 text-center py-4">
+                  Loading comments...
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="text-sm text-gray-500 text-center py-4">
+                  No feedback yet. Be the first to comment!
+                </div>
+              ) : (
+                <>
+                  {/* ✅ UNRESOLVED COMMENTS - Always visible */}
+                  <div className="space-y-2 mb-3 max-h-[250px] overflow-y-auto">
+                    {comments.filter(c => !c.resolved).map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="p-2 rounded border bg-gray-50 border-gray-200" // CHANGE
+                      >
+                        {/* Comment header */}
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {comment.user_name}
+                            </span>
+                            <span className="text-gray-500">
+                              {formatTimestamp(comment.created_at)}
+                            </span>
+                            {/* ✅ NEW: Show edited timestamp if comment was edited */}
+                            {comment.edited_at && (
+                              <span className="text-gray-400 italic">
+                                (edited {formatTimestamp(comment.edited_at)})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Comment text - Editable if this comment is being edited */}
+                        {editingCommentId === comment.id ? (
+                          <div className="mb-2">
+                            <textarea
+                              value={editingCommentText}
+                              onChange={(e) => setEditingCommentText(e.target.value)}
+                              className="w-full border rounded p-2 text-sm min-h-[60px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              disabled={savingEdit}
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-800 whitespace-pre-wrap mb-2">
+                            {comment.comment_text}
+                          </p>
+                        )}
+
+                        {/* Comment actions */}
+                        <div className="flex gap-1.5">
+                          {editingCommentId === comment.id ? (
+                            <>
+                              {/* Save and Cancel buttons when editing */}
+                              <button
+                                onClick={() => handleSaveEdit(comment.id)}
+                                disabled={savingEdit}
+                                className="text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+                              >
+                                {savingEdit ? 'Saving...' : 'Save'}
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                disabled={savingEdit}
+                                className="text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {/* Edit and Delete buttons when not editing */}
+                              <button
+                                onClick={() => handleStartEdit(comment)}
+                                className="text-xs px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteComment(comment.id)}
+                                className="text-xs px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-red-700"
+                              >
+                                Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    {comments.filter(c => !c.resolved).length === 0 && (
+                      <div className="text-sm text-gray-500 text-center py-3">
+                        All feedback resolved! 🎉
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ✅ RESOLVED COMMENTS - Collapsible, read-only */}
+                  {comments.filter(c => c.resolved).length > 0 && (
+                    <div className="mb-3">
+                      <button
+                        onClick={() => setShowResolvedComments(!showResolvedComments)}
+                        className="w-full text-left text-xs text-gray-600 hover:text-gray-900 py-2 px-3 bg-gray-50 rounded flex items-center justify-between"
+                      >
+                        <span>
+                          {showResolvedComments ? '▼' : '▶'} Resolved ({comments.filter(c => c.resolved).length})
+                        </span>
+                      </button>
+
+                      {showResolvedComments && (
+                        <div className="space-y-2 mt-2 max-h-[200px] overflow-y-auto">
+                          {comments.filter(c => c.resolved).map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="p-2 rounded border bg-gray-50 border-gray-200"
+                            >
+                              {/* Comment header */}
+                              <div className="flex items-start justify-between mb-1">
+                                <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                                  <span className="font-medium text-gray-700">
+                                    {comment.user_name}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    {formatTimestamp(comment.created_at)}
+                                  </span>
+                                  {/* ✅ NEW: Show edited timestamp if comment was edited */}
+                                  {comment.edited_at && (
+                                    <span className="text-gray-400 italic">
+                                      (edited {formatTimestamp(comment.edited_at)})
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+                                  ✓
+                                </span>
+                              </div>
+
+                              {/* Comment text - Read-only for resolved comments */}
+                              <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                                {comment.comment_text}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ✅ ADD NEW COMMENT */}
+              <div className="border-t pt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Add new feedback
+                </label>
+                <textarea
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  placeholder="Leave feedback here..."
+                  className="w-full border rounded p-2 text-sm min-h-[80px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={submittingComment}
+                />
+                <button
+                  onClick={handleSubmitComment}
+                  disabled={submittingComment || !newCommentText.trim()}
+                  className="mt-2 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {submittingComment ? 'Posting...' : 'Post Feedback'}
+                </button>
+              </div>
+            </div>
+              {/* ✅ Greenlight button */}
+              <button
+                type="button"
+                onClick={toggleGreenlight}
+                disabled={savingGreenlight}
+                className={[
+                  "mt-2 w-full py-2 rounded transition-colors disabled:opacity-60",
+                  localGreenlight
+                    ? "bg-green-600 hover:bg-green-700 text-white"
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-900",
+                ].join(" ")}
+              >
+                {savingGreenlight
+                  ? "Saving…"
+                  : localGreenlight
+                    ? "Greenlit ✅"
+                    : "Greenlight"}
+              </button>
+            </div>
+        </div>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useFeedbackComments } from '../../hooks/useFeedbackComments';
 
 // Helpers
 const pad = (n) => String(n).padStart(2, '0')
@@ -298,20 +299,32 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");  
 
-  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
-  const [saving, setSaving] = useState(false);
+  // ✅ REMOVED: Old feedback state (localResolved, saving, feedbackModalOpen)
+  // ✅ NEW: Use feedback comments hook
+  const {
+    comments,
+    loading: commentsLoading,
+    unresolvedCount,
+    addComment,
+    resolveComment,
+    unresolveComment,
+    deleteComment
+  } = useFeedbackComments(variation?.id);
+
+  // ✅ NEW: State for feedback system
+  const [newCommentText, setNewCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
 
   const [platforms, setPlatforms] = useState(variation?.platforms || []);
   const [savingPlatforms, setSavingPlatforms] = useState(false);
 
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-
   const audioRef = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
 
-   // ✅ NEW: greenlight local state + saver
-   const [localGreenlight, setLocalGreenlight] = useState(!!variation?.greenlight);
-   const [savingGreenlight, setSavingGreenlight] = useState(false);
+  // Greenlight state
+  const [localGreenlight, setLocalGreenlight] = useState(!!variation?.greenlight);
+  const [savingGreenlight, setSavingGreenlight] = useState(false);
 
   // 🔊 snippet state for THIS player
   const [snippetStart, setSnippetStart] = useState(
@@ -364,10 +377,6 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   useEffect(() => {
     setPlatforms(variation?.platforms || []);
   }, [variation?.platforms]);
-
-  useEffect(() => {
-    setLocalResolved(!!variation?.feedback_resolved);
-  }, [variation?.feedback_resolved]);
 
   // Then in MediaPlayer's useEffect where you load media URLs, replace with:
 useEffect(() => {
@@ -510,23 +519,53 @@ useEffect(() => {
     }
   }
 
-  async function toggleResolve() {
-    if (!variation || saving) return;
-    setSaving(true);
-    const next = !localResolved;
-    const { error } = await supabase
-      .from("postvariations")
-      .update({ feedback_resolved: next })
-      .eq("id", variation.id);
-    setSaving(false);
-    if (error) {
-      console.error(error);
-      alert("Could not update feedback status.");
-      return;
+  // ✅ NEW: Handler to resolve/unresolve comment (admins can toggle)
+  async function handleToggleResolve(comment) {
+    try {
+      if (comment.resolved) {
+        await unresolveComment(comment.id);
+      } else {
+        await resolveComment(comment.id);
+      }
+      if (typeof onRefreshPost === "function") onRefreshPost(); // Refresh parent to update bubble counts
+    } catch (err) {
+      console.error("Failed to toggle resolve:", err);
+      alert("Could not update comment. See console for details.");
     }
-    setLocalResolved(next);
-    variation.feedback_resolved = next;
-    if (typeof onRefreshPost === "function") onRefreshPost(variation.id, next);
+  }
+
+  // ✅ NEW: Handler to delete comment (admins can delete any comment)
+  async function handleDeleteComment(commentId) {
+    if (!confirm("Delete this comment? This cannot be undone.")) return;
+
+    try {
+      await deleteComment(commentId);
+      if (typeof onRefreshPost === "function") onRefreshPost(); // Refresh parent to update bubble counts
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert("Could not delete comment. See console for details.");
+    }
+  }
+
+  // ✅ NEW: Format timestamp for display
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
   }
 
   async function toggleGreenlight() {
@@ -582,9 +621,6 @@ useEffect(() => {
       alert("Failed to delete variation. Check console for details.");
     }
   };
-
-  const hasFeedback =
-    Boolean(variation.feedback && variation.feedback.trim() !== "");
 
   const goPrev = () => {
     if (!hasCarousel) return;
@@ -871,29 +907,157 @@ useEffect(() => {
             )}
 
 
-            {/* Feedback summary */}
-            {hasFeedback && (
-              <div className="mt-4 rounded-md bg-[#f9fafb] border border-[#e5e7eb] p-3 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                  <span className="font-semibold text-[#111827]">Feedback summary</span>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      localResolved
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
-                    {localResolved ? "Resolved" : "Needs attention"}
-                  </span>
-                </div>
-                <p className="text-[#374151] whitespace-pre-wrap">
-                  {variation.feedback}
-                </p>
+            {/* ============================================================================ */}
+            {/* ✅ NEW FEEDBACK SECTION - Admin version with resolve/unresolve */}
+            {/* ============================================================================ */}
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">
+                  Feedback {unresolvedCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] bg-yellow-100 text-yellow-800">
+                      {unresolvedCount} need attention
+                    </span>
+                  )}
+                </h3>
               </div>
-            )}
 
-            {/* Action buttons */}
-            <div className="flex gap-2 mt-2 flex-wrap">
+              {commentsLoading ? (
+                <div className="text-xs text-gray-500 text-center py-3">
+                  Loading feedback...
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="text-xs text-gray-500 text-center py-3">
+                  No feedback yet.
+                </div>
+              ) : (
+                <>
+                  {/* ✅ UNRESOLVED COMMENTS - Always visible */}
+                  <div className="space-y-1.5 mb-2 max-h-[220px] overflow-y-auto">
+                    {comments.filter(c => !c.resolved).map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="p-2 rounded border bg-gray-50 border-gray-200"
+                      >
+                        {/* Comment header */}
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-center gap-1 text-[10px] flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {comment.user_name}
+                            </span>
+                            <span className="text-gray-500">
+                              {formatTimestamp(comment.created_at)}
+                            </span>
+                            {comment.edited_at && (
+                              <span className="text-gray-400 italic">
+                                (edited {formatTimestamp(comment.edited_at)})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Comment text */}
+                        <p className="text-xs text-gray-800 whitespace-pre-wrap mb-1.5">
+                          {comment.comment_text}
+                        </p>
+
+                        {/* Comment actions */}
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleToggleResolve(comment)}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 hover:bg-green-200 text-green-800"
+                          >
+                            Resolve
+                          </button>
+                          
+                          <button
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {comments.filter(c => !c.resolved).length === 0 && (
+                      <div className="text-xs text-gray-500 text-center py-2">
+                        All feedback resolved! 🎉
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ✅ RESOLVED COMMENTS - Collapsible */}
+                  {comments.filter(c => c.resolved).length > 0 && (
+                    <div className="mb-2">
+                      <button
+                        onClick={() => setShowResolvedComments(!showResolvedComments)}
+                        className="w-full text-left text-[10px] text-gray-600 hover:text-gray-900 py-1.5 px-2 bg-gray-50 rounded flex items-center justify-between"
+                      >
+                        <span>
+                          {showResolvedComments ? '▼' : '▶'} Resolved ({comments.filter(c => c.resolved).length})
+                        </span>
+                      </button>
+
+                      {showResolvedComments && (
+                        <div className="space-y-1.5 mt-1.5 max-h-[180px] overflow-y-auto">
+                          {comments.filter(c => c.resolved).map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="p-2 rounded border bg-gray-50 border-gray-200"
+                            >
+                              {/* Comment header */}
+                              <div className="flex items-start justify-between mb-1">
+                                <div className="flex items-center gap-1 text-[10px] flex-wrap">
+                                  <span className="font-medium text-gray-700">
+                                    {comment.user_name}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    {formatTimestamp(comment.created_at)}
+                                  </span>
+                                  {comment.edited_at && (
+                                    <span className="text-gray-400 italic">
+                                      (edited {formatTimestamp(comment.edited_at)})
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] bg-green-100 text-green-800 px-1 py-0.5 rounded">
+                                  ✓
+                                </span>
+                              </div>
+
+                              {/* Comment text - slightly muted */}
+                              <p className="text-xs text-gray-600 whitespace-pre-wrap mb-1.5">
+                                {comment.comment_text}
+                              </p>
+
+                              {/* Comment actions */}
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleToggleResolve(comment)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
+                                >
+                                  Unresolve
+                                </button>
+                                
+                                <button
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Action buttons - KEEP THESE */}
+            <div className="flex gap-2 mt-3 flex-wrap">
               <button
                 onClick={handleDelete}
                 className="flex-1 bg-gray-200 text-black py-2 rounded hover:bg-gray-300 transition-colors text-sm min-w-[180px]"
@@ -908,7 +1072,7 @@ useEffect(() => {
                 Replace Variation
               </button>
 
-              {/* ✅ NEW: Greenlight toggle */}
+              {/* Greenlight toggle */}
               <button
                 onClick={toggleGreenlight}
                 disabled={savingGreenlight}
@@ -918,60 +1082,9 @@ useEffect(() => {
               >
                 {savingGreenlight ? "Saving…" : localGreenlight ? "Greenlit ✅ (click to undo)" : "Not greenlit (click to greenlight)"}
               </button>
-
-              <button
-                onClick={toggleResolve}
-                disabled={saving || !variation.feedback}
-                className={`flex-1 py-2 rounded text-white transition-colors text-sm min-w-[180px] ${
-                  localResolved ? "bg-gray-500 hover:bg-gray-600" : "bg-green-600 hover:bg-green-700"
-                } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
-              >
-                {saving
-                  ? "Saving…"
-                  : localResolved
-                  ? "Mark feedback as unresolved"
-                  : "Mark feedback as resolved"}
-              </button>
             </div>
-
           </div>
         </div>
-
-        {/* Feedback Modal */}
-        {feedbackModalOpen && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60">
-            <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
-              <button
-                onClick={() => setFeedbackModalOpen(false)}
-                className="absolute top-2 right-2 text-gray-500 hover:text-black p-1 rounded-full"
-              >
-                ✕
-              </button>
-              <h3 className="text-lg font-semibold mb-2">
-                {localResolved ? "Feedback - resolved" : "Feedback"}
-              </h3>
-              <div
-                className={`whitespace-pre-wrap rounded p-3 border ${
-                  localResolved ? "opacity-60 grayscale" : ""
-                }`}
-              >
-                {variation.feedback || "—"}
-              </div>
-              {variation.feedback && (
-                <button
-                  onClick={toggleResolve}
-                  className={`mt-4 px-4 py-2 rounded text-white ${
-                    localResolved ? "bg-gray-500" : "bg-green-600"
-                  }`}
-                >
-                  {localResolved
-                    ? "Mark as unresolved"
-                    : "Mark feedback resolved"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -2189,7 +2302,11 @@ useEffect(() => {
           platforms,
           feedback,
           feedback_resolved,
-          greenlight
+          greenlight,
+          feedback_comments!variation_id (
+            id,
+            resolved
+          )
         `)
   
       .in("post_id", postIds)
@@ -2201,7 +2318,13 @@ useEffect(() => {
       // continue — we can still render posts without variations
     }
 
-    setAllVariations(variations || [])
+    // ✅ Add unresolved_feedback_count to each variation
+    const variationsWithCounts = (variations || []).map(v => ({
+      ...v,
+      unresolved_feedback_count: (v.feedback_comments || []).filter(fc => !fc.resolved).length
+    }));
+
+    setAllVariations(variationsWithCounts)
 
     const endDate = new Date(to);                 // ✅ REQUIRED
     const weeksArr = []
@@ -2876,14 +2999,10 @@ return (
 
                           <div className="space-y-1">
                             {day.posts.map((post, index) => {
-                              // ✅ Count all variations across the loaded range that belong to this post and have feedback
-                              const feedbackCount = allVariations.filter(
-                                (v) =>
-                                  v.post_id === post.id &&
-                                  v.feedback &&
-                                  v.feedback.trim() !== "" &&
-                                  !v.feedback_resolved
-                              ).length;
+                              // ✅ Count total unresolved comments for this post's variations
+                              const feedbackCount = allVariations
+                                .filter((v) => v.post_id === post.id)
+                                .reduce((sum, v) => sum + (v.unresolved_feedback_count || 0), 0);
 
                               // ✅ Count variations that have been greenlit
                               const greenlitCount = allVariations.filter(
