@@ -69,38 +69,55 @@ function cacheHasValidUrl(path) {
   return true;
 }
 
-// Single file URL fetch (for priorityPreload and background preloading)
-async function getOptimizedMediaUrl(path) {
+// Single file URL fetch with image optimization
+async function getOptimizedMediaUrl(path, options = {}) {
   const now = Date.now();
 
-  if (cacheHasValidUrl(path)) {
-    return cacheGetUrl(path);
+  // Create cache key that includes transformation options
+  const cacheKey = options.fullSize ? `${path}:full` : path;
+
+  if (cacheHasValidUrl(cacheKey)) {
+    return cacheGetUrl(cacheKey);
   }
+
+  // Detect if this is an image
+  const isImage = /\.(jpe?g|png|webp|gif)$/i.test(path);
+  
+  // Build transformation options for images
+  const transformOptions = isImage && !options.fullSize ? {
+    transform: {
+      width: 1200,      // Max width for display
+      height: 1200,     // Max height for display
+      quality: 85,      // Good quality, smaller size
+      format: 'webp'    // Modern format with better compression
+    }
+  } : undefined;
 
   const { data, error } = await supabase.storage
     .from("post-variations")
-    .createSignedUrl(path, 7200);
+    .createSignedUrl(path, 604800, transformOptions);
 
   if (error) throw error;
 
-  cacheSetUrl(path, data.signedUrl, now + 7200 * 1000);
+  cacheSetUrl(cacheKey, data.signedUrl, now + 7200 * 1000);
   return data.signedUrl;
 }
 
   // ✅ NEW: Batch fetch signed URLs for multiple files at once
-async function getBatchOptimizedMediaUrls(paths) {
+async function getBatchOptimizedMediaUrls(paths, options = {}) {
   if (!paths || paths.length === 0) return [];
   
   const now = Date.now();
   const uncachedPaths = [];
   const cachedResults = [];
 
-  // Step 1: Check cache for each path
+  // Step 1: Check cache for each path (with transformation-aware cache keys)
   for (const path of paths) {
-    if (cacheHasValidUrl(path)) {
+    const cacheKey = options.fullSize ? `${path}:full` : path;
+    if (cacheHasValidUrl(cacheKey)) {
       cachedResults.push({
         path,
-        signedUrl: cacheGetUrl(path)
+        signedUrl: cacheGetUrl(cacheKey)
       });
     } else {
       uncachedPaths.push(path);
@@ -112,22 +129,65 @@ async function getBatchOptimizedMediaUrls(paths) {
     return cachedResults;
   }
 
-  // Step 3: Batch fetch uncached URLs in ONE API call
-  const { data, error } = await supabase.storage
-    .from("post-variations")
-    .createSignedUrls(uncachedPaths, 7200);  // Note: createSignedUrls (plural)
+  // Step 3: Split paths by type for appropriate transformations
+  const imagePaths = uncachedPaths.filter(p => /\.(jpe?g|png|webp|gif)$/i.test(p));
+  const videoPaths = uncachedPaths.filter(p => !imagePaths.includes(p));
+  
+  const newResults = [];
 
-  if (error) throw error;
+  // Step 4a: Fetch images WITH transformations (unless fullSize requested)
+  if (imagePaths.length > 0 && !options.fullSize) {
+    const { data, error } = await supabase.storage
+      .from("post-variations")
+      .createSignedUrls(imagePaths, 604800, {
+        transform: {
+          width: 1200,
+          height: 1200,
+          quality: 85,
+          format: 'webp'
+        }
+      });
 
-  // Step 4: Cache the new URLs
-  const newResults = (data || []).map((item) => {
-    if (item.signedUrl) {
-      cacheSetUrl(item.path, item.signedUrl, now + 7200 * 1000);
+    if (!error && data) {
+      newResults.push(...data);
+    } else if (error) {
+      console.error('Error fetching transformed images:', error);
     }
-    return item;
+  } else if (imagePaths.length > 0) {
+    // Step 4b: Fetch images WITHOUT transformations (fullSize requested)
+    const { data, error } = await supabase.storage
+      .from("post-variations")
+      .createSignedUrls(imagePaths, 604800);
+
+    if (!error && data) {
+      newResults.push(...data);
+    } else if (error) {
+      console.error('Error fetching full-size images:', error);
+    }
+  }
+
+  // Step 5: Fetch videos WITHOUT transformations (videos can't be transformed)
+  if (videoPaths.length > 0) {
+    const { data, error } = await supabase.storage
+      .from("post-variations")
+      .createSignedUrls(videoPaths, 604800);
+
+    if (!error && data) {
+      newResults.push(...data);
+    } else if (error) {
+      console.error('Error fetching videos:', error);
+    }
+  }
+
+  // Step 6: Cache the new URLs (with transformation-aware cache keys)
+  newResults.forEach((item) => {
+    if (item.signedUrl) {
+      const cacheKey = options.fullSize ? `${item.path}:full` : item.path;
+      cacheSetUrl(cacheKey, item.signedUrl, now + 7200 * 1000);
+    }
   });
 
-  // Step 5: Combine cached + newly fetched
+  // Step 7: Combine cached + newly fetched
   return [...cachedResults, ...newResults];
 }
 
@@ -1131,50 +1191,6 @@ switch ((status || '').toLowerCase()) {
   default: return '#d1d5db' // gray-300
 }}
 
-// ✅ Preload variations for a specific post when it becomes visible
-async function preloadPostVariations(postId, allVariations) {
-  if (!postId || !allVariations) return;
-  
-  // Find variations for this post
-  const postVariations = allVariations.filter(v => v.post_id === postId);
-  if (!postVariations.length) return;
-  
-  console.log(`🔄 Preloading ${postVariations.length} variations for post ${postId}`);
-  
-  // ✅ Preload each variation's media in PARALLEL (first item only for speed)
-  const preloadPromises = postVariations.map(async (variation) => {
-    const paths = Array.isArray(variation.carousel_files) && variation.carousel_files.length
-      ? variation.carousel_files
-      : variation.file_name ? [variation.file_name] : [];
-    
-    if (!paths.length) return;
-    
-    try {
-      // Only preload first item (most likely to be viewed)
-      const firstPath = paths[0];
-      const url = await getOptimizedMediaUrl(firstPath);
-      
-      // Trigger browser preload
-      const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
-      if (isVideo) {
-        const video = document.createElement("video");
-        video.preload = "metadata";
-        video.muted = true;
-        video.src = url;
-        video.load();
-      } else {
-        const img = new Image();
-        img.src = url;
-      }
-    } catch (err) {
-      console.log("Preload failed for variation", variation.id, err);
-    }
-  });
-
-  // Wait for all preloads to complete
-  await Promise.all(preloadPromises);
-}
-
 function ArtistCalendarInner() {
   const [artists, setArtists] = useState([]) // I think this might be an issue if it's messing with the artist_id of the logged in profile
   const [platformFilter, setPlatformFilter] = useState("all");
@@ -1182,7 +1198,7 @@ function ArtistCalendarInner() {
   const [weeks, setWeeks] = useState([])
   const [rangeLabel, setRangeLabel] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
-  const [allVariations, setAllVariations] = useState([])
+  //const [allVariations, setAllVariations] = useState([]) // Removed by claude
 
   // Checking width for dates
   const [isNarrow, setIsNarrow] = useState(false);
@@ -1351,260 +1367,81 @@ function ArtistCalendarInner() {
 
   // Load posts whenever artist / view mode / selected month changes
   useEffect(() => {
-    const loadPosts = async () => {
-      if (!selectedArtistId) return
-      setErrorMsg('')
+  const loadPosts = async () => {
+    if (!selectedArtistId) return;
+    setErrorMsg('');
 
-      let from, to
-      if (viewMode === '4weeks') {
-        const today = new Date()
-        const startThisWeek = startOfWeekMonday(today)
-        const startLastWeek = addDays(startThisWeek, -7)
-      
-        // ✅ extend to 4 full weeks (28 days) ahead
-        const endNextFourWeeks = addDays(startThisWeek, 28)
-      
-        // ✅ snap to Sunday so we cover the full calendar grid
-        const endVisibleSunday = addDays(endNextFourWeeks, 6 - endNextFourWeeks.getDay())
-      
-        from = toYMD(startLastWeek)
-        to = toYMD(endVisibleSunday)
-        setRangeLabel(`${from} → ${to}`)
-      } else if (viewMode === 'month' && selectedMonth) {
-        const [y, m] = selectedMonth.split('-').map(Number)
-        const firstDay = new Date(y, m - 1, 1)
-        const lastDay = new Date(y, m, 0)
-        from = toYMD(firstDay)
-        to = toYMD(lastDay)
-        setRangeLabel(`${from} → ${to}`)
-      } else {
-        return
+    let from, to;
+
+    if (viewMode === '4weeks') {
+      const today = new Date();
+      const startThisWeek = startOfWeekMonday(today);
+      const startLastWeek = addDays(startThisWeek, -7);
+
+      const endNextFourWeeks = addDays(startThisWeek, 28);
+      const endVisibleSunday = addDays(endNextFourWeeks, 6 - endNextFourWeeks.getDay());
+
+      from = toYMD(startLastWeek);
+      to = toYMD(endVisibleSunday);
+      setRangeLabel(`${from} → ${to}`);
+    } else if (viewMode === 'month' && selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(Number);
+      const firstDay = new Date(y, m - 1, 1);
+      const lastDay = new Date(y, m, 0);
+
+      from = toYMD(firstDay);
+      to = toYMD(lastDay);
+      setRangeLabel(`${from} → ${to}`);
+    } else {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/calendar/posts?artistId=${encodeURIComponent(selectedArtistId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
       }
 
-      const { data: posts, error } = await supabase
-        .from('posts')
-        .select('id, post_name, post_date, status, artist_id')
-        .eq('artist_id', Number(selectedArtistId))
-        .gte('post_date', from)
-        .lte('post_date', to)
-        .order('post_date', { ascending: true })
+      const { posts } = await response.json();
 
-      if (error) {
-        console.error('Supabase error (posts):', error)
-        setErrorMsg('Error loading posts. Check console.')
-        return
-      }
-
-      // 🔄 Fetch variations for these posts so we can show platform badges
-      const postIds = (posts || []).map((p) => p.id);
-      let variations = [];
-      if (postIds.length) {
-        const { data: varData, error: varError } = await supabase
-          .from('postvariations')
-          .select('id, post_id, platforms')
-          .in('post_id', postIds);
-
-        if (varError) {
-          console.error('Supabase error (variations):', varError);
-        } else {
-          variations = varData;
-        }
-      }
-
-      setAllVariations(variations || []);
-
-      // Build week rows across range
-      const startDate = new Date(from)
-      const endDate = new Date(to)
-      const weeksArr = []
-      let currentStart = startOfWeekMonday(startDate)
+      const startDate = new Date(from);
+      const endDate = new Date(to);
+      const weeksArr = [];
+      let currentStart = startOfWeekMonday(startDate);
 
       while (currentStart <= endDate) {
-        const days = []
+        const days = [];
         for (let d = 0; d < 7; d++) {
-          const dayDate = addDays(currentStart, d)
-          const ymd = toYMD(dayDate)
-          const postsForDay = (posts || []).filter(p => toYMD(new Date(p.post_date)) === ymd)
-          days.push({ date: dayDate, ymd, posts: postsForDay })
-        }
-        weeksArr.push({ weekStart: currentStart, days })
-        currentStart = addDays(currentStart, 7)
-      }
-
-      setWeeks(weeksArr)
-      
-      // ✅ SMART PRELOADING: Actually download media files for likely-to-be-viewed posts
-      {/*const preloadVariations = async () => {
-        const today = new Date();
-        const thisWeekStart = startOfWeekMonday(today);
-        const thisWeekEnd = addDays(thisWeekStart, 12);
-        
-        // Find posts in current week OR with unresolved feedback OR recently uploaded
-        const priorityPosts = posts.filter(post => {
-          // ✅ Skip currently open post (it's being preloaded separately with higher priority)
-          if (selectedPostId && post.id === selectedPostId) return false;
-          
-          const postDate = new Date(post.post_date);
-          const isThisWeek = postDate >= thisWeekStart && postDate < thisWeekEnd;
-          const isRecentStatus = ['uploaded', 'ready'].includes(post.status?.toLowerCase());
-          const hasUnresolvedFeedback = (variations || []).some(v => 
-            v.post_id === post.id && 
-            v.feedback && 
-            v.feedback.trim() !== "" && 
-            !v.feedback_resolved
+          const dayDate = addDays(currentStart, d);
+          const ymd = toYMD(dayDate);
+          const postsForDay = (posts || []).filter(
+            (p) => toYMD(new Date(p.post_date)) === ymd
           );
-          
-          return isThisWeek || isRecentStatus || hasUnresolvedFeedback;
-        });
+          days.push({ date: dayDate, ymd, posts: postsForDay });
+        }
+        weeksArr.push({ weekStart: currentStart, days });
+        currentStart = addDays(currentStart, 7);
+      }
 
-        // Get variations for these priority posts
-        const priorityVariationIds = new Set(
-          priorityPosts.map(p => p.id)
-        );
-        
-        const variationsToPreload = (variations || []).filter(v => 
-          priorityVariationIds.has(v.post_id)
-        );
-
-        console.log(`Background preloading ${variationsToPreload.length} priority variations (excluding currently open post)`);
-
-        // Helper to actually preload media into browser cache
-        const preloadMediaFile = (url) => {
-          preloadVideoBytes(url);
-          const isVideo = /\.(mp4|mov|webm|ogg)$/i.test(getPathname(url));
-
-          if (isVideo) {
-            const video = document.createElement("video");
-            video.preload = "metadata";
-            video.muted = true; // helps some browsers allow loading behavior
-
-            video.onloadedmetadata = () => console.log("🎥 preload metadata ok", url);
-            video.oncanplay = () => console.log("🎥 preload canplay", url);
-            video.onerror = (e) => console.log("🎥 preload error", url, video.error, e);
-
-            video.src = url;
-            video.load();
-          } else {
-            const img = new Image();
-            img.onload = () => console.log("🖼️ preload ok", url);
-            img.onerror = (e) => console.log("🖼️ preload error", url, e);
-            img.src = url;
-          }
-        };
-
-        // Preload up to 15 variations (increased from 10 since we're skipping open post)
-        const preloadPromises = variationsToPreload
-          .slice(0, 15)
-          .map(async (v) => {
-            const paths = Array.isArray(v.carousel_files) && v.carousel_files.length > 0
-              ? v.carousel_files
-              : v.file_name ? [v.file_name] : [];
-            
-            // Only preload first image/video of each variation
-            const firstPath = paths[0];
-            if (!firstPath) return;
-            
-            try {
-              // Get the URL
-              const url = await getOptimizedMediaUrl(firstPath);
-              
-              // Tell browser to download it (lower priority)
-              preloadMediaFile(url);
-              
-              // Skip audio for background preload (save bandwidth for priority content)
-            } catch (err) {
-              // Silent fail - preloading is optional
-            }
-          });
-
-        // Execute all preloads in background
-        Promise.all(preloadPromises).then(() => {
-          console.log(`✅ Background preload complete`);
-        });
-      };
-
-      // Start preloading after calendar renders (increased delay to let priority preload finish first)
-      setTimeout(preloadVariations, 1000);
-
-      // Start preloading after calendar renders
-      setTimeout(preloadVariations, 500);*/}
-
+      setWeeks(weeksArr);
+    } catch (e) {
+      console.error('Error loading posts:', e);
+      setErrorMsg('Could not load posts. See console for details.');
     }
-    loadPosts()
-  }, [selectedArtistId, viewMode, selectedMonth, platformFilter])
+  };
 
-   // Smart preloading: Load media when posts become visible in viewport
-  // Smart preloading: Load media when posts become visible in viewport (with throttling)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!weeks.length || !allVariations.length) return;
-    
-    // Queue system to prevent too many simultaneous preloads
-    const preloadQueue = new Set();
-    const preloadedPosts = new Set();
-    let isPreloading = false;
-    
-    // Process preloads one at a time to avoid network congestion
-    async function processPreloadQueue() {
-      if (isPreloading || preloadQueue.size === 0) return;
-      
-      isPreloading = true;
-      
-      // Get first item from queue
-      const postId = Array.from(preloadQueue)[0];
-      preloadQueue.delete(postId);
-      
-      // Skip if already preloaded
-      if (preloadedPosts.has(postId)) {
-        isPreloading = false;
-        processPreloadQueue(); // Continue to next
-        return;
-      }
-      
-      try {
-        await preloadPostVariations(postId, allVariations);
-        preloadedPosts.add(postId);
-      } catch (err) {
-        console.log('Background preload failed for post', postId, err);
-      }
-      
-      isPreloading = false;
-      
-      // Process next item in queue after a small delay
-      setTimeout(() => processPreloadQueue(), 100);
-    }
-    
-    // Create observer that watches when post elements enter viewport
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            // Post is visible - add to preload queue
-            const postId = entry.target.dataset.postId;
-            if (postId && !preloadedPosts.has(parseInt(postId))) {
-              preloadQueue.add(parseInt(postId));
-              processPreloadQueue(); // Start processing if not already running
-            }
-          }
-        });
-      },
-      { 
-        // Reduced from 200px to 100px - less aggressive
-        rootMargin: '100px',
-        // Increased from 0.1 to 0.2 - post must be more visible before preloading
-        threshold: 0.2
-      }
-    );
-    
-    // Find all post elements and observe them
-    const postElements = document.querySelectorAll('[data-post-id]');
-    postElements.forEach(el => observer.observe(el));
-    
-    // Cleanup: stop observing when component unmounts
-    return () => observer.disconnect();
-  }, [weeks, allVariations]);
+  loadPosts();
+}, [selectedArtistId, viewMode, selectedMonth, platformFilter]);
+
+  // ✅ Removed Intersection Observer preloading
+   // Variations are now fetched on-demand, preloading isn't needed
+   // This simplifies code and reduces background network activity
 
   // Open modal + fetch details (post + variations) in two queries
+  // Open modal + fetch details (post + variations) from API
   async function openPostDetails(postId) {
       setSelectedPostId(postId)
       setPostLoading(true)
@@ -1612,36 +1449,26 @@ function ArtistCalendarInner() {
       setPostDetails(null)
     
       try {
-        // 1) Fetch the post (use * to avoid column mismatches)
-        const { data: post, error: postErr } = await supabase
-          .from('posts')
-          .select('*')
-          .eq('id', postId)
-          .single()
-        if (postErr) throw postErr
+        // ✅ NEW: Fetch from API route instead of direct Supabase call
+        const response = await fetch(`/api/posts/${postId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Post not found');
+          }
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        const { post } = await response.json();
     
-        // 2) Fetch variations for that post
-        const { data: variations, error: varErr } = await supabase
-          .from('postvariations')
-          .select(`
-            id,
-            platforms,
-            test_version,
-            file_name,
-            length_seconds,
-            feedback,
-            feedback_resolved,
-            greenlight,
-            audio_file_name,
-            audio_start_seconds,
-            carousel_files
-          `)
-          .eq('post_id', postId)
-          .order('test_version', { ascending: true })
-        if (varErr) throw varErr
+        // Extract variations from the joined data
+        const variations = post.postvariations || [];
+        
+        // Remove the nested postvariations from post object
+        delete post.postvariations;
     
         // ✅ Attach captions to each variation so MediaPlayer can display them
-        const variationsWithCaptions = (variations || []).map(v => ({
+        const variationsWithCaptions = variations.map(v => ({
           ...v,
           caption_a: post.caption_a,
           caption_b: post.caption_b
@@ -1662,7 +1489,7 @@ function ArtistCalendarInner() {
       } finally {
         setPostLoading(false)
       }
-    }  
+    }
 
   // Close post details modal
   function closeModal() {
@@ -1763,50 +1590,16 @@ function ArtistCalendarInner() {
 
                         <div className="space-y-1">
                           {day.posts.map((post) => {
-                            const postPlatforms = Array.from(
-                              new Set(
-                                allVariations
-                                  .filter((v) => v.post_id === post.id)
-                                  .flatMap((v) => v.platforms || [])
-                                  .filter(Boolean)
-                              )
-                            );
-
                             return (
                               <div
                                 key={post.id}
-                                data-post-id={post.id}  // ✅ Add data attribute for Intersection Observer
+                                data-post-id={post.id}
                                 className="text-xs px-2 py-1 rounded text-white cursor-pointer"
                                 style={{ backgroundColor: statusColor(post.status) }}
                                 title={post.status || ""}
                                 onClick={() => openPostDetails(post.id)}
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <span>{post.post_name}</span>
-
-                                  {postPlatforms.length > 0 && (
-                                    <div className="flex flex-col gap-1">
-                                      {postPlatforms
-                                        .sort(
-                                          (a, b) =>
-                                            PLATFORM_OPTIONS.findIndex((o) => o.value === a) -
-                                            PLATFORM_OPTIONS.findIndex((o) => o.value === b)
-                                        )
-                                        .map((plat) => {
-                                          const cfg = PLATFORM_OPTIONS.find((o) => o.value === plat);
-                                          const short = cfg?.short || plat[0] || "?";
-                                          return (
-                                            <span
-                                              key={plat}
-                                              className="inline-flex items-center rounded-full bg-black/40 px-1.5 py-0.5 text-[10px] leading-none"
-                                            >
-                                              {short}
-                                            </span>
-                                          );
-                                        })}
-                                    </div>
-                                  )}
-                                </div>
+                                <span>{post.post_name}</span>
                               </div>
                             );
                           })}

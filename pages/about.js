@@ -132,9 +132,9 @@ export default function AboutPage() {
                   }}
                 >
                   {/* Bio text from Cargo */}
-                  Miguel is skilled music producer, mixing, and mastering engineer.
+                  Miguel is a music producer and sound engineer with a background in latin influenced production. His work spans in reggaeton, indie latin, pop, and house, with additional experience in punk, experimental, and alternative projects.
                   <br /><br />
-                  In terms of genre, Miguel primarily works in reggaeton, indie latin, pop, and house/techno. His interest extend to film scoring, sound design, and audio post production.
+                  His work extends to sound design, post-production, and film scoring. At Las Aguas Miguel is also reponsible for artist relations and outreach.
                   <br /><br />
                   Languages: English, Spanish
                 </p>
