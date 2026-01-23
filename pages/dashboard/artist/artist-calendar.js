@@ -5,6 +5,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import Link from "next/link";
 import ArtistLayout from "../../../components/artist/ArtistLayout";
+import { mediaUrlCache, cacheGetUrl, cacheSetUrl } from '../../../hooks/usePreloadPriorityPosts';
 
 // Helpers
 const pad = (n) => String(n).padStart(2, '0')
@@ -19,7 +20,7 @@ const getPathname = (url) => {
     return s.split("#")[0].split("?")[0];
   }
 };
-const mediaUrlCache = new Map(); // path -> string OR { url, expires }
+//const mediaUrlCache = new Map(); // path -> string OR { url, expires }
 
 const preloadVideoBytes = async (url, bytes = 256 * 1024) => {
   try {
@@ -34,7 +35,7 @@ const preloadVideoBytes = async (url, bytes = 256 * 1024) => {
 };
 
 // ✅ Get cached URL - returns null if expired or missing
-function cacheGetUrl(path) {
+{/*function cacheGetUrl(path) {
   const v = mediaUrlCache.get(path);
   if (!v) return null;
   
@@ -53,7 +54,7 @@ function cacheSetUrl(path, url, expiresMs = Date.now() + 7200000) {
     url, 
     expires: expiresMs 
   });
-}
+}*/}
 
 // ✅ Check if cache has valid (non-expired) URL
 function cacheHasValidUrl(path) {
@@ -99,7 +100,7 @@ async function getOptimizedMediaUrl(path, options = {}) {
 
   if (error) throw error;
 
-  cacheSetUrl(cacheKey, data.signedUrl, now + 7200 * 1000);
+  cacheSetUrl(cacheKey, data.signedUrl, now + 604800 * 1000);
   return data.signedUrl;
 }
 
@@ -183,7 +184,7 @@ async function getBatchOptimizedMediaUrls(paths, options = {}) {
   newResults.forEach((item) => {
     if (item.signedUrl) {
       const cacheKey = options.fullSize ? `${item.path}:full` : item.path;
-      cacheSetUrl(cacheKey, item.signedUrl, now + 7200 * 1000);
+      cacheSetUrl(cacheKey, item.signedUrl, now + 604800 * 1000);
     }
   });
 

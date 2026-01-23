@@ -2,13 +2,39 @@
 
 import { useEffect, useState } from "react";
 import ArtistNav from "./ArtistNav";
+import { getMyArtistContext } from "./artistData";
+import usePreloadPriorityPosts from "../../hooks/usePreloadPriorityPosts";
 
 export default function ArtistLayout({ children, title, forceDesktopOpen = false }) {
   const [desktopOpen, setDesktopOpen] = useState(true);
+  const [artistId, setArtistId] = useState(null);
+
+  // Get artist ID on mount
+  useEffect(() => {
+    async function loadArtistId() {
+      try {
+        const { artistId } = await getMyArtistContext();
+        setArtistId(artistId);
+      } catch (err) {
+        console.error("Failed to get artist context:", err);
+      }
+    }
+    loadArtistId();
+  }, []);
+
+  // Preload priority posts in background
+  const preloadStatus = usePreloadPriorityPosts(artistId);
 
   useEffect(() => {
     setDesktopOpen(true);
   }, []);
+
+  // Optional: Show preload progress in development
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && preloadStatus.loading) {
+      console.log(`📦 Preloading: ${preloadStatus.completed}/${preloadStatus.total}`);
+    }
+  }, [preloadStatus]);
 
   return (
     <div className="min-h-screen artist-page">
