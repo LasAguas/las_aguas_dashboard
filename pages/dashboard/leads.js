@@ -447,6 +447,8 @@ export default function LeadsPage() {
   const [openInvoiceEntity, setOpenInvoiceEntity] = useState(null); // { entity, plan, next_invoice_on, overdue }
   const [openCrmEntity, setOpenCrmEntity] = useState(null); // entity
 
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+
   // ---------------------------------------------------------------------------
   // Loaders
   // ---------------------------------------------------------------------------
@@ -1100,6 +1102,347 @@ export default function LeadsPage() {
     );
   }
 
+  // Modal for adding a new CRM lead
+  function AddLeadModal() {
+    // Form state - initialize with empty/default values
+    const [displayName, setDisplayName] = useState("");
+    const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
+    const [entityType, setEntityType] = useState("lead"); // Default to "lead"
+    const [pipelineStatus, setPipelineStatus] = useState("cold"); // Default status
+    const [workedBefore, setWorkedBefore] = useState(false);
+    const [service, setService] = useState("");
+    const [language, setLanguage] = useState("");
+    const [direction, setDirection] = useState("Outgoing");
+    const [source, setSource] = useState("");
+    const [followupEveryDays, setFollowupEveryDays] = useState("7"); // Default to 7 days
+    const [followupPaused, setFollowupPaused] = useState(false);
+    const [notes, setNotes] = useState("");
+    const [links, setLinks] = useState(""); // Will be stored as JSONB
+    const [extraFields, setExtraFields] = useState(""); // Will be stored as JSONB
+
+    // Loading state for save button
+    const [saving, setSaving] = useState(false);
+
+    // Function to create new lead in database
+    const handleCreateLead = async () => {
+      // Validate required fields
+      if (!displayName.trim()) {
+        alert("Display name is required");
+        return;
+      }
+
+      setSaving(true);
+
+      try {
+        // Parse JSON fields (links and extra_fields)
+        let linksJson = null;
+        let extraFieldsJson = null;
+
+        // Try to parse links if provided
+        if (links.trim()) {
+          try {
+            linksJson = JSON.parse(links);
+          } catch (e) {
+            alert("Links must be valid JSON (e.g., {\"ig\":\"https://...\"}). Leave empty if not needed.");
+            setSaving(false);
+            return;
+          }
+        }
+
+        // Try to parse extra fields if provided
+        if (extraFields.trim()) {
+          try {
+            extraFieldsJson = JSON.parse(extraFields);
+          } catch (e) {
+            alert("Extra fields must be valid JSON (e.g., {\"Quality\":10}). Leave empty if not needed.");
+            setSaving(false);
+            return;
+          }
+        }
+
+        // Insert new entity into crm_entities table
+        const { data, error } = await supabase
+          .from("crm_entities")
+          .insert([
+            {
+              display_name: displayName.trim() || null,
+              email: email.trim() || null,
+              phone: phone.trim() || null,
+              entity_type: entityType,
+              pipeline_status: pipelineStatus || null,
+              worked_before: workedBefore || null,
+              service: service.trim() || null,
+              language: language.trim() || null,
+              direction: direction || null,
+              source: source.trim() || null,
+              followup_every_days: followupEveryDays ? Number(followupEveryDays) : null,
+              followup_paused: followupPaused || null,
+              notes: notes.trim() || null,
+              links: linksJson,
+              extra_fields: extraFieldsJson,
+            },
+          ])
+          .select();
+
+        if (error) {
+          console.error("Error creating lead:", error);
+          alert("Failed to create lead. Check console for details.");
+          setSaving(false);
+          return;
+        }
+
+        console.log("✅ Lead created successfully:", data);
+
+        // Close modal and refresh the CRM data
+        setShowAddLeadModal(false);
+        await loadCrm();
+
+        // Reset form (in case user opens modal again)
+        setDisplayName("");
+        setEmail("");
+        setPhone("");
+        setEntityType("lead");
+        setPipelineStatus("cold");
+        setWorkedBefore(false);
+        setService("");
+        setLanguage("");
+        setDirection("Outgoing");
+        setSource("");
+        setFollowupEveryDays("7");
+        setFollowupPaused(false);
+        setNotes("");
+        setLinks("");
+        setExtraFields("");
+      } catch (err) {
+        console.error("Unexpected error:", err);
+        alert("An unexpected error occurred. Check console.");
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <ModalShell
+        title="Add New Lead"
+        onClose={() => {
+          setShowAddLeadModal(false);
+        }}
+        footer={
+          <div className="flex flex-wrap gap-2 justify-end">
+            {/* Cancel button */}
+            <button
+              type="button"
+              onClick={() => setShowAddLeadModal(false)}
+              className="px-4 py-2 rounded-full bg-gray-200 text-[#33286a] text-sm font-semibold shadow hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+            {/* Save button */}
+            <button
+              type="button"
+              onClick={handleCreateLead}
+              disabled={saving}
+              className="px-4 py-2 rounded-full bg-[#bbe1ac] text-[#33286a] text-sm font-semibold shadow hover:bg-[#eef8ea] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Creating..." : "Create Lead"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {/* Basic Information Section */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="text-sm font-semibold text-[#33286a]">Basic Information</div>
+            </summary>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Display Name (Required) */}
+              <FieldRow label="Display Name *">
+                <TextInput
+                  value={displayName}
+                  onChange={setDisplayName}
+                  placeholder="e.g., John Smith, Band Name"
+                />
+              </FieldRow>
+
+              {/* Email */}
+              <FieldRow label="Email">
+                <TextInput
+                  value={email}
+                  onChange={setEmail}
+                  placeholder="email@example.com"
+                />
+              </FieldRow>
+
+              {/* Phone */}
+              <FieldRow label="Phone">
+                <TextInput
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="+1234567890"
+                />
+              </FieldRow>
+
+              {/* Entity Type */}
+              <FieldRow label="Entity Type">
+                <Select
+                  value={entityType}
+                  onChange={setEntityType}
+                  options={[
+                    { value: "lead", label: "Lead" },
+                    { value: "client", label: "Client" },
+                  ]}
+                />
+              </FieldRow>
+            </div>
+          </details>
+
+          {/* Pipeline & Service Details */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="text-sm font-semibold text-[#33286a]">Pipeline & Service</div>
+            </summary>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Pipeline Status */}
+              <FieldRow label="Pipeline Status">
+                <Select
+                  value={pipelineStatus}
+                  onChange={setPipelineStatus}
+                  options={[
+                    { value: "cold", label: "Cold" },
+                    { value: "known_uncontacted", label: "Known Uncontacted" },
+                    { value: "contacted", label: "Contacted" },
+                    { value: "meeting", label: "Meeting" },
+                    { value: "signed", label: "Signed" },
+                    { value: "worked_before", label: "Worked Before" },
+                    { value: "ghosted", label: "Ghosted" },
+                    { value: "said_no", label: "Said No" },
+                  ]}
+                />
+              </FieldRow>
+
+              {/* Service */}
+              <FieldRow label="Service">
+                <TextInput
+                  value={service}
+                  onChange={setService}
+                  placeholder="Digital Strategy, Mix/Master, Video..."
+                />
+              </FieldRow>
+
+              {/* Language */}
+              <FieldRow label="Language">
+                <TextInput
+                  value={language}
+                  onChange={setLanguage}
+                  placeholder="EN, ES, DE, EN/ES..."
+                />
+              </FieldRow>
+
+              {/* Direction */}
+              <FieldRow label="Direction">
+                <Select
+                  value={direction}
+                  onChange={setDirection}
+                  options={[
+                    { value: "Outgoing", label: "Outgoing" },
+                    { value: "Incoming", label: "Incoming" },
+                  ]}
+                />
+              </FieldRow>
+
+              {/* Source */}
+              <FieldRow label="Source">
+                <TextInput
+                  value={source}
+                  onChange={setSource}
+                  placeholder="Referral, Web, FB, IG..."
+                />
+              </FieldRow>
+
+              {/* Worked Before */}
+              <FieldRow label="Worked Before">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={workedBefore}
+                    onChange={(e) => setWorkedBefore(e.target.checked)}
+                    className="w-4 h-4 text-[#bbe1ac] rounded focus:ring-2 focus:ring-[#bbe1ac]"
+                  />
+                  <span className="text-sm text-[#33286a]">
+                    Yes
+                  </span>
+                </div>
+              </FieldRow>
+            </div>
+          </details>
+
+          {/* Follow-up Settings */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="text-sm font-semibold text-[#33286a]">Follow-up Settings</div>
+            </summary>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Follow-up Every Days */}
+              <FieldRow label="Follow-up Every (days)">
+                <TextInput
+                  value={followupEveryDays}
+                  onChange={setFollowupEveryDays}
+                  placeholder="7, 14, 30..."
+                />
+              </FieldRow>
+
+              {/* Follow-up Paused */}
+              <FieldRow label="Follow-up Paused">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={followupPaused}
+                    onChange={(e) => setFollowupPaused(e.target.checked)}
+                    className="w-4 h-4 text-[#bbe1ac] rounded focus:ring-2 focus:ring-[#bbe1ac]"
+                  />
+                  <span className="text-sm text-[#33286a]">
+                    Paused
+                  </span>
+                </div>
+              </FieldRow>
+            </div>
+          </details>
+
+          {/* Notes & Additional Info */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="text-sm font-semibold text-[#33286a]">Notes & Additional Info</div>
+            </summary>
+            <div className="p-4 space-y-3">
+              {/* Notes */}
+              <FieldRow label="Notes">
+                <TextArea
+                  value={notes}
+                  onChange={setNotes}
+                  placeholder="Internal notes about this lead..."
+                />
+              </FieldRow>
+
+              {/* Links (JSON) */}
+              <FieldRow label='Links (JSON format)'>
+                <TextArea
+                  value={links}
+                  onChange={setLinks}
+                  placeholder='{"ig":"https://instagram.com/...", "spotify":"https://..."}'
+                />
+                <div className="text-xs text-[#33286a]/60 mt-1">
+                  Must be valid JSON. Example: {`{"ig":"https://...", "website":"https://..."}`}
+                </div>
+              </FieldRow>
+            </div>
+          </details>
+        </div>
+      </ModalShell>
+    );
+  }
+
   function CrmEntityModal({ entity }) {
     if (!entity) return null;
 
@@ -1217,6 +1560,50 @@ export default function LeadsPage() {
               </FieldRow>
             </div>
           </details>
+
+          {/* Links Section - Display social media and web links */}
+          {entity.links && Object.keys(entity.links).length > 0 ? (
+            <details open className="rounded-2xl border border-black/10 overflow-hidden">
+              <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+                <div className="text-sm font-semibold text-[#33286a]">Links</div>
+              </summary>
+              <div className="p-4">
+                <div className="space-y-2">
+                  {/* Map through all links and display them */}
+                  {Object.entries(entity.links).map(([key, value]) => (
+                    <div key={key} className="flex items-start gap-2">
+                      {/* Link label (e.g., "ig", "spotify", "website") */}
+                      <div className="text-xs font-semibold text-[#33286a] min-w-[80px] capitalize">
+                        {key}:
+                      </div>
+                      {/* Clickable link - opens in new tab */}
+                      <a
+                        href={value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline break-all flex-1"
+                      >
+                        {value}
+                      </a>
+                      {/* Copy button for convenience */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(value);
+                          // Optional: You could add a toast notification here
+                          console.log('📋 Copied:', value);
+                        }}
+                        className="text-xs text-[#33286a] hover:text-[#33286a]/70 px-2 py-1 rounded bg-[#eef8ea] hover:bg-[#bbe1ac] transition-colors"
+                        title="Copy link"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          ) : null}
 
           <details open className="rounded-2xl border border-black/10 overflow-hidden">
             <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
@@ -1542,7 +1929,18 @@ export default function LeadsPage() {
             right={
               <div className="flex flex-col items-end gap-2">
                 <div className="text-xs text-[#33286a]/80">{loadingCrm ? "Loading…" : `${crmLeads.length} total`}</div>
-                <FilterIconButton active={showCrmLeadsFilters} onClick={() => setShowCrmLeadsFilters((v) => !v)} />
+                <div className="flex gap-2">
+                  {/* Add Lead button - opens modal to create new CRM entity */}
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLeadModal(true)}
+                    className="px-3 py-1.5 rounded-full bg-white text-[#33286a] text-xs font-semibold shadow hover:opacity-90 transition-opacity"
+                    title="Add new lead"
+                  >
+                    + Add Lead
+                  </button>
+                  <FilterIconButton active={showCrmLeadsFilters} onClick={() => setShowCrmLeadsFilters((v) => !v)} />
+                </div>
               </div>
             }
           >
@@ -1681,6 +2079,8 @@ export default function LeadsPage() {
       {openAdsLead ? <AdsLeadModal lead={openAdsLead} /> : null}
       {openInvoiceEntity ? <InvoiceModal row={openInvoiceEntity} /> : null}
       {openCrmEntity ? <CrmEntityModal entity={decorateEntityForFiltering(openCrmEntity)} /> : null}
+      {/* Add Lead Modal - shows when showAddLeadModal is true */}
+      {showAddLeadModal ? <AddLeadModal /> : null}
     </div>
   );
 }
