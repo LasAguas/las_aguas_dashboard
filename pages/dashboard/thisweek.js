@@ -6,11 +6,32 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { useFeedbackComments } from "../../hooks/useFeedbackComments";
 
 // --- Helpers ---
 const pad = (n) => String(n).padStart(2, "0");
 const toYMD = (d) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+// ✅ NEW: Media URL cache functions (from calendar.js)
+const mediaUrlCache = new Map(); // path -> { url, expires }
+
+function cacheGetUrl(path) {
+  const v = mediaUrlCache.get(path);
+  if (!v) return null;
+  return typeof v === "string" ? v : v.url || null;
+}
+
+function cacheSetUrl(path, url, expiresMs = Number.POSITIVE_INFINITY) {
+  mediaUrlCache.set(path, { url, expires: expiresMs });
+}
+
+function cacheHasValidUrl(path) {
+  const v = mediaUrlCache.get(path);
+  if (!v) return false;
+  if (typeof v === "string") return true;
+  return !!v.url && (v.expires ?? 0) > Date.now();
+}
 
 function startOfWeekMonday(date) {
   const d = new Date(date);
@@ -59,41 +80,6 @@ const STATUS_OPTIONS = [
   "ready",
   "posted",
 ];
-
-// Feedback modal
-function FeedbackBlock({ variation, onRefreshPost }) {
-  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setLocalResolved(!!variation?.feedback_resolved);
-  }, [variation?.feedback_resolved]);
-
-  const toggleResolve = async () => {
-    if (!variation || saving) return;
-    setSaving(true);
-    const next = !localResolved;
-    const { error } = await supabase
-      .from("postvariations")
-      .update({ feedback_resolved: next })
-      .eq("id", variation.id);
-    setSaving(false);
-    if (error) {
-      console.error(error);
-      alert("Could not update feedback status.");
-      return;
-    }
-    setLocalResolved(next);
-    variation.feedback_resolved = next; // keep UI in sync
-    if (typeof onRefreshPost === "function") onRefreshPost();
-  };
-
-  return (
-    <>
-      <FeedbackBlock variation={variation} onRefreshPost={onRefreshPost} />
-    </>
-  );
-}
 
 // --- Captions Modal ---
 function CaptionsModal({ captions, onClose, onSave }) {
@@ -196,7 +182,7 @@ function CaptionsModal({ captions, onClose, onSave }) {
   );
 }
 
-// Media Player Function
+// --- MediaPlayer with NEW feedback comments system (from calendar.js) ---
 function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, onPlatformsUpdated, onGreenlightUpdated, }) {
   const [mediaUrls, setMediaUrls] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -204,29 +190,40 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");  
 
-  const [localResolved, setLocalResolved] = useState(!!variation?.feedback_resolved);
-  const [saving, setSaving] = useState(false);
+  // ✅ NEW: Use feedback comments hook instead of old feedback state
+  const {
+    comments,
+    loading: commentsLoading,
+    unresolvedCount,
+    addComment,
+    resolveComment,
+    unresolveComment,
+    deleteComment
+  } = useFeedbackComments(variation?.id);
+
+  // ✅ NEW: State for feedback system
+  const [newCommentText, setNewCommentText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [showResolvedComments, setShowResolvedComments] = useState(false);
 
   const [platforms, setPlatforms] = useState(variation?.platforms || []);
   const [savingPlatforms, setSavingPlatforms] = useState(false);
 
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-
   const audioRef = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
 
-   // ✅ NEW: greenlight local state + saver
-   const [localGreenlight, setLocalGreenlight] = useState(!!variation?.greenlight);
-   const [savingGreenlight, setSavingGreenlight] = useState(false);
+  // Greenlight state
+  const [localGreenlight, setLocalGreenlight] = useState(!!variation?.greenlight);
+  const [savingGreenlight, setSavingGreenlight] = useState(false);
 
-  // 🔊 snippet state for THIS player
+  // Snippet state
   const [snippetStart, setSnippetStart] = useState(
     typeof variation?.audio_start_seconds === "number"
       ? variation.audio_start_seconds
       : 0
   );
   const [savingSnippet, setSavingSnippet] = useState(false);
-  const [snippetDuration, setSnippetDuration] = useState(15); // seconds, for preview only
+  const [snippetDuration, setSnippetDuration] = useState(15);
 
   const getFileName = (p = "") => {
     const parts = String(p).split("/");
@@ -263,7 +260,6 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
       alert("Could not save snippet start.");
       return;
     }
-    // keep local variation in sync
     variation.audio_start_seconds = snippetStart;
   };
 
@@ -271,11 +267,8 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     setPlatforms(variation?.platforms || []);
   }, [variation?.platforms]);
 
-  useEffect(() => {
-    setLocalResolved(!!variation?.feedback_resolved);
-  }, [variation?.feedback_resolved]);
-
   // Load media URLs (single file or carousel)
+  // ✅ CORRECTED: Load media URLs using getPublicUrl with cache
   useEffect(() => {
     if (!variation) {
       setMediaUrls([]);
@@ -309,13 +302,17 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
     try {
       const urls = paths.map((path) => {
+        // ✅ CHECK CACHE FIRST
+        const cachedUrl = cacheGetUrl(path);
+        if (cachedUrl) return cachedUrl;
+
         const { data, error } = supabase.storage
           .from("post-variations")
           .getPublicUrl(path);
-        if (error) {
-          console.error("Error fetching media URL:", error);
-          throw error;
-        }
+
+        if (error) throw error;
+
+        cacheSetUrl(path, data.publicUrl); // no expiry
         return data.publicUrl;
       });
 
@@ -330,39 +327,55 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
       setLoading(false);
     }
   }, [variation]);
-  
 
-  // Load audio snippet URL if present
+  // ✅ CORRECTED: Load audio using getPublicUrl with cache
   useEffect(() => {
     if (!variation?.audio_file_name) {
       setAudioUrl(null);
       return;
     }
+
+    // ✅ CHECK CACHE FIRST
+    const cachedAudio = cacheGetUrl(variation.audio_file_name);
+    if (cachedAudio) {
+      setAudioUrl(cachedAudio);
+      return;
+    }
+
     const { data, error } = supabase.storage
       .from("post-variations")
       .getPublicUrl(variation.audio_file_name);
+
     if (error) {
       console.error("Error fetching audio URL:", error);
       setAudioUrl(null);
     } else {
+      cacheSetUrl(variation.audio_file_name, data.publicUrl);
       setAudioUrl(data.publicUrl);
     }
   }, [variation?.audio_file_name]);
 
-  if (!variation) return null;
-
-  const hasMedia = mediaUrls.length > 0;
-  const hasCarousel = mediaUrls.length > 1;
-  const activeUrl = hasMedia ? mediaUrls[currentIndex] : null;
-
-  const isImageFile = (url) =>
-    /\.(jpe?g|png|gif|webp)$/i.test(url || "");
+  const handlePlaySnippet = () => {
+    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    const start = Number(snippetStart) || 0;
+    const dur = Number(snippetDuration) || 0;
   
-  const isVideoFile = (url) =>
-    /\.(mp4|mov|webm|ogg)$/i.test(url || "");
+    audio.currentTime = start;
+    audio.muted = false;
   
+    audio.play().catch((e) => console.error("Audio play error:", e));
+  
+    if (dur > 0) {
+      setTimeout(() => {
+        if (!audio.paused) {
+          audio.pause();
+        }
+      }, dur * 1000);
+    }
+  };
 
-  async function handleSavePlatforms() {
+  const handleSavePlatforms = async () => {
     if (!variation || savingPlatforms) return;
     setSavingPlatforms(true);
     try {
@@ -383,52 +396,29 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     } finally {
       setSavingPlatforms(false);
     }
-  }
+  };
 
-  async function toggleResolve() {
-    if (!variation || saving) return;
-    setSaving(true);
-    const next = !localResolved;
-    const { error } = await supabase
-      .from("postvariations")
-      .update({ feedback_resolved: next })
-      .eq("id", variation.id);
-    setSaving(false);
-    if (error) {
-      console.error(error);
-      alert("Could not update feedback status.");
-      return;
-    }
-    setLocalResolved(next);
-    variation.feedback_resolved = next;
-    if (typeof onRefreshPost === "function") onRefreshPost(variation.id, next);
-  }
-
-  async function toggleGreenlight() {
+  const toggleGreenlight = async () => {
     if (!variation || savingGreenlight) return;
-    setSavingGreenlight(true);
+    savingGreenlight(true);
     const next = !localGreenlight;
-
     const { error } = await supabase
       .from("postvariations")
       .update({ greenlight: next })
       .eq("id", variation.id);
-
-    setSavingGreenlight(false);
-
+    savingGreenlight(false);
     if (error) {
       console.error(error);
-      alert("Could not update greenlight status.");
+      alert("Could not update greenlight.");
       return;
     }
-
     setLocalGreenlight(next);
     variation.greenlight = next;
-
     if (typeof onGreenlightUpdated === "function") {
       onGreenlightUpdated(variation.id, next);
     }
-  }
+  };
+
   const handleDelete = async () => {
     if (!confirm("Are you sure you want to delete this variation?")) return;
     try {
@@ -458,61 +448,74 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     }
   };
 
-  const hasFeedback =
-    Boolean(variation.feedback && variation.feedback.trim() !== "");
+  // ✅ NEW: Handler to submit new comment
+  async function handleSubmitComment() {
+    if (!newCommentText.trim()) return;
 
-  const goPrev = () => {
-    if (!hasCarousel) return;
-    setCurrentIndex((i) => (i - 1 + mediaUrls.length) % mediaUrls.length);
-  };
-
-  const goNext = () => {
-    if (!hasCarousel) return;
-    setCurrentIndex((i) => (i + 1) % mediaUrls.length);
-  };
-
-  const handleTouchStart = (e) => {
-    if (!hasCarousel) return;
-    setTouchStartX(e.touches[0].clientX);
-  };
-
-  const handleTouchEnd = (e) => {
-    if (!hasCarousel || touchStartX == null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX;
-    if (deltaX > 50) goPrev();
-    else if (deltaX < -50) goNext();
-    setTouchStartX(null);
-  };
-
-  const formatSnippetTime = (sec) => {
-    if (typeof sec !== "number" || isNaN(sec)) return "0:00";
-    const s = Math.floor(sec);
-    const m = Math.floor(s / 60);
-    const r = s % 60;
-    return `${m}:${r.toString().padStart(2, "0")}`;
-  };
-
-  const handlePlaySnippet = () => {
-    if (!audioRef.current) return;
-    const audio = audioRef.current;
-    const start = Number(snippetStart) || 0;
-    const dur = Number(snippetDuration) || 0;
-  
-    audio.currentTime = start;
-    audio.muted = false;
-  
-    audio.play().catch((e) => console.error("Audio play error:", e));
-  
-    if (dur > 0) {
-      setTimeout(() => {
-        if (!audio.paused) {
-          audio.pause();
-        }
-      }, dur * 1000);
+    setSubmittingComment(true);
+    try {
+      await addComment(newCommentText);
+      setNewCommentText("");
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      alert("Could not add comment. See console for details.");
+    } finally {
+      setSubmittingComment(false);
     }
-  };
-  
-  
+  }
+
+  // ✅ NEW: Handler to resolve/unresolve comment (admins can toggle)
+  async function handleToggleResolve(comment) {
+    try {
+      if (comment.resolved) {
+        await unresolveComment(comment.id);
+      } else {
+        await resolveComment(comment.id);
+      }
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to toggle resolve:", err);
+      alert("Could not update comment. See console for details.");
+    }
+  }
+
+  // ✅ NEW: Handler to delete comment (admins can delete any comment)
+  async function handleDeleteComment(commentId) {
+    if (!confirm("Delete this comment? This cannot be undone.")) return;
+
+    try {
+      await deleteComment(commentId);
+      if (typeof onRefreshPost === "function") onRefreshPost();
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert("Could not delete comment. See console for details.");
+    }
+  }
+
+  // ✅ NEW: Format timestamp for display
+  function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return date.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  }
+
+  const isVideo = (url) => /\.(mp4|mov|webm|m4v)$/i.test(url);
+  const activeUrl = mediaUrls[currentIndex] || null;
 
   const variationDateLabel = variation.variation_post_date
     ? new Date(variation.variation_post_date).toLocaleDateString(undefined, {
@@ -554,106 +557,60 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
         <div className="flex flex-col md:flex-row gap-4">
           {/* Media area */}
           <div className="md:w-2/3">
-            <div
-              className="bg-black rounded-md flex items-center justify-center relative overflow-hidden"
-              style={
-                hasCarousel
-                  ? { height: "70vh", maxHeight: "70vh" }                  // fixed for carousels
-                  : { minHeight: "240px", maxHeight: "70vh" }              // flexible for single media
-              }
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              {loading && (
-                <div className="text-sm text-gray-300">Loading media…</div>
-              )}
-              {!loading && error && (
-                <div className="text-sm text-red-400 px-4 text-center">
-                  {error}
-                </div>
-              )}
-              {!loading && !error && !hasMedia && (
-                <div className="text-sm text-gray-300 px-4 text-center">
-                  No media attached to this variation.
-                </div>
-              )}
-              {!loading && !error && hasMedia && activeUrl && (
-                <>
-                  {isImageFile(activeUrl) && (
-                    <img
-                      src={activeUrl}
-                      alt={variation.file_name}
-                      className="max-h-[70vh] max-w-full object-contain"
-                    />
-                  )}
+            {loading && <div className="text-sm text-gray-600">Loading media…</div>}
+            {error && <div className="text-sm text-red-600">{error}</div>}
 
-                  {isVideoFile(activeUrl) && (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        width: "100%",
-                      }}
+            {!loading && !error && activeUrl && (
+              <div className="relative">
+                {isVideo(activeUrl) ? (
+                  <video
+                    key={activeUrl}
+                    src={activeUrl}
+                    controls
+                    className="w-full rounded-md"
+                    style={{ maxHeight: "70vh" }}
+                  />
+                ) : (
+                  <img
+                    src={activeUrl}
+                    alt="variation"
+                    className="w-full rounded-md object-contain"
+                    style={{ maxHeight: "70vh" }}
+                  />
+                )}
+
+                {mediaUrls.length > 1 && (
+                  <div className="mt-2 flex items-center justify-center gap-2">
+                    <button
+                      onClick={() =>
+                        setCurrentIndex((i) =>
+                          i === 0 ? mediaUrls.length - 1 : i - 1
+                        )
+                      }
+                      className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
                     >
-                      <video
-                        src={activeUrl}
-                        autoPlay
-                        muted
-                        playsInline
-                        controls
-                        style={{
-                          maxHeight: "70vh",
-                          maxWidth: "70vw",
-                          width: "auto",
-                          height: "auto",
-                          objectFit: "contain",
-                        }}
-                      />
-                    </div>
-                  )}
-
-                  {!isImageFile(activeUrl) && !isVideoFile(activeUrl) && (
-                    <div className="text-sm text-gray-200 px-4 text-center">
-                      Unsupported file type
-                    </div>
-                  )}
-
-                  {hasCarousel && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goPrev}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
-                      >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        onClick={goNext}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
-                      >
-                        ›
-                      </button>
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                        {mediaUrls.map((_, idx) => (
-                          <span
-                            key={idx}
-                            className={`w-2 h-2 rounded-full ${
-                              idx === currentIndex ? "bg-white" : "bg-gray-500"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-
-            </div>
+                      ‹
+                    </button>
+                    <span className="text-sm">
+                      {currentIndex + 1} / {mediaUrls.length}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentIndex((i) =>
+                          i === mediaUrls.length - 1 ? 0 : i + 1
+                        )
+                      }
+                      className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+                    >
+                      ›
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Right side: meta, platforms, audio, feedback actions */}
+          {/* Right side: meta, platforms, audio, feedback */}
           <div className="md:w-1/3 flex flex-col gap-4">
             {/* Platforms */}
             <div>
@@ -745,27 +702,166 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
               </div>
             )}
 
-
-            {/* Feedback summary */}
-            {hasFeedback && (
-              <div className="mt-4 rounded-md bg-[#f9fafb] border border-[#e5e7eb] p-3 text-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-                  <span className="font-semibold text-[#111827]">Feedback summary</span>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                      localResolved
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
-                    {localResolved ? "Resolved" : "Needs attention"}
-                  </span>
-                </div>
-                <p className="text-[#374151] whitespace-pre-wrap">
-                  {variation.feedback}
-                </p>
+            {/* ============================================================================ */}
+            {/* ✅ NEW FEEDBACK SECTION - Admin version with resolve/unresolve */}
+            {/* ============================================================================ */}
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">
+                  Feedback {unresolvedCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] bg-yellow-100 text-yellow-800">
+                      {unresolvedCount} need attention
+                    </span>
+                  )}
+                </h3>
               </div>
-            )}
+
+              {commentsLoading ? (
+                <div className="text-xs text-gray-500 text-center py-3">
+                  Loading feedback...
+                </div>
+              ) : comments.length === 0 ? (
+                <div className="text-xs text-gray-500 text-center py-3">
+                  No feedback yet.
+                </div>
+              ) : (
+                <>
+                  {/* ✅ UNRESOLVED COMMENTS - Always visible */}
+                  <div className="space-y-1.5 mb-2 max-h-[220px] overflow-y-auto">
+                    {comments.filter(c => !c.resolved).map((comment) => (
+                      <div
+                        key={comment.id}
+                        className="p-2 rounded border bg-yellow-50 border-yellow-200"
+                      >
+                        <div className="flex items-start justify-between mb-1">
+                          <div className="flex items-center gap-1 text-[10px] flex-wrap">
+                            <span className="font-medium text-gray-900">
+                              {comment.user_name}
+                            </span>
+                            <span className="text-gray-500">
+                              {formatTimestamp(comment.created_at)}
+                            </span>
+                            {comment.edited_at && (
+                              <span className="text-gray-400 italic">
+                                (edited {formatTimestamp(comment.edited_at)})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-gray-800 whitespace-pre-wrap mb-1.5">
+                          {comment.comment_text}
+                        </p>
+
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => handleToggleResolve(comment)}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 hover:bg-green-200 text-green-800"
+                          >
+                            Resolve
+                          </button>
+                          
+                          <button
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {comments.filter(c => !c.resolved).length === 0 && (
+                      <div className="text-xs text-gray-500 text-center py-2">
+                        All feedback resolved! 🎉
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ✅ RESOLVED COMMENTS - Collapsible */}
+                  {comments.filter(c => c.resolved).length > 0 && (
+                    <div className="mb-2">
+                      <button
+                        onClick={() => setShowResolvedComments(!showResolvedComments)}
+                        className="w-full text-left text-[10px] text-gray-600 hover:text-gray-900 py-1.5 px-2 bg-gray-50 rounded flex items-center justify-between"
+                      >
+                        <span>
+                          {showResolvedComments ? '▼' : '▶'} Resolved ({comments.filter(c => c.resolved).length})
+                        </span>
+                      </button>
+
+                      {showResolvedComments && (
+                        <div className="space-y-1.5 mt-1.5 max-h-[180px] overflow-y-auto">
+                          {comments.filter(c => c.resolved).map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="p-2 rounded border bg-gray-50 border-gray-200"
+                            >
+                              <div className="flex items-start justify-between mb-1">
+                                <div className="flex items-center gap-1 text-[10px] flex-wrap">
+                                  <span className="font-medium text-gray-700">
+                                    {comment.user_name}
+                                  </span>
+                                  <span className="text-gray-500">
+                                    {formatTimestamp(comment.created_at)}
+                                  </span>
+                                  {comment.edited_at && (
+                                    <span className="text-gray-400 italic">
+                                      (edited {formatTimestamp(comment.edited_at)})
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] bg-green-100 text-green-800 px-1 py-0.5 rounded">
+                                  ✓
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-gray-600 whitespace-pre-wrap mb-1.5">
+                                {comment.comment_text}
+                              </p>
+
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleToggleResolve(comment)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-gray-700"
+                                >
+                                  Unresolve
+                                </button>
+                                
+                                <button
+                                  onClick={() => handleDeleteComment(comment.id)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ✅ ADD NEW COMMENT */}
+              <div className="border-t pt-2">
+                <textarea
+                  value={newCommentText}
+                  onChange={(e) => setNewCommentText(e.target.value)}
+                  placeholder="Add feedback..."
+                  className="w-full border rounded p-2 text-xs min-h-[50px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={submittingComment}
+                />
+                <button
+                  onClick={handleSubmitComment}
+                  disabled={submittingComment || !newCommentText.trim()}
+                  className="mt-1 w-full bg-blue-600 text-white py-1.5 rounded text-xs hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {submittingComment ? 'Posting...' : 'Add Feedback'}
+                </button>
+              </div>
+            </div>
 
             {/* Action buttons */}
             <div className="flex gap-2 mt-2 flex-wrap">
@@ -783,7 +879,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                 Replace Variation
               </button>
 
-              {/* ✅ NEW: Greenlight toggle */}
+              {/* Greenlight toggle */}
               <button
                 onClick={toggleGreenlight}
                 disabled={savingGreenlight}
@@ -793,60 +889,11 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
               >
                 {savingGreenlight ? "Saving…" : localGreenlight ? "Greenlit ✅ (click to undo)" : "Not greenlit (click to greenlight)"}
               </button>
-
-              <button
-                onClick={toggleResolve}
-                disabled={saving || !variation.feedback}
-                className={`flex-1 py-2 rounded text-white transition-colors text-sm min-w-[180px] ${
-                  localResolved ? "bg-gray-500 hover:bg-gray-600" : "bg-green-600 hover:bg-green-700"
-                } ${saving ? "opacity-70 cursor-not-allowed" : ""}`}
-              >
-                {saving
-                  ? "Saving…"
-                  : localResolved
-                  ? "Mark feedback as unresolved"
-                  : "Mark feedback as resolved"}
-              </button>
             </div>
 
           </div>
         </div>
 
-        {/* Feedback Modal */}
-        {feedbackModalOpen && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-60">
-            <div className="bg-white p-6 rounded-lg max-w-lg w-full relative">
-              <button
-                onClick={() => setFeedbackModalOpen(false)}
-                className="absolute top-2 right-2 text-gray-500 hover:text-black p-1 rounded-full"
-              >
-                ✕
-              </button>
-              <h3 className="text-lg font-semibold mb-2">
-                {localResolved ? "Feedback - resolved" : "Feedback"}
-              </h3>
-              <div
-                className={`whitespace-pre-wrap rounded p-3 border ${
-                  localResolved ? "opacity-60 grayscale" : ""
-                }`}
-              >
-                {variation.feedback || "—"}
-              </div>
-              {variation.feedback && (
-                <button
-                  onClick={toggleResolve}
-                  className={`mt-4 px-4 py-2 rounded text-white ${
-                    localResolved ? "bg-gray-500" : "bg-green-600"
-                  }`}
-                >
-                  {localResolved
-                    ? "Mark as unresolved"
-                    : "Mark feedback resolved"}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
