@@ -13,6 +13,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
+import WeeklyInsightsModal from "../../../components/artist/WeeklyInsightsModal";
 
 // -------------------- helpers --------------------
 
@@ -23,6 +24,18 @@ function normalizePlatform(p) {
   if (s.includes("youtube")) return "youtube";
   if (s.includes("yt")) return "youtube";
   return s || "unknown";
+}
+
+/**
+ * Get the Monday of the current week (in YYYY-MM-DD format)
+ */
+function getCurrentWeekMonday() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff);
+  return monday.toISOString().slice(0, 10);
 }
 
 function formatNumber(n) {
@@ -451,6 +464,11 @@ export default function InsightsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalPost, setModalPost] = useState(null);
 
+  // Weekly Insights Modal state
+  const [showWeeklyInsights, setShowWeeklyInsights] = useState(false);
+  const [artistId, setArtistId] = useState("");
+  const [profileId, setProfileId] = useState("");
+
   useEffect(() => {
     const run = async () => {
       try {
@@ -458,6 +476,13 @@ export default function InsightsPage() {
         setErr("");
 
         const { artistId } = await getMyArtistContext();
+        setArtistId(artistId); // Store for WH? button
+        
+        // Also get profile ID
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setProfileId(user.id);
+        }
 
         // last 6 weeks
         const cutoff = new Date();
@@ -617,6 +642,17 @@ export default function InsightsPage() {
 
   return (
     <ArtistLayout title="Insights">
+      {/* WH? Button in top right */}
+      <div className="fixed top-4 right-4 z-50">
+        <button
+          onClick={() => setShowWeeklyInsights(true)}
+          className="px-4 py-2 bg-[#33296b] text-white rounded-xl font-semibold hover:opacity-90 transition shadow-lg"
+          title="View What Happened this week"
+        >
+          WH?
+        </button>
+      </div>
+      
       {err && (
         <div className="mb-4 rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {err}
@@ -669,6 +705,16 @@ export default function InsightsPage() {
         onClose={() => setModalOpen(false)}
         post={modalPost}
         platformSnapsByPostId={platformSnapsByPostId}
+      />
+      
+      {/* Weekly Insights Modal (manual access, 3 slides only) */}
+      <WeeklyInsightsModal
+        open={showWeeklyInsights}
+        onClose={() => setShowWeeklyInsights(false)}
+        artistId={artistId}
+        profileId={profileId}
+        weekStartDate={getCurrentWeekMonday()}
+        isAutoPopup={false}
       />
     </ArtistLayout>
   );

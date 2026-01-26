@@ -24,6 +24,19 @@ function normalizePlatform(p) {
   return s || "unknown";
 }
 
+/**
+ * Get the Monday of the week containing the given date
+ */
+function getMondayOfWeek(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diff);
+  return monday.toISOString().slice(0, 10);
+}
+
 function formatNumber(n) {
   if (n == null || isNaN(n)) return "—";
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
@@ -488,6 +501,15 @@ export default function InsightsAdminPage() {
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const artistId = selectedArtistId ? Number(selectedArtistId) : null;
 
+  // Weekly Insights Upload state
+  const [whWeekDate, setWhWeekDate] = useState("");
+  const [whSlide1, setWhSlide1] = useState(null);
+  const [whSlide2, setWhSlide2] = useState(null);
+  const [whSlide3, setWhSlide3] = useState(null);
+  const [whUploading, setWhUploading] = useState(false);
+  const [whUploadSuccess, setWhUploadSuccess] = useState("");
+  const [whUploadError, setWhUploadError] = useState("");
+
   const [posts, setPosts] = useState([]);
   const [platformSnapsByPostId, setPlatformSnapsByPostId] = useState(
     new Map()
@@ -768,6 +790,113 @@ export default function InsightsAdminPage() {
     }
   }
   
+  /**
+   * Upload weekly insights slides for the selected artist_id and week
+   */
+  async function handleUploadWeeklyInsights() {
+    // Validation
+    if (!artistId) {
+      alert("Please select an artist first.");
+      return;
+    }
+    
+    if (!whWeekDate) {
+      alert("Please select a week date.");
+      return;
+    }
+    
+    if (!whSlide1 || !whSlide2 || !whSlide3) {
+      alert("Please select all 3 slides.");
+      return;
+    }
+    
+    setWhUploading(true);
+    setWhUploadSuccess("");
+    setWhUploadError("");
+    
+    try {
+      // Get the Monday of the selected week
+      const weekMonday = getMondayOfWeek(whWeekDate);
+      
+      // Upload slides to storage
+      const timestamp = Date.now();
+      const slidePaths = [];
+      
+      for (let i = 0; i < 3; i++) {
+        const file = [whSlide1, whSlide2, whSlide3][i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `slide${i + 1}_${timestamp}.${fileExt}`;
+        const path = `${artistId}/${weekMonday}/${fileName}`;
+        
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from("weekly-insights")
+          .upload(path, file, {
+            cacheControl: '3600',
+            upsert: true // Replace if exists
+          });
+        
+        if (uploadError) throw uploadError;
+        
+        slidePaths.push(path);
+      }
+      
+      // Check if record already exists for this artist_id + week
+      const { data: existing, error: fetchError } = await supabase
+        .from("weekly_insights")
+        .select("id")
+        .eq("artist_id", artistId)
+        .eq("week_start_date", weekMonday)
+        .limit(1);
+      
+      if (fetchError) throw fetchError;
+      
+      if (existing && existing.length > 0) {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from("weekly_insights")
+          .update({
+            slide_paths: slidePaths,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", existing[0].id);
+        
+        if (updateError) throw updateError;
+        
+        setWhUploadSuccess(`✅ Updated slides for artist_id "${artistId}" week of ${weekMonday}`);
+      } else {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from("weekly_insights")
+          .insert({
+            artist_id: artistId,
+            week_start_date: weekMonday,
+            slide_paths: slidePaths
+          });
+        
+        if (insertError) throw insertError;
+        
+        setWhUploadSuccess(`✅ Uploaded slides for artist_id "${artistId}" week of ${weekMonday}`);
+      }
+      
+      // Clear form
+      setWhWeekDate("");
+      setWhSlide1(null);
+      setWhSlide2(null);
+      setWhSlide3(null);
+      
+      // Clear file inputs
+      document.getElementById("wh-slide-1").value = "";
+      document.getElementById("wh-slide-2").value = "";
+      document.getElementById("wh-slide-3").value = "";
+      
+    } catch (err) {
+      console.error("Upload error:", err);
+      setWhUploadError(err.message || "Failed to upload slides");
+    } finally {
+      setWhUploading(false);
+    }
+  }
 
   return (
     <ArtistLayout title="Insights (admin)">
@@ -897,6 +1026,115 @@ export default function InsightsAdminPage() {
             <p className="text-sm opacity-80">
               This section is quite hard to make and is coming soon.
             </p>
+          </div>
+          {/* Weekly Insights Upload Panel */}
+          <div className="artist-panel p-4 md:p-5">
+            <h2 className="text-sm font-semibold mb-4">Upload Weekly Insights (WH?)</h2>
+            
+            {whUploadSuccess && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                {whUploadSuccess}
+              </div>
+            )}
+            
+            {whUploadError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {whUploadError}
+              </div>
+            )}
+            
+            <div className="space-y-4">
+              {/* Week selection */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Select Week (any date in the week)
+                </label>
+                <input
+                  type="date"
+                  value={whWeekDate}
+                  onChange={(e) => setWhWeekDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                />
+                {whWeekDate && (
+                  <div className="mt-1 text-xs text-gray-600">
+                    Week of: {getMondayOfWeek(whWeekDate)} (Monday)
+                  </div>
+                )}
+              </div>
+              
+              {/* Slide uploads */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Slide 1 (1080x1440)
+                  </label>
+                  <input
+                    id="wh-slide-1"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={(e) => setWhSlide1(e.target.files[0])}
+                    className="w-full text-sm"
+                  />
+                  {whSlide1 && (
+                    <div className="mt-1 text-xs text-green-600">
+                      ✓ {whSlide1.name}
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Slide 2 (1080x1440)
+                  </label>
+                  <input
+                    id="wh-slide-2"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={(e) => setWhSlide2(e.target.files[0])}
+                    className="w-full text-sm"
+                  />
+                  {whSlide2 && (
+                    <div className="mt-1 text-xs text-green-600">
+                      ✓ {whSlide2.name}
+                    </div>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Slide 3 (1080x1440)
+                  </label>
+                  <input
+                    id="wh-slide-3"
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png"
+                    onChange={(e) => setWhSlide3(e.target.files[0])}
+                    className="w-full text-sm"
+                  />
+                  {whSlide3 && (
+                    <div className="mt-1 text-xs text-green-600">
+                      ✓ {whSlide3.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Upload button */}
+              <button
+                onClick={handleUploadWeeklyInsights}
+                disabled={whUploading || !artistId || !whWeekDate || !whSlide1 || !whSlide2 || !whSlide3}
+                className="px-4 py-2 bg-[#33296b] text-white rounded-lg font-semibold hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {whUploading ? "Uploading..." : "Upload Weekly Insights"}
+              </button>
+              
+              <div className="text-xs text-gray-600 space-y-1">
+                <p>• Slides will be uploaded for the week starting Monday of the selected date</p>
+                <p>• All profiles with artist_id "{artistId || '(select artist)'}" will see these slides</p>
+                <p>• Uploading new slides for the same week will replace existing ones</p>
+                <p>• Artists will see auto-popup on Monday if they haven't viewed them yet</p>
+              </div>
+            </div>
           </div>
         </div>
       )}

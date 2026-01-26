@@ -5,6 +5,7 @@ import ArtistLayout from "../../../components/artist/ArtistLayout";
 import { getMyArtistContext } from "../../../components/artist/artistData";
 import { supabase } from "../../../lib/supabaseClient";
 import { useFeedbackComments } from "../../../hooks/useFeedbackComments";  // ✅ NEW
+import WeeklyInsightsModal from "../../../components/artist/WeeklyInsightsModal";
 
 /** -------- helpers -------- */
 const pad2 = (n) => String(n).padStart(2, "0");
@@ -16,6 +17,19 @@ function formatDDMMYY(dateLike) {
   const mm = pad2(d.getMonth() + 1);
   const yy = String(d.getFullYear()).slice(-2);
   return `${dd}-${mm}-${yy}`;
+}
+
+/**
+ * Get the Monday of the current week (in YYYY-MM-DD format)
+ * This is used to identify which week's insights to show
+ */
+function getCurrentWeekMonday() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const diff = day === 0 ? -6 : 1 - day; // If Sunday, go back 6 days, else go back to Monday
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff);
+  return monday.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 /**
@@ -808,6 +822,12 @@ export default function ArtistHomePage() {
   const [notifications, setNotifications] = useState([]);
 
   const [selectedPostId, setSelectedPostId] = useState(null);
+  
+  // Weekly Insights Modal state
+  const [showWeeklyInsights, setShowWeeklyInsights] = useState(false);
+  const [weeklyInsightsWeek, setWeeklyInsightsWeek] = useState("");
+  const [weeklyInsightsArtistId, setWeeklyInsightsArtistId] = useState("");
+  const [weeklyInsightsProfileId, setWeeklyInsightsProfileId] = useState("");
 
   useEffect(() => {
     const run = async () => {
@@ -913,6 +933,72 @@ export default function ArtistHomePage() {
     run();
   }, []);
   
+  // Check if we should auto-show weekly insights
+  useEffect(() => {
+    async function checkWeeklyInsights() {
+      try {
+        // Get the current user's profile info
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        const profileId = user.id;
+        
+        // Get the artist_id from profiles table
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("artist_id")
+          .eq("id", profileId)
+          .single();
+        
+        if (profileError || !profile || !profile.artist_id) {
+          console.log("No artist_id found for profile");
+          return;
+        }
+        
+        const artistId = profile.artist_id;
+        const currentMonday = getCurrentWeekMonday();
+        
+        // Check if there are insights for this artist_id for this week
+        const { data: insights, error: insightsError } = await supabase
+          .from("weekly_insights")
+          .select("id, slide_paths")
+          .eq("artist_id", artistId)
+          .eq("week_start_date", currentMonday)
+          .single();
+        
+        // If no insights exist for this week, don't show modal
+        if (insightsError || !insights || !insights.slide_paths || insights.slide_paths.length === 0) {
+          return;
+        }
+        
+        // Check if THIS PROFILE has already viewed this week's insights
+        const { data: viewData, error: viewError } = await supabase
+          .from("weekly_insights_views")
+          .select("id")
+          .eq("profile_id", profileId)
+          .eq("week_start_date", currentMonday)
+          .limit(1);
+        
+        // If already viewed, don't show
+        if (viewData && viewData.length > 0) {
+          return;
+        }
+        
+        // Show the modal!
+        setWeeklyInsightsArtistId(artistId);
+        setWeeklyInsightsProfileId(profileId);
+        setWeeklyInsightsWeek(currentMonday);
+        setShowWeeklyInsights(true);
+        
+      } catch (err) {
+        console.error("Error checking weekly insights:", err);
+        // Silently fail - don't interrupt user experience
+      }
+    }
+    
+    // Only run once on mount
+    checkWeeklyInsights();
+  }, []); // Empty dependency array = run once on mount
 
   const readyNeedingAction = useMemo(() => readyPosts, [readyPosts]);
 
@@ -1012,6 +1098,16 @@ export default function ArtistHomePage() {
       {selectedPostId && (
         <PostDetailsModal postId={selectedPostId} onClose={() => setSelectedPostId(null)} />
       )}
+      
+      {/* Weekly Insights Modal (auto-popup) */}
+      <WeeklyInsightsModal
+        open={showWeeklyInsights}
+        onClose={() => setShowWeeklyInsights(false)}
+        artistId={weeklyInsightsArtistId}
+        profileId={weeklyInsightsProfileId}
+        weekStartDate={weeklyInsightsWeek}
+        isAutoPopup={true}
+      />
     </ArtistLayout>
   );
 }
