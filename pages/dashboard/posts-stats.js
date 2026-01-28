@@ -3119,9 +3119,11 @@ function PostDetailsModal({
 function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
   const [url, setUrl] = useState(post.instagram_url || "");
   const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false); // New state for fetch stats
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
+  // Existing handleSave function
   async function handleSave(e) {
     e.preventDefault();
     setError("");
@@ -3144,7 +3146,7 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
         setError(supaErr.message || "Failed to update Instagram URL.");
       } else {
         setMessage(
-          "Saved. Re-run “Fetch IG stats” to try again with the new link."
+          "Saved. You can now fetch stats for this post."
         );
         if (onUpdatedUrl) onUpdatedUrl(trimmed);
       }
@@ -3152,6 +3154,53 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
       setError(err.message || "Failed to update Instagram URL.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // New function to fetch stats for this specific post
+  async function handleFetchStats() {
+    setError("");
+    setMessage("");
+
+    // Check if there's a URL set
+    if (!post.instagram_url && !url.trim()) {
+      setError("Please save an Instagram URL first before fetching stats.");
+      return;
+    }
+
+    try {
+      setFetching(true);
+      
+      // Call the single-post Instagram API route
+      const response = await fetch(
+        `/api/metrics/instagram-single?postId=${post.id}&secret=${process.env.NEXT_PUBLIC_CRON_SECRET}`
+      );
+      
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setError(data.error || "Failed to fetch Instagram stats");
+        if (data.details) {
+          console.error("API error details:", data.details);
+        }
+        if (data.hint) {
+          setError(`${data.error}. ${data.hint}`);
+        }
+      } else {
+        setMessage(
+          `✅ Success! Fetched ${data.metrics?.views || 0} views, ${data.metrics?.likes || 0} likes. The page will reload to show updated metrics.`
+        );
+        
+        // Reload the page after 2 seconds to show the new data
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Fetch stats error:", err);
+      setError("Network error. Please check console for details.");
+    } finally {
+      setFetching(false);
     }
   }
 
@@ -3228,21 +3277,35 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-between items-center gap-2 pt-2">
+            {/* Left side: Fetch stats button */}
             <button
               type="button"
-              onClick={onClose}
-              className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+              onClick={handleFetchStats}
+              disabled={fetching || !post.instagram_url}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!post.instagram_url ? "Save a URL first" : "Fetch Instagram stats for this post"}
             >
-              Cancel
+              {fetching ? "Fetching stats…" : "🔄 Fetch stats for this post"}
             </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save new link"}
-            </button>
+
+            {/* Right side: Cancel and Save buttons */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save new link"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
