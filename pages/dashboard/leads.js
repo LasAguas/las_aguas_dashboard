@@ -134,8 +134,66 @@ function applyFilters(rows, filters) {
   });
 }
 
-function FilterBuilder({ groups, filters, setFilters }) {
+function FilterBuilder({ groups, filters, setFilters, allData = [] }) {
+  // allData is the complete dataset so we can extract unique values
   const [draft, setDraft] = useState({ field: "", op: "contains", value: "" });
+
+  // Extract unique values for the selected field from the dataset
+  const getUniqueValuesForField = (fieldName) => {
+    if (!fieldName || !allData || allData.length === 0) return [];
+    
+    const values = new Set();
+    
+    allData.forEach((row) => {
+      const val = row?.[fieldName];
+      
+      // Skip null, undefined, empty strings
+      if (val == null || val === "") return;
+      
+      // Convert to string for consistent comparison
+      const strVal = String(val).trim();
+      if (strVal) values.add(strVal);
+    });
+    
+    // Convert Set to sorted array
+    return Array.from(values).sort((a, b) => {
+      // Try numeric sort first
+      const numA = Number(a);
+      const numB = Number(b);
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      // Fall back to string sort
+      return a.localeCompare(b, undefined, { sensitivity: 'base' });
+    });
+  };
+
+  // Determine if selected field should use dropdown or text input
+  const shouldUseDropdown = (fieldName) => {
+    if (!fieldName) return false;
+    
+    // Fields that should always use text input (free-form text)
+    const textFields = [
+      'display_name', 
+      'email', 
+      'phone', 
+      'notes',
+      '__last_contacted_at',
+      '__next_contact_on',
+      'created_at'
+    ];
+    
+    if (textFields.includes(fieldName)) return false;
+    
+    // For all other fields, use dropdown if we have values
+    const uniqueValues = getUniqueValuesForField(fieldName);
+    return uniqueValues.length > 0 && uniqueValues.length <= 50; // Cap at 50 options
+  };
+
+  // Get unique values for current field
+  const uniqueValuesForCurrentField = draft.field 
+    ? getUniqueValuesForField(draft.field) 
+    : [];
 
   const add = () => {
     if (!draft.field) return;
@@ -189,12 +247,29 @@ function FilterBuilder({ groups, filters, setFilters }) {
 
         <div className="flex-1">
           <label className="block text-xs font-semibold text-[#33286a] mb-1">Value</label>
-          <input
-            value={draft.value}
-            onChange={(e) => setDraft((p) => ({ ...p, value: e.target.value }))}
-            placeholder="Value…"
-            className="w-full rounded-xl px-3 py-2 text-sm bg-white border border-black/10"
-          />
+          {/* Show dropdown for fields with discrete values, text input for free-form fields */}
+          {shouldUseDropdown(draft.field) ? (
+            <select
+              value={draft.value}
+              onChange={(e) => setDraft((p) => ({ ...p, value: e.target.value }))}
+              className="w-full rounded-xl px-3 py-2 text-sm bg-white border border-black/10"
+            >
+              <option value="">Select value…</option>
+              {uniqueValuesForCurrentField.map((val) => (
+                <option key={val} value={val}>
+                  {val}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={draft.value}
+              onChange={(e) => setDraft((p) => ({ ...p, value: e.target.value }))}
+              placeholder={draft.field ? "Enter value…" : "Select field first"}
+              disabled={!draft.field}
+              className="w-full rounded-xl px-3 py-2 text-sm bg-white border border-black/10 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            />
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -1115,12 +1190,16 @@ export default function LeadsPage() {
     const [language, setLanguage] = useState("");
     const [direction, setDirection] = useState("Outgoing");
     const [source, setSource] = useState("");
-    const [followupEveryDays, setFollowupEveryDays] = useState("7"); // Default to 7 days
+    const [followupEveryDays, setFollowupEveryDays] = useState("4"); // Default to 7 days
     const [followupPaused, setFollowupPaused] = useState(false);
     const [notes, setNotes] = useState("");
-    const [links, setLinks] = useState(""); // Will be stored as JSONB
-    const [extraFields, setExtraFields] = useState(""); // Will be stored as JSONB
 
+    // Individual link fields instead of JSON textarea
+    const [youtubeLink, setYoutubeLink] = useState("");
+    const [musicLink, setMusicLink] = useState("");
+    const [instagramLink, setInstagramLink] = useState("");
+
+    const [extraFields, setExtraFields] = useState(""); // Will be stored as JSONB
     // Loading state for save button
     const [saving, setSaving] = useState(false);
 
@@ -1135,21 +1214,29 @@ export default function LeadsPage() {
       setSaving(true);
 
       try {
-        // Parse JSON fields (links and extra_fields)
+        // Build links object from individual fields
         let linksJson = null;
-        let extraFieldsJson = null;
-
-        // Try to parse links if provided
-        if (links.trim()) {
-          try {
-            linksJson = JSON.parse(links);
-          } catch (e) {
-            alert("Links must be valid JSON (e.g., {\"ig\":\"https://...\"}). Leave empty if not needed.");
-            setSaving(false);
-            return;
-          }
+        const linksObject = {};
+        
+        // Add each link if it has a value
+        if (youtubeLink.trim()) {
+          linksObject.youtube = youtubeLink.trim();
+        }
+        if (musicLink.trim()) {
+          linksObject.music = musicLink.trim();
+        }
+        if (instagramLink.trim()) {
+          linksObject.ig = instagramLink.trim();
+        }
+        
+        // Only set linksJson if at least one link was provided
+        if (Object.keys(linksObject).length > 0) {
+          linksJson = linksObject;
         }
 
+        // Parse extra fields JSON
+        let extraFieldsJson = null;
+        
         // Try to parse extra fields if provided
         if (extraFields.trim()) {
           try {
@@ -1212,7 +1299,10 @@ export default function LeadsPage() {
         setFollowupEveryDays("7");
         setFollowupPaused(false);
         setNotes("");
-        setLinks("");
+        // Reset individual link fields
+        setYoutubeLink("");
+        setMusicLink("");
+        setInstagramLink("");
         setExtraFields("");
       } catch (err) {
         console.error("Unexpected error:", err);
@@ -1424,18 +1514,45 @@ export default function LeadsPage() {
                   placeholder="Internal notes about this lead..."
                 />
               </FieldRow>
+            </div>
+          </details>
 
-              {/* Links (JSON) */}
-              <FieldRow label='Links (JSON format)'>
-                <TextArea
-                  value={links}
-                  onChange={setLinks}
-                  placeholder='{"ig":"https://instagram.com/...", "spotify":"https://..."}'
+          {/* Links Section - Separate text fields for each platform */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="text-sm font-semibold text-[#33286a]">Links</div>
+            </summary>
+            <div className="p-4 space-y-3">
+              {/* YouTube Link */}
+              <FieldRow label="YouTube">
+                <TextInput
+                  value={youtubeLink}
+                  onChange={setYoutubeLink}
+                  placeholder="https://youtube.com/@channelname or video URL"
                 />
-                <div className="text-xs text-[#33286a]/60 mt-1">
-                  Must be valid JSON. Example: {`{"ig":"https://...", "website":"https://..."}`}
-                </div>
               </FieldRow>
+
+              {/* Music Link (Spotify, Apple Music, etc.) */}
+              <FieldRow label="Music (Spotify, etc.)">
+                <TextInput
+                  value={musicLink}
+                  onChange={setMusicLink}
+                  placeholder="https://open.spotify.com/artist/... or Apple Music URL"
+                />
+              </FieldRow>
+
+              {/* Instagram Link */}
+              <FieldRow label="Instagram">
+                <TextInput
+                  value={instagramLink}
+                  onChange={setInstagramLink}
+                  placeholder="https://instagram.com/username"
+                />
+              </FieldRow>
+
+              <div className="text-xs text-[#33286a]/60 mt-2">
+                💡 Tip: Just paste the full URL from your browser. Leave empty if not applicable.
+              </div>
             </div>
           </details>
         </div>
@@ -1454,6 +1571,10 @@ export default function LeadsPage() {
     );
     const [notes, setNotes] = useState(entity.notes || "");
 
+    // State for loading contact history
+    const [contactHistory, setContactHistory] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
     const [contactMethod, setContactMethod] = useState("email");
     const [contactDate, setContactDate] = useState(toYMD(new Date()));
     const [contactNote, setContactNote] = useState("");
@@ -1464,6 +1585,39 @@ export default function LeadsPage() {
     const [txNote, setTxNote] = useState("");
 
     const isClient = normStr(entity.entity_type) === "client";
+
+    // Function to load contact history for this entity
+    const loadContactHistory = async () => {
+      if (!entity?.id) return;
+      
+      setLoadingHistory(true);
+      try {
+        // Fetch all contact events for this entity, ordered by most recent first
+        const { data, error } = await supabase
+          .from("crm_contact_events")
+          .select("*")
+          .eq("entity_id", entity.id)
+          .order("contacted_at", { ascending: false });
+
+        if (error) {
+          console.error("Error loading contact history:", error);
+          setContactHistory([]);
+        } else {
+          setContactHistory(data || []);
+        }
+      } catch (err) {
+        console.error("Unexpected error loading contact history:", err);
+        setContactHistory([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    };
+
+    // Load contact history when modal opens
+    useEffect(() => {
+      loadContactHistory();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entity?.id]);
 
     return (
       <ModalShell
@@ -1494,7 +1648,7 @@ export default function LeadsPage() {
         }
       >
         <div className="space-y-3">
-          {/* Name + Notes always visible */}
+          {/* Name, Email, Phone, LTV - Always visible */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <FieldRow label="Name">
               <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
@@ -1505,6 +1659,38 @@ export default function LeadsPage() {
             <FieldRow label="LTV (computed)">
               <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
                 {Number(entity.__ltv || 0).toLocaleString()}
+              </div>
+            </FieldRow>
+
+            {/* Email - Display if available */}
+            <FieldRow label="Email">
+              <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
+                {entity.email ? (
+                  <a
+                    href={`mailto:${entity.email}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {entity.email}
+                  </a>
+                ) : (
+                  <span className="text-[#33286a]/50">—</span>
+                )}
+              </div>
+            </FieldRow>
+
+            {/* Phone - Display if available */}
+            <FieldRow label="Phone">
+              <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
+                {entity.phone ? (
+                  <a
+                    href={`tel:${entity.phone}`}
+                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    {entity.phone}
+                  </a>
+                ) : (
+                  <span className="text-[#33286a]/50">—</span>
+                )}
               </div>
             </FieldRow>
           </div>
@@ -1654,13 +1840,90 @@ export default function LeadsPage() {
                       method: contactMethod,
                       note: contactNote,
                     });
+                    
+                    // Clear the note field
                     setContactNote("");
+                    
+                    // Reload contact history to show the new entry
+                    await loadContactHistory();
                   }}
                   className="px-4 py-2 rounded-full bg-[#bbe1ac] text-[#33286a] text-sm font-semibold shadow hover:bg-[#eef8ea]"
                 >
                   Log contact
                 </button>
               </div>
+            </div>
+          </details>
+
+                    {/* Contact History Section */}
+          <details open className="rounded-2xl border border-black/10 overflow-hidden">
+            <summary className="cursor-pointer list-none select-none px-4 py-3 bg-[#eef8ea]">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-[#33286a]">Contact History</div>
+                <div className="text-xs text-[#33286a]/70">
+                  {contactHistory.length} {contactHistory.length === 1 ? 'contact' : 'contacts'}
+                </div>
+              </div>
+            </summary>
+            <div className="p-4">
+              {loadingHistory ? (
+                <div className="text-sm text-[#33286a]/60 text-center py-4">
+                  Loading contact history...
+                </div>
+              ) : contactHistory.length === 0 ? (
+                <div className="text-sm text-[#33286a]/60 text-center py-4">
+                  No contact history yet. Log your first contact below!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Map through contact history and display each entry */}
+                  {contactHistory.map((contact, index) => {
+                    const date = contact.contacted_at 
+                      ? new Date(contact.contacted_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })
+                      : '—';
+                    
+                    const time = contact.contacted_at
+                      ? new Date(contact.contacted_at).toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : '';
+
+                    return (
+                      <div
+                        key={contact.id || index}
+                        className="rounded-xl p-3 bg-[#eef8ea] border border-black/10"
+                      >
+                        {/* Header: Date and Method */}
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div className="flex-1">
+                            <div className="text-sm font-semibold text-[#33286a]">
+                              {date}
+                              {time && <span className="text-xs font-normal ml-2 text-[#33286a]/70">{time}</span>}
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-white text-[#33286a] border border-black/10">
+                              {contact.method || 'contact'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Note (if exists) */}
+                        {contact.note && (
+                          <div className="text-sm text-[#33286a] mt-2 pl-3 border-l-2 border-[#bbe1ac]">
+                            {contact.note}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </details>
 
@@ -1686,12 +1949,9 @@ export default function LeadsPage() {
                 <FieldRow label="Currency">
                   <Select
                     value={txCurrency}
-                    onChange={(v) => setTxCurrency(v || "USD")}
+                    onChange={(v) => setTxCurrency(v || "EUR")}
                     options={[
-                      { value: "USD", label: "USD" },
-                      { value: "COP", label: "COP" },
                       { value: "EUR", label: "EUR" },
-                      { value: "GBP", label: "GBP" },
                     ]}
                   />
                 </FieldRow>
@@ -1783,7 +2043,12 @@ export default function LeadsPage() {
             }
           >
             {showInvoiceFilters ? (
-              <FilterBuilder groups={invoiceFilterGroups} filters={invoiceFilters} setFilters={setInvoiceFilters} />
+              <FilterBuilder 
+                groups={invoiceFilterGroups} 
+                filters={invoiceFilters} 
+                setFilters={setInvoiceFilters}
+                allData={invoiceNotifications.map(x => x.entity)}
+              />
             ) : null}
 
             {loadingCrm ? (
@@ -1838,7 +2103,12 @@ export default function LeadsPage() {
 
               <div className="mt-3">
                 {showAdsUnansweredFilters ? (
-                  <FilterBuilder groups={adsFieldGroups} filters={adsUnansweredFilters} setFilters={setAdsUnansweredFilters} />
+                  <FilterBuilder 
+                    groups={adsFieldGroups} 
+                    filters={adsUnansweredFilters} 
+                    setFilters={setAdsUnansweredFilters}
+                    allData={adsUnanswered}
+                  />
                 ) : null}
 
                 {loadingAds ? (
@@ -1887,7 +2157,12 @@ export default function LeadsPage() {
 
               <div className="mt-3">
                 {showAdsAnsweredFilters ? (
-                  <FilterBuilder groups={adsFieldGroups} filters={adsAnsweredFilters} setFilters={setAdsAnsweredFilters} />
+                  <FilterBuilder 
+                    groups={adsFieldGroups} 
+                    filters={adsAnsweredFilters} 
+                    setFilters={setAdsAnsweredFilters}
+                    allData={adsAnswered}
+                  />
                 ) : null}
 
                 {loadingAds ? (
@@ -1945,7 +2220,12 @@ export default function LeadsPage() {
             }
           >
             {showCrmLeadsFilters ? (
-              <FilterBuilder groups={crmFieldGroups} filters={crmLeadsFilters} setFilters={setCrmLeadsFilters} />
+              <FilterBuilder 
+                groups={crmFieldGroups} 
+                filters={crmLeadsFilters} 
+                setFilters={setCrmLeadsFilters}
+                allData={crmLeads}
+              />
             ) : null}
 
             {loadingCrm ? (
@@ -1994,7 +2274,12 @@ export default function LeadsPage() {
 
               <div className="mt-3">
                 {showCrmDsClientFilters ? (
-                  <FilterBuilder groups={crmFieldGroups} filters={crmDsClientFilters} setFilters={setCrmDsClientFilters} />
+                  <FilterBuilder 
+                    groups={crmFieldGroups} 
+                    filters={crmDsClientFilters} 
+                    setFilters={setCrmDsClientFilters}
+                    allData={crmDsClients}
+                  />
                 ) : null}
 
                 {loadingCrm ? (
@@ -2041,7 +2326,12 @@ export default function LeadsPage() {
 
               <div className="mt-3">
                 {showCrmCreativeClientFilters ? (
-                  <FilterBuilder groups={crmFieldGroups} filters={crmCreativeClientFilters} setFilters={setCrmCreativeClientFilters} />
+                  <FilterBuilder 
+                    groups={crmFieldGroups} 
+                    filters={crmCreativeClientFilters} 
+                    setFilters={setCrmCreativeClientFilters}
+                    allData={crmCreativeClients}
+                  />
                 ) : null}
 
                 {loadingCrm ? (
