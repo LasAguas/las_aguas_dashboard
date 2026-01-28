@@ -620,7 +620,7 @@ async function runInstagramManualCollect() {
 
   // Modal state
   const [selectedPost, setSelectedPost] = useState(null);
-  const [recentPostsDays, setRecentPostsDays] = useState(7);
+  const [recentPostsDays, setRecentPostsDays] = useState(14);
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [igLinkModalPost, setIgLinkModalPost] = useState(null);

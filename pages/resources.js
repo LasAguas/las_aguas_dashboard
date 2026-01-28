@@ -13,7 +13,7 @@ const LAS_AGUAS = {
     website: "https://lasaguasproductions.com",
   },
   resources: {
-    marketingGuide: "#", // TODO: Add your full marketing guide URL when ready
+    marketingGuide: "https://freight.cargo.site/m/O2768027204059247985388153081308/Full-Branding-Guide-for-Indie-Artists---Las-Aguas.pdf", // TODO: Add your full marketing guide URL when ready
     resource1: "https://freight.cargo.site/m/R2619736070357291154163775180252/Las-Aguas-20-Sales-Offers-for-Each-Holiday-Sale.pdf",
     resource2: "https://docs.google.com/presentation/d/1WfDM20CUogbUYXYYbZD6bxo90kcuey7oPEqlx8j0up8/edit?usp=sharing",
   },
@@ -213,12 +213,10 @@ export default function ResourcesPage() {
           >
             <div className="bg-[#eef8ea] rounded-2xl p-4 border border-black/10">
               <div className="text-sm font-semibold text-[#33286a] mb-2">
-                The Independent Artist Marketing Guide
+                The Independent Artist Branding Guide
               </div>
               <div className="text-xs text-[#33286a]/80 mb-3 leading-relaxed">
-                Comprehensive guide covering social media strategy, release planning, 
-                playlist pitching, email marketing, monetization, and building a sustainable 
-                music career.
+                Comprehensive guide to defining your artist brand and getting consistnent, using examples that we have made for clients at Las Aguas.
               </div>
               
               {/* What's Included List */}
@@ -233,10 +231,40 @@ export default function ResourcesPage() {
                 href={LAS_AGUAS.resources.marketingGuide}
                 className="inline-block px-4 py-2 bg-[#33286a] text-white text-xs font-semibold rounded-lg hover:bg-[#33286a]/90 transition"
               >
-                Coming Soon
+                Get it Now
               </a>
             </div>
           </SectionDetails>
+          {/* UPDATE WHEN WE KNOW THE NEXT ONE 
+          <SectionDetails
+            title="Complete Marketing Guide"
+            subtitle="Full guide for independent artists"
+            defaultOpen={true}
+          >
+            <div className="bg-[#eef8ea] rounded-2xl p-4 border border-black/10">
+              <div className="text-sm font-semibold text-[#33286a] mb-2">
+                The Independent Artist Branding Guide
+              </div>
+              <div className="text-xs text-[#33286a]/80 mb-3 leading-relaxed">
+                Comprehensive guide to defining your artist brand and getting consistnent, using examples that we have made for clients at Las Aguas.
+              </div>
+              
+              {/* What's Included List 
+              <div className="text-xs text-[#33286a]/70 mb-3 space-y-1">
+                <div>✓ How to define your brand</div>
+                <div>✓ What to avoid with websites</div>
+                <div>✓ Platform recommendations</div>
+                <div>✓ Schedules to get consistent</div>
+              </div>
+
+              <a
+                href={LAS_AGUAS.resources.marketingGuide}
+                className="inline-block px-4 py-2 bg-[#33286a] text-white text-xs font-semibold rounded-lg hover:bg-[#33286a]/90 transition"
+              >
+                Get Notified
+              </a>
+            </div>
+          </SectionDetails> */}
 
           {/* Free resources (templates & downloads) */}
           <SectionDetails
@@ -246,7 +274,7 @@ export default function ResourcesPage() {
           >
             <LinkCard
               href={LAS_AGUAS.resources.resource1}
-              label="Sales Offers PDF"
+              label="20 Sales Offers for Each Holiday"
               sublabel="20 sales offers to use for every major sales holiday"
               external={true}
             />
