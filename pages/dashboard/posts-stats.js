@@ -715,19 +715,65 @@ async function runInstagramManualCollect() {
       if (postErr) throw postErr;
   
       const postIds = (postRows || []).map((p) => p.id);
-  
-      // 2) Load TikTok snapshots for those posts
+
+      // 🐛 DEBUG: Check postIds array
+      console.log('🔍 postIds array length:', postIds.length);
+      console.log('🔍 Is 312 in postIds?', postIds.includes(312));
+      console.log('🔍 Is "312" (string) in postIds?', postIds.includes("312"));
+      console.log('🔍 Type of first post ID:', typeof postIds[0], postIds[0]);
+      const post312Data = postRows?.find(p => p.id === 312);
+      if (post312Data) {
+        console.log('🔍 Post 312 data:', {
+          id: post312Data.id,
+          type: typeof post312Data.id,
+          instagram_url: post312Data.instagram_url
+        });
+      }
+
+      // 2) Load TikTok snapshots for those posts (only last 90 days)
       let snapshotRows = [];
-      if (postIds.length > 0) {
-        const { data: snapRows, error: snapErr } = await supabase
-          .from("post_metrics_snapshots")
-          .select("*")
-          .in("post_id", postIds)
-          .eq("platform", "tiktok")
-          .order("snapshot_at", { ascending: true });
-  
-        if (snapErr) throw snapErr;
-        snapshotRows = snapRows || [];
+        if (postIds.length > 0) {
+          // Only fetch snapshots from the last 90 days to improve performance
+          const ninetyDaysAgo = new Date();
+          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+          
+          // Load snapshots with pagination to get ALL rows
+          let allSnapshots = [];
+          let from = 0;
+          const pageSize = 1000;
+          let hasMore = true;
+
+          console.log('🔍 Starting snapshot pagination for TikTok...');
+
+          while (hasMore) {
+            const { data: snapRows, error: snapErr } = await supabase
+              .from("post_metrics_snapshots")
+              .select("*")
+              .in("post_id", postIds)
+              .eq("platform", "tiktok")
+              .order("snapshot_at", { ascending: true })
+              .range(from, from + pageSize - 1);
+
+            if (snapErr) throw snapErr;
+
+            console.log(`🔍 TikTok page: ${from}-${from + pageSize}, got ${snapRows?.length || 0} rows`);
+
+            if (snapRows && snapRows.length > 0) {
+              allSnapshots = allSnapshots.concat(snapRows);
+              from += pageSize;
+              if (snapRows.length < pageSize) hasMore = false;
+            } else {
+              hasMore = false;
+            }
+
+            if (from > 100000) {
+              console.warn('⚠️ Hit safety limit');
+              hasMore = false;
+            }
+          }
+
+          snapshotRows = allSnapshots;
+          console.log('🔍 Total TikTok snapshots after pagination:', snapshotRows.length);
       }
   
       setTiktokPosts(postRows || []);
@@ -770,26 +816,85 @@ async function runInstagramManualCollect() {
             .not("instagram_url", "is", null);
       if (postErr) throw postErr;
 
+      // 🐛 DEBUG: Check if post 312 is included
+      console.log('🔍 Instagram posts loaded:', postRows?.length || 0);
+      const post312 = postRows?.find(p => p.id === 312);
+      console.log('🔍 Post 312 in Instagram posts?', post312 ? 'YES' : 'NO', post312);
+
       const postIds = (postRows || []).map((p) => p.id);
 
       // 2) Load Instagram snapshots for those posts
       let snapshotRows = [];
-      if (postIds.length > 0) {
-        const { data: snapRows, error: snapErr } = await supabase
-          .from("post_metrics_snapshots")
-          .select("*")
-          .in("post_id", postIds)
-          .eq("platform", "instagram")
-          .order("snapshot_at", { ascending: true });
+        if (postIds.length > 0) {
+          // Only fetch snapshots from the last 90 days
+          const ninetyDaysAgo = new Date();
+          ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+          
+          // Load snapshots with pagination to get ALL rows (not just 1000)
+          let allSnapshots = [];
+          let from = 0;
+          const pageSize = 1000;
+          let hasMore = true;
 
-        if (snapErr) throw snapErr;
-        snapshotRows = snapRows || [];
+          console.log('🔍 Starting snapshot pagination for Instagram...');
+
+          while (hasMore) {
+            const { data: snapRows, error: snapErr, count } = await supabase
+              .from("post_metrics_snapshots")
+              .select("*", { count: 'exact' })
+              .in("post_id", postIds)
+              .eq("platform", "instagram")
+              .order("snapshot_at", { ascending: true })
+              .range(from, from + pageSize - 1);
+
+            if (snapErr) throw snapErr;
+
+            console.log(`🔍 Loaded page: ${from}-${from + pageSize}, got ${snapRows?.length || 0} rows, total count: ${count}`);
+
+            if (snapRows && snapRows.length > 0) {
+              allSnapshots = allSnapshots.concat(snapRows);
+              from += pageSize;
+              
+              // Check if we got fewer than pageSize (means we're done)
+              if (snapRows.length < pageSize) {
+                hasMore = false;
+              }
+            } else {
+              hasMore = false;
+            }
+
+            // Safety: don't infinite loop if something goes wrong
+            if (from > 100000) {
+              console.warn('⚠️ Hit safety limit of 100k rows');
+              hasMore = false;
+            }
+          }
+
+          snapshotRows = allSnapshots;
+          console.log('🔍 Total Instagram snapshots after pagination:', snapshotRows.length);
+      }
+
+      // 🐛 DEBUG: Check snapshots for post 312
+      const snaps312 = snapshotRows.filter(s => s.post_id === 312);
+      console.log('🔍 Instagram snapshots for post 312:', snaps312.length, snaps312);
+      if (snaps312.length > 0) {
+        const latest = snaps312[snaps312.length - 1]; // Last one (most recent due to sort)
+        console.log('🔍 Latest Instagram snapshot for 312:', {
+          views: latest.views,
+          likes: latest.likes,
+          comments: latest.comments,
+          snapshot_at: latest.snapshot_at
+        });
       }
 
       setInstagramPosts(postRows || []);
       setInstagramSnapshots(snapshotRows);
       setInstagramTierTopLimit({});
       setInstagramTierShowWorst({});
+      
+      // 🐛 DEBUG: Log final state
+      console.log('🔍 Total Instagram snapshots loaded:', snapshotRows.length);
+      
     } catch (err) {
       console.error(err);
       setInstagramErrorMsg(err.message || "Failed to load Instagram data");
@@ -849,16 +954,49 @@ async function runInstagramManualCollect() {
         if (postErr) throw postErr;
 
         const postIds = (postRows || []).map((p) => p.id);
-        let snapshotRows = [];
-        if (postIds.length > 0) {
-          const { data: snapRows, error: snapErr } = await supabase
-            .from("post_metrics_snapshots")
-            .select("*")
-            .in("post_id", postIds)
-            .eq("platform", PLATFORM_YOUTUBE_SHORTS)
-            .order("snapshot_at", { ascending: true });
-          if (snapErr) throw snapErr;
-          snapshotRows = snapRows || [];
+          let snapshotRows = [];
+          if (postIds.length > 0) {
+            // Only fetch snapshots from the last 90 days to improve performance
+            const ninetyDaysAgo = new Date();
+            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+            
+            // Load snapshots with pagination to get ALL rows
+            let allSnapshots = [];
+            let from = 0;
+            const pageSize = 1000;
+            let hasMore = true;
+
+            console.log('🔍 Starting snapshot pagination for YouTube...');
+
+            while (hasMore) {
+              const { data: snapRows, error: snapErr } = await supabase
+                .from("post_metrics_snapshots")
+                .select("*")
+                .in("post_id", postIds)
+                .eq("platform", PLATFORM_YOUTUBE_SHORTS)
+                .order("snapshot_at", { ascending: true })
+                .range(from, from + pageSize - 1);
+
+              if (snapErr) throw snapErr;
+
+              console.log(`🔍 YouTube page: ${from}-${from + pageSize}, got ${snapRows?.length || 0} rows`);
+
+              if (snapRows && snapRows.length > 0) {
+                allSnapshots = allSnapshots.concat(snapRows);
+                from += pageSize;
+                if (snapRows.length < pageSize) hasMore = false;
+              } else {
+                hasMore = false;
+              }
+
+              if (from > 100000) {
+                console.warn('⚠️ Hit safety limit');
+                hasMore = false;
+              }
+            }
+
+            snapshotRows = allSnapshots;
+            console.log('🔍 Total YouTube snapshots after pagination:', snapshotRows.length);
         }
 
         setArtists(artistRows || []);
@@ -921,6 +1059,21 @@ async function runInstagramManualCollect() {
         map.set(s.post_id, s);
       }
     });
+
+    // DEBUG: Log info about the map
+    console.log('🔍 YouTube latest snapshots map built:', map.size, 'posts');
+    if (map.has(312)) {
+      const snap = map.get(312);
+      console.log('🔍 YouTube snap for 312:', {
+        views: snap.views,
+        likes: snap.likes,
+        comments: snap.comments,
+        snapshot_at: snap.snapshot_at
+      });
+    } else {
+      console.log('🔍 YouTube snap for 312: NOT FOUND in map');
+    }
+
     return map;
   }, [snapshots]);
 
@@ -942,6 +1095,21 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
       map.set(s.post_id, s);
     }
   });
+  
+  // DEBUG: Log info about the map
+  console.log('🔍 TikTok latest snapshots map built:', map.size, 'posts');
+  if (map.has(312)) {
+    const snap = map.get(312);
+    console.log('🔍 TikTok snap for 312:', {
+      views: snap.views,
+      likes: snap.likes,
+      comments: snap.comments,
+      snapshot_at: snap.snapshot_at
+    });
+  } else {
+    console.log('🔍 TikTok snap for 312: NOT FOUND in map');
+  }
+  
   return map;
 }, [tiktokSnapshots]);
 
@@ -974,6 +1142,21 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
           map.set(s.post_id, s);
         }
       });
+
+      //DEBUG: Log info about the map
+      console.log('🔍 Instagram latest snapshots map built:', map.size, 'posts');
+      if (map.has(312)) {
+        const snap = map.get(312);
+        console.log('🔍 Instagram snap for 312:', {
+          views: snap.views,
+          likes: snap.likes,
+          comments: snap.comments,
+          snapshot_at: snap.snapshot_at
+        });
+      } else {
+        console.log('🔍 Instagram snap for 312: NOT FOUND in map');
+      }
+
       return map;
     }, [instagramSnapshots]);
   
@@ -982,6 +1165,31 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
         instagramLatestSnapshotByPostId.has(p.id)
       );
     }, [instagramPosts, instagramLatestSnapshotByPostId]);
+
+    // 🐛 DEBUG: Check if post 312 makes it through the filters
+    useEffect(() => {
+      if (activeTab === 'instagram') {
+        console.log('━━━ INSTAGRAM TAB STATE CHECK ━━━');
+        console.log('🔍 instagramPosts count:', instagramPosts.length);
+        console.log('🔍 instagramSnapshots count:', instagramSnapshots.length);
+        console.log('🔍 instagramPostsWithData count:', instagramPostsWithData.length);
+        
+        const post312InPosts = instagramPosts.find(p => p.id === 312);
+        console.log('🔍 Post 312 in instagramPosts?', post312InPosts ? 'YES' : 'NO');
+        
+        const snap312 = instagramLatestSnapshotByPostId.get(312);
+        console.log('🔍 Latest snapshot for 312:', snap312 ? {
+          views: snap312.views,
+          likes: snap312.likes,
+          comments: snap312.comments
+        } : 'NONE');
+        
+        const post312HasData = instagramPostsWithData.find(p => p.id === 312);
+        console.log('🔍 Post 312 in instagramPostsWithData?', post312HasData ? 'YES' : 'NO');
+        
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      }
+    }, [activeTab, instagramPosts, instagramSnapshots, instagramPostsWithData, instagramLatestSnapshotByPostId]);
   
     const instagramPostsWithoutData = useMemo(() => {
       if (!instagramPosts || instagramPosts.length === 0) return [];
@@ -989,6 +1197,18 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
         (p) => !instagramLatestSnapshotByPostId.has(p.id)
       );
     }, [instagramPosts, instagramLatestSnapshotByPostId]);
+
+    // ADD THIS NEW MEMO FOR YOUTUBE:
+    const postsWithoutData = useMemo(() => {
+      if (!posts || posts.length === 0) return [];
+      return posts.filter((p) => !latestSnapshotByPostId.has(p.id));
+    }, [posts, latestSnapshotByPostId]);
+
+    // ADD THIS NEW MEMO FOR TIKTOK:
+    const tiktokPostsWithoutData = useMemo(() => {
+      if (!tiktokPosts || tiktokPosts.length === 0) return [];
+      return tiktokPosts.filter((p) => !tiktokLatestSnapshotByPostId.has(p.id));
+    }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
 
     const instagramArtistAverages = useMemo(() => {
       const byArtist = new Map();
@@ -1299,13 +1519,21 @@ const crossStandoutsByCategory = useMemo(() => {
 ]);
 
 const recentPosts = useMemo(() => {
+    console.log('━━━ BUILDING RECENT POSTS ━━━');
+    
     const allPostIds = new Set();
     (posts || []).forEach((p) => allPostIds.add(p.id));
     (tiktokPosts || []).forEach((p) => allPostIds.add(p.id));
     (instagramPosts || []).forEach((p) => allPostIds.add(p.id));
 
+    console.log('🔍 Total unique post IDs:', allPostIds.size);
+    console.log('🔍 YouTube posts:', posts?.length || 0);
+    console.log('🔍 TikTok posts:', tiktokPosts?.length || 0);
+    console.log('🔍 Instagram posts:', instagramPosts?.length || 0);
+
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - recentPostsDays);
+    console.log('🔍 Cutoff date:', cutoffDate.toISOString());
 
     const filtered = [];
     allPostIds.forEach((postId) => {
@@ -1318,12 +1546,21 @@ const recentPosts = useMemo(() => {
         const ttSnap = tiktokLatestSnapshotByPostId.get(postId);
         const igSnap = instagramLatestSnapshotByPostId.get(postId);
 
+        // DEBUG for specific post
+        if (postId === 312) {
+          console.log('🔍 Post 312 in recent posts calculation:');
+          console.log('  - Post date:', postDate.toISOString());
+          console.log('  - YT snapshot:', ytSnap ? `${ytSnap.views} views` : 'NONE');
+          console.log('  - TT snapshot:', ttSnap ? `${ttSnap.views} views` : 'NONE');
+          console.log('  - IG snapshot:', igSnap ? `${igSnap.views} views` : 'NONE');
+        }
+
         const totalViews =
           (Number(ytSnap?.views) || 0) +
           (Number(ttSnap?.views) || 0) +
           (Number(igSnap?.views) || 0);
 
-        if (totalViews > 0) {
+        if (totalViews > -1) {
           filtered.push({
             post,
             totalViews,
@@ -1334,6 +1571,10 @@ const recentPosts = useMemo(() => {
         }
       }
     });
+
+    console.log('🔍 Filtered recent posts:', filtered.length);
+    console.log('🔍 Sample recent post IDs:', filtered.slice(0, 5).map(p => p.post.id));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     filtered.sort((a, b) => b.totalViews - a.totalViews);
     return filtered;
@@ -1807,6 +2048,66 @@ const recentPosts = useMemo(() => {
             </details>
           );
         })}
+
+        {/* Posts with YouTube link but no stats yet */}
+        {postsWithoutData.length > 0 && (
+          <div className="mt-8 bg-white rounded-xl p-4 border border-dashed border-gray-300">
+            <h3 className="text-sm font-semibold mb-1">
+              Posts with YouTube link but no stats yet
+            </h3>
+            <p className="text-xs text-gray-600 mb-3">
+              These posts have a <code className="bg-gray-100 px-1 rounded">youtube_url</code>{" "}
+              saved but no YouTube metrics snapshots. This usually means the
+              collector hasn&apos;t found a matching video for the link yet, or
+              hasn&apos;t run since the link was updated.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {postsWithoutData.map((post) => {
+                const artist = artistById.get(post.artist_id);
+
+                return (
+                  <div
+                    key={post.id}
+                    className="w-full min-w-0 bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {post.post_name || "Untitled post"}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {artist?.name || "Unknown artist"} •{" "}
+                          {post.post_date
+                            ? new Date(post.post_date).toLocaleDateString()
+                            : "No date"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-gray-700">
+                      <div className="break-all">
+                        <span className="font-medium">Current link:</span>{" "}
+                        {post.youtube_url || "—"}
+                      </div>
+                      {post.youtube_url && (
+                        <a
+                          href={post.youtube_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-[11px] text-blue-600 underline"
+                        >
+                          Open link in new tab
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -2152,6 +2453,66 @@ const recentPosts = useMemo(() => {
             </details>
           );
         })}
+
+        {/* Posts with TikTok link but no stats yet */}
+        {tiktokPostsWithoutData.length > 0 && (
+          <div className="mt-8 bg-white rounded-xl p-4 border border-dashed border-gray-300">
+            <h3 className="text-sm font-semibold mb-1">
+              Posts with TikTok link but no stats yet
+            </h3>
+            <p className="text-xs text-gray-600 mb-3">
+              These posts have a <code className="bg-gray-100 px-1 rounded">tiktok_url</code>{" "}
+              saved but no TikTok metrics snapshots. This usually means the
+              collector hasn&apos;t found a matching video for the link yet, or
+              hasn&apos;t run since the link was updated.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {tiktokPostsWithoutData.map((post) => {
+                const artist = artistById.get(post.artist_id);
+
+                return (
+                  <div
+                    key={post.id}
+                    className="w-full min-w-0 bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="text-sm font-semibold">
+                          {post.post_name || "Untitled post"}
+                        </div>
+                        <div className="text-xs text-gray-600">
+                          {artist?.name || "Unknown artist"} •{" "}
+                          {post.post_date
+                            ? new Date(post.post_date).toLocaleDateString()
+                            : "No date"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-gray-700">
+                      <div className="break-all">
+                        <span className="font-medium">Current link:</span>{" "}
+                        {post.tiktok_url || "—"}
+                      </div>
+                      {post.tiktok_url && (
+                        <a
+                          href={post.tiktok_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-[11px] text-blue-600 underline"
+                        >
+                          Open link in new tab
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }
@@ -2840,8 +3201,29 @@ const recentPosts = useMemo(() => {
         <PostDetailsModal
           post={selectedPost}
           artist={artistById.get(selectedPost.artist_id)}
-          snapshots={snapshotsByPostId.get(selectedPost.id) || []}
-          artistAverages={artistAverages.get(selectedPost.artist_id) || null}
+          // Determine which snapshot data to use based on the post's platform
+          snapshots={(() => {
+            // Check which URL the post has to determine platform
+            if (selectedPost.instagram_url) {
+              return instagramSnapshotsByPostId.get(selectedPost.id) || [];
+            }
+            if (selectedPost.tiktok_url) {
+              return tiktokSnapshotsByPostId.get(selectedPost.id) || [];
+            }
+            // Default to YouTube
+            return snapshotsByPostId.get(selectedPost.id) || [];
+          })()}
+          // Use the appropriate artist averages for the platform
+          artistAverages={(() => {
+            if (selectedPost.instagram_url) {
+              return instagramArtistAverages.get(selectedPost.artist_id) || null;
+            }
+            if (selectedPost.tiktok_url) {
+              return tiktokArtistAverages.get(selectedPost.artist_id) || null;
+            }
+            // Default to YouTube
+            return artistAverages.get(selectedPost.artist_id) || null;
+          })()}
           variations={selectedPostVariations}
           loading={modalLoading}
           onClose={closeModal}
