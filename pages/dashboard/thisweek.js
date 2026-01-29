@@ -1617,10 +1617,18 @@ async function savePostName() {
               greenlight,
               audio_file_name,
               audio_start_seconds,
-              carousel_files
+              carousel_files,
+              feedback_comments!variation_id (
+                id,
+                resolved
+              )
             `)
             .in("post_id", postIds);
-          varData = vData || [];
+          // Add unresolved_feedback_count to each variation
+          varData = (vData || []).map(v => ({
+            ...v,
+            unresolved_feedback_count: (v.feedback_comments || []).filter(fc => !fc.resolved).length
+          }));
         }
         setPosts(postData || []);
         setVariations(varData);
@@ -1631,9 +1639,9 @@ async function savePostName() {
           const to = nextWeekDays[nextWeekDays.length - 1].ymd; // <- use last day (index 13 for 14 days)
           const { data: postData } = await supabase
             .from("posts").select("*").gte("post_date", from).lte("post_date", to).order("post_date", { ascending: true });
-          const postIds = (postData || []).map((p) => p.id);
+          const nextPostIds = (postData || []).map((p) => p.id);
           let varData = [];
-          if (postIds.length) {
+          if (nextPostIds.length) {
             const { data: vData } = await supabase
               .from("postvariations")
               .select(`
@@ -1649,10 +1657,18 @@ async function savePostName() {
                 greenlight,
                 audio_file_name,
                 audio_start_seconds,
-                carousel_files
+                carousel_files,
+                feedback_comments!variation_id (
+                  id,
+                  resolved
+                )
               `)
-              .in("post_id", postIds);
-            varData = vData || [];
+              .in("post_id", nextPostIds);
+            // Add unresolved_feedback_count to each variation
+            varData = (vData || []).map(v => ({
+              ...v,
+              unresolved_feedback_count: (v.feedback_comments || []).filter(fc => !fc.resolved).length
+            }));
           }
           setNextWeekPosts(postData || []);
           setNextWeekVariations(varData);
@@ -1707,12 +1723,20 @@ async function savePostName() {
               greenlight,
               audio_file_name,
               audio_start_seconds,
-              carousel_files
+              carousel_files,
+              feedback_comments!variation_id (
+                id,
+                resolved
+              )
             `)
             .in("post_id", postIds);
-          varData = vData;
+          // Add unresolved_feedback_count to each variation
+          varData = (vData || []).map(v => ({
+            ...v,
+            unresolved_feedback_count: (v.feedback_comments || []).filter(fc => !fc.resolved).length
+          }));
         }
-  
+
         setPosts(postData);
         setVariations(varData);
   
@@ -1754,12 +1778,20 @@ async function savePostName() {
                 greenlight,
                 audio_file_name,
                 audio_start_seconds,
-                carousel_files
+                carousel_files,
+                feedback_comments!variation_id (
+                  id,
+                  resolved
+                )
               `)
-              .in("post_id", postIds);
-            nextVarData = vData;
+              .in("post_id", nextPostIds);
+            // Add unresolved_feedback_count to each variation
+            nextVarData = (vData || []).map(v => ({
+              ...v,
+              unresolved_feedback_count: (v.feedback_comments || []).filter(fc => !fc.resolved).length
+            }));
           }
-  
+
           setNextWeekPosts(nextPostData);
           setNextWeekVariations(nextVarData);
         
@@ -2104,13 +2136,10 @@ async function updatePostDate(newDate) {
                           // 🔹 Variations for this post (used for bubbles)
                           const postVariations = variations.filter((v) => v.post_id === post.id);
 
-                          // 🔹 Count how many variations for this post have feedback
-                          const feedbackCount = postVariations.filter(
-                            (v) =>
-                              v.feedback &&
-                              v.feedback.trim() !== "" &&
-                              !v.feedback_resolved
-                          ).length;
+                          // 🔹 Count total unresolved comments for this post's variations
+                          const feedbackCount = postVariations.reduce(
+                            (sum, v) => sum + (v.unresolved_feedback_count || 0), 0
+                          );
 
                           // Count how many variations for this post have been greenlit
                           const greenlitCount = postVariations.filter((v) => v.greenlight === true || v.greenlight === 'true').length;
@@ -2158,7 +2187,7 @@ async function updatePostDate(newDate) {
                                         ].join(" ")}
                                         title={
                                           hasFeedback
-                                            ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                            ? `${feedbackCount} unresolved comment${feedbackCount === 1 ? "" : "s"}`
                                             : hasGreenlit
                                             ? "Has greenlit variation(s)"
                                             : "Not greenlit yet"
@@ -2248,13 +2277,10 @@ async function updatePostDate(newDate) {
                               // 🔹 ALL variations for this post (not filtered by date)
                               const postVariations = nextWeekVariations.filter((v) => v.post_id === post.id);
 
-                              // 🔹 Count unresolved feedback
-                              const feedbackCount = postVariations.filter(
-                                (v) =>
-                                  v.feedback &&
-                                  v.feedback.trim() !== "" &&
-                                  !v.feedback_resolved
-                              ).length;
+                              // 🔹 Count total unresolved comments for this post's variations
+                              const feedbackCount = postVariations.reduce(
+                                (sum, v) => sum + (v.unresolved_feedback_count || 0), 0
+                              );
 
                               // 🔹 Count greenlit variations
                               const greenlitCount = postVariations.filter(
@@ -2303,7 +2329,7 @@ async function updatePostDate(newDate) {
                                             ].join(" ")}
                                             title={
                                               hasFeedback
-                                                ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                                ? `${feedbackCount} unresolved comment${feedbackCount === 1 ? "" : "s"}`
                                                 : hasGreenlit
                                                 ? "Has greenlit variation(s)"
                                                 : "Not greenlit yet"
@@ -2396,13 +2422,10 @@ async function updatePostDate(newDate) {
                               // 🔹 ALL variations for this post (not filtered by date)
                               const postVariations = nextWeekVariations.filter((v) => v.post_id === post.id);
 
-                              // 🔹 Count unresolved feedback
-                              const feedbackCount = postVariations.filter(
-                                (v) =>
-                                  v.feedback &&
-                                  v.feedback.trim() !== "" &&
-                                  !v.feedback_resolved
-                              ).length;
+                              // 🔹 Count total unresolved comments for this post's variations
+                              const feedbackCount = postVariations.reduce(
+                                (sum, v) => sum + (v.unresolved_feedback_count || 0), 0
+                              );
 
                               // 🔹 Count greenlit variations
                               const greenlitCount = postVariations.filter(
@@ -2451,7 +2474,7 @@ async function updatePostDate(newDate) {
                                             ].join(" ")}
                                             title={
                                               hasFeedback
-                                                ? `${feedbackCount} variation${feedbackCount === 1 ? "" : "s"} with feedback`
+                                                ? `${feedbackCount} unresolved comment${feedbackCount === 1 ? "" : "s"}`
                                                 : hasGreenlit
                                                 ? "Has greenlit variation(s)"
                                                 : "Not greenlit yet"
