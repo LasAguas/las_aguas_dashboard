@@ -400,13 +400,13 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   const toggleGreenlight = async () => {
     if (!variation || savingGreenlight) return;
-    savingGreenlight(true);
+    setSavingGreenlight(true);
     const next = !localGreenlight;
     const { error } = await supabase
       .from("postvariations")
       .update({ greenlight: next })
       .eq("id", variation.id);
-    savingGreenlight(false);
+    setSavingGreenlight(false);
     if (error) {
       console.error(error);
       alert("Could not update greenlight.");
@@ -1012,6 +1012,19 @@ function SocialLinksModal({ post, onClose, onSaved }) {
       </div>
     </div>
   );
+}
+
+function makeStorageSafeName(name) {
+  return name
+    // remove accents/diacritics (é, ç, etc.)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // replace anything not letter/number/.-_ with a dash
+    .replace(/[^a-zA-Z0-9.\-_]+/g, "-")
+    // collapse multiple dashes
+    .replace(/-+/g, "-")
+    // trim leading/trailing dashes
+    .replace(/^-|-$/g, "");
 }
 
 //Upload Modal Function
@@ -2846,6 +2859,11 @@ async function updatePostDate(newDate) {
           variation={selectedVariation}
           onClose={() => setShowMediaPlayer(false)}
           onRefreshPost={refreshWeekData}
+          onReplaceRequested={(v) => {
+            setUploadMode('replace');
+            setReplaceVariation(v);
+            setShowUploadModal(true);
+          }}
         />
       )}
 
@@ -2854,8 +2872,13 @@ async function updatePostDate(newDate) {
           postId={postDetails.post.id}
           artistId={postDetails.post.artist_id}
           defaultDate={postDetails.post.post_date}
+          mode={uploadMode}
+          variation={replaceVariation}
           onClose={() => setShowUploadModal(false)}
-          onSave={() => setShowUploadModal(false)}
+          onSave={() => {
+            setShowUploadModal(false);
+            openPostDetails(selectedPostId);
+          }}
         />
       )}
     </div>
