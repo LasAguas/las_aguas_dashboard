@@ -3546,9 +3546,10 @@ function PostDetailsModal({
 function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
   const [url, setUrl] = useState(post.instagram_url || "");
   const [saving, setSaving] = useState(false);
-  const [fetching, setFetching] = useState(false); // New state for fetch stats
+  const [fetching, setFetching] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [showManualEntry, setShowManualEntry] = useState(false);
 
   // Existing handleSave function
   async function handleSave(e) {
@@ -3706,15 +3707,24 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
 
           <div className="flex justify-between items-center gap-2 pt-2">
             {/* Left side: Fetch stats button */}
-            <button
-              type="button"
-              onClick={handleFetchStats}
-              disabled={fetching || !post.instagram_url}
-              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!post.instagram_url ? "Save a URL first" : "Fetch Instagram stats for this post"}
-            >
-              {fetching ? "Fetching stats…" : "🔄 Fetch stats for this post"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleFetchStats}
+                disabled={fetching || !post.instagram_url}
+                className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!post.instagram_url ? "Save a URL first" : "Fetch Instagram stats for this post"}
+              >
+                {fetching ? "Fetching stats…" : "🔄 Fetch stats"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowManualEntry(true)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-gray-600 text-white hover:bg-gray-700"
+              >
+                ✏️ Add stats manually
+              </button>
+            </div>
 
             {/* Right side: Cancel and Save buttons */}
             <div className="flex gap-2">
@@ -3733,6 +3743,213 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
                 {saving ? "Saving…" : "Save new link"}
               </button>
             </div>
+          </div>
+        </form>
+      </div>
+
+      {/* Manual Stats Entry Modal */}
+      {showManualEntry && (
+        <InstagramManualStatsModal
+          post={post}
+          artist={artist}
+          onClose={() => setShowManualEntry(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function InstagramManualStatsModal({ post, artist, onClose }) {
+  const [views, setViews] = useState("");
+  const [reach, setReach] = useState("");
+  const [likes, setLikes] = useState("");
+  const [comments, setComments] = useState("");
+  const [saves, setSaves] = useState("");
+  const [shares, setShares] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    // Validate at least one metric is provided
+    if (!views && !reach && !likes && !comments && !saves && !shares) {
+      setError("Please enter at least one metric.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const response = await fetch(
+        `/api/metrics/instagram-manual?secret=${process.env.NEXT_PUBLIC_CRON_SECRET}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            postId: post.id,
+            views: views || null,
+            reach: reach || null,
+            likes: likes || null,
+            comments: comments || null,
+            saves: saves || null,
+            shares: shares || null,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setError(data.error || "Failed to save stats");
+      } else {
+        setMessage("Stats saved successfully! The page will reload.");
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (err) {
+      console.error("Manual stats error:", err);
+      setError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Add Instagram Stats Manually</h2>
+            <div className="text-xs text-gray-600">
+              {artist?.name || "Unknown artist"} • {post.post_name || "Untitled post"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-gray-500 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-600 mb-4">
+          Enter the Instagram metrics from your Insights. Leave fields blank if unknown.
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Views (Plays)
+              </label>
+              <input
+                type="number"
+                value={views}
+                onChange={(e) => setViews(e.target.value)}
+                placeholder="e.g. 1500"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Reach
+              </label>
+              <input
+                type="number"
+                value={reach}
+                onChange={(e) => setReach(e.target.value)}
+                placeholder="e.g. 1200"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Likes
+              </label>
+              <input
+                type="number"
+                value={likes}
+                onChange={(e) => setLikes(e.target.value)}
+                placeholder="e.g. 150"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Comments
+              </label>
+              <input
+                type="number"
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+                placeholder="e.g. 12"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Saves
+              </label>
+              <input
+                type="number"
+                value={saves}
+                onChange={(e) => setSaves(e.target.value)}
+                placeholder="e.g. 25"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">
+                Shares
+              </label>
+              <input
+                type="number"
+                value={shares}
+                onChange={(e) => setShares(e.target.value)}
+                placeholder="e.g. 8"
+                className="w-full border rounded-lg px-2 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-md px-2 py-1">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="text-xs text-green-700 bg-green-50 rounded-md px-2 py-1">
+              {message}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Stats"}
+            </button>
           </div>
         </form>
       </div>
