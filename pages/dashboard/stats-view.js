@@ -209,6 +209,7 @@ export default function StatsView() {
         const { data, error } = await supabase
           .from("artists")
           .select("id,name")
+          .eq("active_client", true)
           .order("name");
         if (error) throw error;
         setArtists(data || []);

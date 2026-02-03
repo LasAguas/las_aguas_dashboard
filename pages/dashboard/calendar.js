@@ -2217,7 +2217,7 @@ useEffect(() => {
 // Load artists once
 useEffect(() => {
   const load = async () => {
-    const { data, error } = await supabase.from('artists').select('id,name').not('id', 'in', '(1, 2, 3)').order('name') // artist ids removed from artist dropdown
+    const { data, error } = await supabase.from('artists').select('id,name').not('id', 'in', '(1, 2, 3)').eq('active_client', true).order('name') // artist ids removed from artist dropdown, only active clients
     if (error) {
       console.error('Supabase error (artists):', error)
       setErrorMsg('Error loading artists. Check console.')

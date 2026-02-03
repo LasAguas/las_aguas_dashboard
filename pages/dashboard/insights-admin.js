@@ -530,6 +530,7 @@ export default function InsightsAdminPage() {
           .from("artists")
           .select("id, name")
           .not("id", "in", "(1, 2, 3)")
+          .eq("active_client", true)
           .order("name", { ascending: true });
 
         if (error) {

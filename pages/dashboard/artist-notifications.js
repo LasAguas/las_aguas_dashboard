@@ -63,6 +63,7 @@ export default function ArtistNotificationsAdmin() {
         const { data: artistsData, error: aErr } = await supabase
           .from("artists")
           .select("id, name")
+          .eq("active_client", true)
           .order("name", { ascending: true });
 
         if (aErr) throw aErr;
