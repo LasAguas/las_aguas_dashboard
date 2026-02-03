@@ -624,6 +624,8 @@ async function runInstagramManualCollect() {
   const [selectedPostVariations, setSelectedPostVariations] = useState([]);
   const [modalLoading, setModalLoading] = useState(false);
   const [igLinkModalPost, setIgLinkModalPost] = useState(null);
+  const [ytLinkModalPost, setYtLinkModalPost] = useState(null);
+  const [ttLinkModalPost, setTtLinkModalPost] = useState(null);
 
   const navItems = [
     { href: "/dashboard/calendar", label: "Calendar" },
@@ -703,13 +705,13 @@ async function runInstagramManualCollect() {
       const { data: postRows, error: postErr } = selectedArtistId
         ? await supabase
             .from("posts")
-            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes")
+            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes, post_type")
             .eq("status", "posted")
             .not("tiktok_url", "is", null)
             .eq("artist_id", Number(selectedArtistId))
         : await supabase
             .from("posts")
-            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes")
+            .select("id, post_name, post_date, status, artist_id, tiktok_url, notes, post_type")
             .eq("status", "posted")
             .not("tiktok_url", "is", null);
       if (postErr) throw postErr;
@@ -940,16 +942,16 @@ async function runInstagramManualCollect() {
         if (artistErr) throw artistErr;
 
         // load YT posts only for now (status posted & has youtube_url)
-        const { data: postRows, error: postErr } = selectedArtistId 
+        const { data: postRows, error: postErr } = selectedArtistId
         ? await supabase
             .from("posts")
-            .select("id, post_name, post_date, status, artist_id, youtube_url, notes")
+            .select("id, post_name, post_date, status, artist_id, youtube_url, notes, post_type")
             .eq("status", "posted")
             .not("youtube_url", "is", null)
             .eq("artist_id", Number(selectedArtistId))
         : await supabase
             .from("posts")
-            .select("id, post_name, post_date, status, artist_id, youtube_url, notes")
+            .select("id, post_name, post_date, status, artist_id, youtube_url, notes, post_type")
             .eq("status", "posted")
             .not("youtube_url", "is", null);
         if (postErr) throw postErr;
@@ -1202,13 +1204,17 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
     // ADD THIS NEW MEMO FOR YOUTUBE:
     const postsWithoutData = useMemo(() => {
       if (!posts || posts.length === 0) return [];
-      return posts.filter((p) => !latestSnapshotByPostId.has(p.id));
+      return posts.filter(
+        (p) => !latestSnapshotByPostId.has(p.id) && p.post_type !== "Carousel"
+      );
     }, [posts, latestSnapshotByPostId]);
 
     // ADD THIS NEW MEMO FOR TIKTOK:
     const tiktokPostsWithoutData = useMemo(() => {
       if (!tiktokPosts || tiktokPosts.length === 0) return [];
-      return tiktokPosts.filter((p) => !tiktokLatestSnapshotByPostId.has(p.id));
+      return tiktokPosts.filter(
+        (p) => !tiktokLatestSnapshotByPostId.has(p.id) && p.post_type !== "Carousel"
+      );
     }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
 
     const instagramArtistAverages = useMemo(() => {
@@ -1743,6 +1749,22 @@ const recentPosts = useMemo(() => {
     setIgLinkModalPost(null);
   }
 
+  function openYtLinkModal(post) {
+    setYtLinkModalPost(post);
+  }
+
+  function closeYtLinkModal() {
+    setYtLinkModalPost(null);
+  }
+
+  function openTtLinkModal(post) {
+    setTtLinkModalPost(post);
+  }
+
+  function closeTtLinkModal() {
+    setTtLinkModalPost(null);
+  }
+
 
   // ----- render helpers -----
 
@@ -2068,9 +2090,11 @@ const recentPosts = useMemo(() => {
                 const artist = artistById.get(post.artist_id);
 
                 return (
-                  <div
+                  <button
                     key={post.id}
-                    className="w-full min-w-0 bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 flex flex-col gap-2"
+                    type="button"
+                    onClick={() => openYtLinkModal(post)}
+                    className="w-full min-w-0 text-left bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 hover:border-gray-500 hover:shadow-sm transition flex flex-col gap-2"
                   >
                     <div className="flex justify-between items-start gap-2">
                       <div>
@@ -2091,18 +2115,11 @@ const recentPosts = useMemo(() => {
                         <span className="font-medium">Current link:</span>{" "}
                         {post.youtube_url || "—"}
                       </div>
-                      {post.youtube_url && (
-                        <a
-                          href={post.youtube_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-[11px] text-blue-600 underline"
-                        >
-                          Open link in new tab
-                        </a>
-                      )}
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Click to review the link, see possible issues, and fetch stats.
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -2473,9 +2490,11 @@ const recentPosts = useMemo(() => {
                 const artist = artistById.get(post.artist_id);
 
                 return (
-                  <div
+                  <button
                     key={post.id}
-                    className="w-full min-w-0 bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 flex flex-col gap-2"
+                    type="button"
+                    onClick={() => openTtLinkModal(post)}
+                    className="w-full min-w-0 text-left bg-[#eef8ea] rounded-lg p-3 border border-dashed border-gray-300 hover:border-gray-500 hover:shadow-sm transition flex flex-col gap-2"
                   >
                     <div className="flex justify-between items-start gap-2">
                       <div>
@@ -2496,18 +2515,11 @@ const recentPosts = useMemo(() => {
                         <span className="font-medium">Current link:</span>{" "}
                         {post.tiktok_url || "—"}
                       </div>
-                      {post.tiktok_url && (
-                        <a
-                          href={post.tiktok_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-block text-[11px] text-blue-600 underline"
-                        >
-                          Open link in new tab
-                        </a>
-                      )}
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Click to review the link, see possible issues, and fetch stats.
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -3246,10 +3258,42 @@ const recentPosts = useMemo(() => {
           }}
         />
       )}
+
+      {/* YT LINK FIX MODAL */}
+      {ytLinkModalPost && (
+        <YouTubeLinkFixModal
+          post={ytLinkModalPost}
+          artist={artistById.get(ytLinkModalPost.artist_id)}
+          onClose={closeYtLinkModal}
+          onUpdatedUrl={(newUrl) => {
+            setPosts((prev) =>
+              (prev || []).map((p) =>
+                p.id === ytLinkModalPost.id ? { ...p, youtube_url: newUrl } : p
+              )
+            );
+          }}
+        />
+      )}
+
+      {/* TT LINK FIX MODAL */}
+      {ttLinkModalPost && (
+        <TikTokLinkFixModal
+          post={ttLinkModalPost}
+          artist={artistById.get(ttLinkModalPost.artist_id)}
+          onClose={closeTtLinkModal}
+          onUpdatedUrl={(newUrl) => {
+            setTiktokPosts((prev) =>
+              (prev || []).map((p) =>
+                p.id === ttLinkModalPost.id ? { ...p, tiktok_url: newUrl } : p
+              )
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
- 
+
 
 // ----- Post Details Modal -----
 
@@ -3673,6 +3717,383 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
             </button>
 
             {/* Right side: Cancel and Save buttons */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save new link"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function YouTubeLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
+  const [url, setUrl] = useState(post.youtube_url || "");
+  const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("Please enter a valid YouTube URL.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const { error: supaErr } = await supabase
+        .from("posts")
+        .update({ youtube_url: trimmed })
+        .eq("id", post.id);
+
+      if (supaErr) {
+        setError(supaErr.message || "Failed to update YouTube URL.");
+      } else {
+        setMessage("Saved. You can now fetch stats for this post.");
+        if (onUpdatedUrl) onUpdatedUrl(trimmed);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to update YouTube URL.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleFetchStats() {
+    setError("");
+    setMessage("");
+
+    if (!post.youtube_url && !url.trim()) {
+      setError("Please save a YouTube URL first before fetching stats.");
+      return;
+    }
+
+    try {
+      setFetching(true);
+
+      const response = await fetch(
+        `/api/metrics/youtube-single?postId=${post.id}&secret=${process.env.NEXT_PUBLIC_CRON_SECRET}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setError(data.error || "Failed to fetch YouTube stats");
+        if (data.details) {
+          console.error("API error details:", data.details);
+        }
+        if (data.hint) {
+          setError(`${data.error}. ${data.hint}`);
+        }
+      } else {
+        setMessage(
+          `Success! Fetched ${data.metrics?.views || 0} views, ${data.metrics?.likes || 0} likes. The page will reload to show updated metrics.`
+        );
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Fetch stats error:", err);
+      setError("Network error. Please check console for details.");
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Fix YouTube link</h2>
+            <div className="text-xs text-gray-600">
+              {artist?.name || "Unknown artist"} •{" "}
+              {post.post_name || "Untitled post"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-gray-500 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="text-xs text-gray-700 mb-3 space-y-1">
+          <p>No YouTube metrics snapshots exist yet for this post.</p>
+          <p>Common reasons:</p>
+          <ul className="list-disc pl-4">
+            <li>The collector hasn&apos;t run since this post was created.</li>
+            <li>
+              The{" "}
+              <code className="bg-gray-100 px-1 rounded">youtube_url</code>{" "}
+              doesn&apos;t match a valid YouTube video.
+            </li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              YouTube URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full border rounded-lg px-2 py-1.5 text-sm"
+            />
+            {post.youtube_url && (
+              <a
+                href={post.youtube_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-[11px] text-blue-600 underline"
+              >
+                Open current link in new tab
+              </a>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-md px-2 py-1">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="text-xs text-green-700 bg-green-50 rounded-md px-2 py-1">
+              {message}
+            </div>
+          )}
+
+          <div className="flex justify-between items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleFetchStats}
+              disabled={fetching || !post.youtube_url}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!post.youtube_url ? "Save a URL first" : "Fetch YouTube stats for this post"}
+            >
+              {fetching ? "Fetching stats…" : "Fetch stats for this post"}
+            </button>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save new link"}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TikTokLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
+  const [url, setUrl] = useState(post.tiktok_url || "");
+  const [saving, setSaving] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setError("Please enter a valid TikTok URL.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const { error: supaErr } = await supabase
+        .from("posts")
+        .update({ tiktok_url: trimmed })
+        .eq("id", post.id);
+
+      if (supaErr) {
+        setError(supaErr.message || "Failed to update TikTok URL.");
+      } else {
+        setMessage("Saved. You can now fetch stats for this post.");
+        if (onUpdatedUrl) onUpdatedUrl(trimmed);
+      }
+    } catch (err) {
+      setError(err.message || "Failed to update TikTok URL.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleFetchStats() {
+    setError("");
+    setMessage("");
+
+    if (!post.tiktok_url && !url.trim()) {
+      setError("Please save a TikTok URL first before fetching stats.");
+      return;
+    }
+
+    try {
+      setFetching(true);
+
+      const response = await fetch(
+        `/api/metrics/tiktok-single?postId=${post.id}&secret=${process.env.NEXT_PUBLIC_CRON_SECRET}`
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setError(data.error || "Failed to fetch TikTok stats");
+        if (data.details) {
+          console.error("API error details:", data.details);
+        }
+        if (data.hint) {
+          setError(`${data.error}. ${data.hint}`);
+        }
+      } else {
+        setMessage(
+          `Success! Fetched ${data.metrics?.views || 0} views, ${data.metrics?.likes || 0} likes. The page will reload to show updated metrics.`
+        );
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch (err) {
+      console.error("Fetch stats error:", err);
+      setError("Network error. Please check console for details.");
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-lg font-semibold mb-1">Fix TikTok link</h2>
+            <div className="text-xs text-gray-600">
+              {artist?.name || "Unknown artist"} •{" "}
+              {post.post_name || "Untitled post"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs text-gray-500 hover:text-gray-800"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="text-xs text-gray-700 mb-3 space-y-1">
+          <p>No TikTok metrics snapshots exist yet for this post.</p>
+          <p>Common reasons:</p>
+          <ul className="list-disc pl-4">
+            <li>The collector hasn&apos;t run since this post was created.</li>
+            <li>
+              The{" "}
+              <code className="bg-gray-100 px-1 rounded">tiktok_url</code>{" "}
+              doesn&apos;t match a valid TikTok video.
+            </li>
+            <li>The artist hasn&apos;t connected their TikTok account yet.</li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              TikTok URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full border rounded-lg px-2 py-1.5 text-sm"
+            />
+            {post.tiktok_url && (
+              <a
+                href={post.tiktok_url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-block text-[11px] text-blue-600 underline"
+              >
+                Open current link in new tab
+              </a>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-xs text-red-600 bg-red-50 rounded-md px-2 py-1">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="text-xs text-green-700 bg-green-50 rounded-md px-2 py-1">
+              {message}
+            </div>
+          )}
+
+          <div className="flex justify-between items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleFetchStats}
+              disabled={fetching || !post.tiktok_url}
+              className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!post.tiktok_url ? "Save a URL first" : "Fetch TikTok stats for this post"}
+            >
+              {fetching ? "Fetching stats…" : "Fetch stats for this post"}
+            </button>
+
             <div className="flex gap-2">
               <button
                 type="button"
