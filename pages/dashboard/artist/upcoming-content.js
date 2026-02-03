@@ -584,12 +584,8 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
               type="button"
               onClick={toggleGreenlight}
               disabled={savingGreenlight}
-              className={[
-                "mt-4 w-full py-2 rounded transition-colors disabled:opacity-60",
-                localGreenlight
-                  ? "bg-green-600 hover:bg-green-700 text-white"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-900",
-              ].join(" ")}
+              className="mt-4 w-full rounded-full px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-60"
+              style={{ backgroundColor: localGreenlight ? "#86d472" : "#bce1ac", color: "#33296b" }}
             >
               {savingGreenlight
                 ? "Saving…"

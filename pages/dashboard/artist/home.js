@@ -579,34 +579,31 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
                   className="w-full border rounded p-2 text-sm min-h-[80px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={submittingComment}
                 />
-                <button
-                  onClick={handleSubmitComment}
-                  disabled={submittingComment || !newCommentText.trim()}
-                  className="mt-2 w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                >
-                  {submittingComment ? 'Posting...' : 'Post Comment'}
-                </button>
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={handleSubmitComment}
+                    disabled={submittingComment || !newCommentText.trim()}
+                    className="flex-1 rounded-full px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                    style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                  >
+                    {submittingComment ? 'Posting...' : 'Write feedback'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleGreenlight}
+                    disabled={savingGreenlight}
+                    className="flex-1 rounded-full px-3 py-2 text-xs font-semibold disabled:opacity-60"
+                    style={{ backgroundColor: localGreenlight ? "#86d472" : "#bce1ac", color: "#33296b" }}
+                  >
+                    {savingGreenlight
+                      ? "Saving…"
+                      : localGreenlight
+                        ? "Greenlit ✅"
+                        : "Greenlight"}
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Greenlight button */}
-            <button
-              type="button"
-              onClick={toggleGreenlight}
-              disabled={savingGreenlight}
-              className={[
-                "mt-4 w-full py-2 rounded transition-colors disabled:opacity-60",
-                localGreenlight
-                  ? "bg-green-600 hover:bg-green-700 text-white"
-                  : "bg-gray-200 hover:bg-gray-300 text-gray-900",
-              ].join(" ")}
-            >
-              {savingGreenlight
-                ? "Saving…"
-                : localGreenlight
-                  ? "Greenlit ✅"
-                  : "Greenlight"}
-            </button>
           </div>
         </div>
 
