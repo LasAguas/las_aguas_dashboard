@@ -1586,6 +1586,7 @@ export default function LeadsPage() {
     const [followupEveryDays, setFollowupEveryDays] = useState(
       entity.followup_every_days == null ? "" : String(entity.followup_every_days)
     );
+    const [followupPaused, setFollowupPaused] = useState(entity.followup_paused || false);
     const [notes, setNotes] = useState(entity.notes || "");
 
     // State for loading contact history
@@ -1656,6 +1657,7 @@ export default function LeadsPage() {
                   language: language.trim() || null,
                   source: source || null,
                   followup_every_days: followupEveryDays === "" ? null : Number(followupEveryDays),
+                  followup_paused: followupPaused || false,
                   notes: notes || null,
                 });
                 setOpenCrmEntity(null);
@@ -1748,6 +1750,20 @@ export default function LeadsPage() {
 
               <FieldRow label="Follow up every (days)">
                 <TextInput value={followupEveryDays} onChange={setFollowupEveryDays} placeholder="e.g. 7" />
+              </FieldRow>
+
+              <FieldRow label="Follow-up Paused">
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={followupPaused}
+                    onChange={(e) => setFollowupPaused(e.target.checked)}
+                    className="w-4 h-4 text-[#bbe1ac] rounded focus:ring-2 focus:ring-[#bbe1ac]"
+                  />
+                  <span className="text-sm text-[#33286a]">
+                    Paused
+                  </span>
+                </div>
               </FieldRow>
 
               <FieldRow label="Last contacted (computed)">
