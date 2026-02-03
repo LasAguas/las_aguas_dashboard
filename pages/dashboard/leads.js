@@ -1581,6 +1581,7 @@ export default function LeadsPage() {
     const [phone, setPhone] = useState(entity.phone || "");
     const [pipelineStatus, setPipelineStatus] = useState(entity.pipeline_status || null);
     const [service, setService] = useState(entity.service || "");
+    const [language, setLanguage] = useState(entity.language || "");
     const [source, setSource] = useState(entity.source || null);
     const [followupEveryDays, setFollowupEveryDays] = useState(
       entity.followup_every_days == null ? "" : String(entity.followup_every_days)
@@ -1652,6 +1653,7 @@ export default function LeadsPage() {
                   phone: phone.trim() || null,
                   pipeline_status: pipelineStatus || null,
                   service: service || null,
+                  language: language.trim() || null,
                   source: source || null,
                   followup_every_days: followupEveryDays === "" ? null : Number(followupEveryDays),
                   notes: notes || null,
@@ -1734,6 +1736,10 @@ export default function LeadsPage() {
                     ...serviceOptions.map((s) => ({ value: s, label: s })),
                   ]}
                 />
+              </FieldRow>
+
+              <FieldRow label="Language">
+                <TextInput value={language} onChange={setLanguage} placeholder="EN, ES, DE, EN/ES…" />
               </FieldRow>
 
               <FieldRow label="Source">
