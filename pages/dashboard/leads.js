@@ -655,6 +655,17 @@ export default function LeadsPage() {
     [crmEntities]
   );
 
+  // Extract unique services from all CRM entities for dropdown
+  const serviceOptions = useMemo(() => {
+    const services = new Set();
+    (crmEntities || []).forEach((e) => {
+      if (e?.service && String(e.service).trim()) {
+        services.add(String(e.service).trim());
+      }
+    });
+    return Array.from(services).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [crmEntities]);
+
   // Split clients:
   // - Active DS clients: DS service OR has invoice plan; but if DS and plan exists && status != active => hide
   // - Creative Services clients: everyone else
@@ -1414,10 +1425,13 @@ export default function LeadsPage() {
 
               {/* Service */}
               <FieldRow label="Service">
-                <TextInput
+                <Select
                   value={service}
                   onChange={setService}
-                  placeholder="Digital Strategy, Mix/Master, Video..."
+                  options={[
+                    { value: "", label: "— Select —" },
+                    ...serviceOptions.map((s) => ({ value: s, label: s })),
+                  ]}
                 />
               </FieldRow>
 
@@ -1563,8 +1577,10 @@ export default function LeadsPage() {
   function CrmEntityModal({ entity }) {
     if (!entity) return null;
 
+    const [email, setEmail] = useState(entity.email || "");
+    const [phone, setPhone] = useState(entity.phone || "");
     const [pipelineStatus, setPipelineStatus] = useState(entity.pipeline_status || null);
-    const [service, setService] = useState(entity.service || null);
+    const [service, setService] = useState(entity.service || "");
     const [source, setSource] = useState(entity.source || null);
     const [followupEveryDays, setFollowupEveryDays] = useState(
       entity.followup_every_days == null ? "" : String(entity.followup_every_days)
@@ -1632,6 +1648,8 @@ export default function LeadsPage() {
               type="button"
               onClick={async () => {
                 await updateCrmEntity(entity.id, {
+                  email: email.trim() || null,
+                  phone: phone.trim() || null,
                   pipeline_status: pipelineStatus || null,
                   service: service || null,
                   source: source || null,
@@ -1662,36 +1680,22 @@ export default function LeadsPage() {
               </div>
             </FieldRow>
 
-            {/* Email - Display if available */}
+            {/* Email - Editable */}
             <FieldRow label="Email">
-              <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
-                {entity.email ? (
-                  <a
-                    href={`mailto:${entity.email}`}
-                    className="text-blue-600 hover:text-blue-800 hover:underline"
-                  >
-                    {entity.email}
-                  </a>
-                ) : (
-                  <span className="text-[#33286a]/50">—</span>
-                )}
-              </div>
+              <TextInput
+                value={email}
+                onChange={setEmail}
+                placeholder="email@example.com"
+              />
             </FieldRow>
 
-            {/* Phone - Display if available */}
+            {/* Phone - Editable */}
             <FieldRow label="Phone">
-              <div className="rounded-xl px-3 py-2 text-sm bg-[#eef8ea] border border-black/10">
-                {entity.phone ? (
-                  <a
-                    href={`tel:${entity.phone}`}
-                    className="text-blue-600 hover:text-blue-800 hover:underline"
-                  >
-                    {entity.phone}
-                  </a>
-                ) : (
-                  <span className="text-[#33286a]/50">—</span>
-                )}
-              </div>
+              <TextInput
+                value={phone}
+                onChange={setPhone}
+                placeholder="+1234567890"
+              />
             </FieldRow>
           </div>
 
@@ -1722,7 +1726,14 @@ export default function LeadsPage() {
               </FieldRow>
 
               <FieldRow label="Service">
-                <TextInput value={service || ""} onChange={(v) => setService(v)} placeholder="digital strategy, video, etc" />
+                <Select
+                  value={service || ""}
+                  onChange={(v) => setService(v)}
+                  options={[
+                    { value: "", label: "— Select —" },
+                    ...serviceOptions.map((s) => ({ value: s, label: s })),
+                  ]}
+                />
               </FieldRow>
 
               <FieldRow label="Source">
