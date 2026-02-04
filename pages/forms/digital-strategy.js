@@ -1,10 +1,14 @@
-// pages/digital-strategy-lead.js
+// pages/forms/digital-strategy.js
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
 import Link from "next/link";
 import Script from "next/script";
+
+// Budget threshold for meeting scheduler (€280 or above)
+const MEETING_BUDGET_THRESHOLD = 280;
 
 const isValidEmail = (value) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((value || "").trim());
@@ -44,6 +48,8 @@ const getTierLabel = (value) => {
 };
 
 export default function DigitalStrategyLeadPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [socialLinks, setSocialLinks] = useState([""]);
@@ -57,6 +63,7 @@ export default function DigitalStrategyLeadPage() {
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [successMessage, setSuccessMessage] = useState("");
+  const [showLowBudgetSuccess, setShowLowBudgetSuccess] = useState(false);
 
   const resetForm = () => {
     setEmail("");
@@ -184,15 +191,33 @@ export default function DigitalStrategyLeadPage() {
             notes: helpText.trim() || null,
         };
 
-        const { error } = await supabase.from("ad_leads_en").insert([payload]);
+        const { data: insertedLead, error } = await supabase
+          .from("ad_leads_en")
+          .insert([payload])
+          .select()
+          .single();
 
       if (error) {
         console.error("Error inserting digital strategy lead:", error);
         setFormError("Something went wrong saving your details. Please try again.");
       } else {
-        setSuccessMessage("Thanks! We’ve received your info and will be in touch.");
-        resetForm();
-        setFieldErrors({});
+        // Budget-based routing
+        if (budget >= MEETING_BUDGET_THRESHOLD) {
+          // High budget: redirect to meeting scheduler
+          const queryParams = new URLSearchParams({
+            leadId: insertedLead?.id || "",
+            email: encodeURIComponent(email.trim()),
+            phone: encodeURIComponent(phone.trim() || ""),
+            budget: budget.toString(),
+            notes: encodeURIComponent(helpText.trim() || ""),
+          });
+          router.push(`/forms/schedule-meeting?${queryParams.toString()}`);
+        } else {
+          // Low budget: show success message with resources link
+          setShowLowBudgetSuccess(true);
+          resetForm();
+          setFieldErrors({});
+        }
       }
     } catch (err) {
       console.error("Unexpected error inserting digital strategy lead:", err);
@@ -203,6 +228,72 @@ export default function DigitalStrategyLeadPage() {
   };
 
   const tierLabel = getTierLabel(budget);
+
+  // Low budget success view
+  if (showLowBudgetSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#a89ee4] p-4">
+        <Script id="meta-pixel" strategy="afterInteractive">
+          {`
+            !function(f,b,e,v,n,t,s)
+            {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+            n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+            if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+            n.queue=[];t=b.createElement(e);t.async=!0;
+            t.src=v;s=b.getElementsByTagName(e)[0];
+            s.parentNode.insertBefore(t,s)}(window, document,'script',
+            'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('init', '1596969374985643');
+            fbq('track', 'PageView');
+          `}
+        </Script>
+
+        <div className="w-full max-w-md bg-[#bbe1ac] p-8 rounded-2xl shadow-lg text-center">
+          <div className="w-16 h-16 bg-[#599b40] rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+
+          <h1 className="text-2xl font-bold text-[#33296b] mb-2">Thanks for reaching out!</h1>
+
+          <p className="text-sm text-[#33296b] mb-6">
+            We&apos;ve received your information and will be in touch soon.
+          </p>
+
+          <p className="text-sm text-[#33296b] mb-6">
+            In the meantime, check out our{" "}
+            <a
+              href="https://lasaguasproductions.com/resources"
+              className="font-semibold underline hover:opacity-80"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              resources for independent artists
+            </a>
+            .
+          </p>
+
+          <Link
+            href="https://lasaguasproductions.com"
+            className="inline-block bg-[#33296b] text-white py-2 px-6 rounded-lg hover:bg-[#4a3d8a] transition-colors"
+          >
+            Return to Website
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#a89ee4] p-4">
@@ -243,11 +334,6 @@ export default function DigitalStrategyLeadPage() {
         {formError && (
           <div className="mb-3 text-sm text-red-700 bg-red-100 border border-red-300 rounded px-3 py-2">
             {formError}
-          </div>
-        )}
-        {successMessage && (
-          <div className="mb-3 text-sm text-green-800 bg-green-100 border border-green-300 rounded px-3 py-2">
-            {successMessage}
           </div>
         )}
 

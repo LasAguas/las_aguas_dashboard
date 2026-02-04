@@ -340,6 +340,331 @@ function Section({ title, subtitle, right, defaultOpen = true, children }) {
   );
 }
 
+// -----------------------------------------------------------------------------
+// Meetings Calendar Section
+// -----------------------------------------------------------------------------
+function MeetingsCalendarSection() {
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
+
+  // Load slots
+  const loadSlots = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/meetings/manage-slots");
+      if (!res.ok) throw new Error("Failed to fetch slots");
+      const data = await res.json();
+      setSlots(data.slots || []);
+    } catch (err) {
+      console.error("Error loading slots:", err);
+      setError("Failed to load meeting slots.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSlots();
+  }, []);
+
+  // Generate weeks data
+  const generateWeeksData = () => {
+    const weeks = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let w = 0; w < 3; w++) {
+      const weekStart = new Date(today);
+      // Get Monday of the current week + offset
+      const dayOfWeek = weekStart.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      weekStart.setDate(weekStart.getDate() + mondayOffset + w * 7);
+
+      const days = [];
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(weekStart);
+        date.setDate(date.getDate() + d);
+        days.push({
+          date,
+          dateStr: date.toISOString().split("T")[0],
+          dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][d],
+          dayNum: date.getDate(),
+          month: date.toLocaleDateString("en-US", { month: "short" }),
+          isToday: date.toDateString() === today.toDateString(),
+          isPast: date < today,
+        });
+      }
+      weeks.push({ weekStart, days });
+    }
+    return weeks;
+  };
+
+  const weeks = generateWeeksData();
+  const currentWeek = weeks[weekOffset];
+
+  // Get slot hours based on day (Mon-Thu: 13-16, Fri-Sat: 14-15, Sun: none)
+  const getSlotHours = (dayIndex) => {
+    if (dayIndex < 4) return [13, 14, 15, 16]; // Mon-Thu
+    if (dayIndex < 6) return [14, 15]; // Fri-Sat
+    return []; // Sunday
+  };
+
+  // Find slot for a specific datetime
+  const findSlot = (dateStr, hour) => {
+    return slots.find((s) => {
+      const slotDate = new Date(s.meeting_datetime);
+      const slotDateStr = slotDate.toISOString().split("T")[0];
+      const slotHour = slotDate.getHours();
+      return slotDateStr === dateStr && slotHour === hour;
+    });
+  };
+
+  // Block a slot
+  const blockSlot = async (dateStr, hour) => {
+    const datetime = `${dateStr}T${String(hour).padStart(2, "0")}:00:00+01:00`;
+    try {
+      const res = await fetch("/api/meetings/manage-slots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datetime, reason: "Blocked by admin" }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to block slot");
+        return;
+      }
+      await loadSlots();
+    } catch (err) {
+      console.error("Error blocking slot:", err);
+      alert("Failed to block slot");
+    }
+  };
+
+  // Unblock/delete a slot
+  const unblockSlot = async (slotId) => {
+    if (!confirm("Remove this slot/meeting?")) return;
+    try {
+      const res = await fetch("/api/meetings/manage-slots", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: slotId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to remove slot");
+        return;
+      }
+      await loadSlots();
+    } catch (err) {
+      console.error("Error removing slot:", err);
+      alert("Failed to remove slot");
+    }
+  };
+
+  // Get all unique hours across all days for the grid
+  const allHours = [13, 14, 15, 16];
+
+  return (
+    <Section
+      title="Meeting Schedule"
+      subtitle="View upcoming meetings and block unavailable times. Click empty slots to block, click booked/blocked to remove."
+      defaultOpen={true}
+      right={
+        <div className="text-xs text-[#33286a]/80">
+          {loading ? "Loading…" : `${slots.filter((s) => s.status === "confirmed").length} meetings`}
+        </div>
+      }
+    >
+      {error && (
+        <div className="mb-3 text-sm text-red-700 bg-red-100 border border-red-300 rounded px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* Week navigation */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => Math.max(0, w - 1))}
+          disabled={weekOffset === 0}
+          className="px-3 py-1.5 rounded-full bg-white text-[#33286a] text-xs font-semibold shadow hover:opacity-90 disabled:opacity-40"
+        >
+          ← Prev
+        </button>
+        <div className="text-sm font-semibold text-[#33286a]">
+          Week of {currentWeek?.days[0]?.month} {currentWeek?.days[0]?.dayNum}
+        </div>
+        <button
+          type="button"
+          onClick={() => setWeekOffset((w) => Math.min(2, w + 1))}
+          disabled={weekOffset === 2}
+          className="px-3 py-1.5 rounded-full bg-white text-[#33286a] text-xs font-semibold shadow hover:opacity-90 disabled:opacity-40"
+        >
+          Next →
+        </button>
+      </div>
+
+      {/* Calendar grid */}
+      <div className="bg-white rounded-xl overflow-hidden border border-black/10">
+        {/* Header row - days */}
+        <div className="grid grid-cols-8 border-b border-black/10">
+          <div className="p-2 text-xs font-semibold text-[#33286a]/60 text-center">Time</div>
+          {currentWeek?.days.map((day, idx) => (
+            <div
+              key={day.dateStr}
+              className={`p-2 text-center border-l border-black/10 ${
+                day.isToday ? "bg-[#bbe1ac]" : ""
+              } ${idx === 6 ? "bg-gray-100" : ""}`}
+            >
+              <div className="text-xs font-semibold text-[#33286a]">{day.dayName}</div>
+              <div className="text-xs text-[#33286a]/70">{day.dayNum}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Time rows */}
+        {allHours.map((hour) => (
+          <div key={hour} className="grid grid-cols-8 border-b border-black/10 last:border-b-0">
+            <div className="p-2 text-xs font-medium text-[#33286a]/60 text-center">
+              {String(hour).padStart(2, "0")}:00
+            </div>
+            {currentWeek?.days.map((day, dayIdx) => {
+              const slotHours = getSlotHours(dayIdx);
+              const hasSlot = slotHours.includes(hour);
+              const slot = hasSlot ? findSlot(day.dateStr, hour) : null;
+              const isPast = day.isPast || (day.isToday && new Date().getHours() >= hour);
+
+              // No slot available for this day/time
+              if (!hasSlot) {
+                return (
+                  <div
+                    key={`${day.dateStr}-${hour}`}
+                    className="p-1 border-l border-black/10 bg-gray-50"
+                  />
+                );
+              }
+
+              // Past slot
+              if (isPast && !slot) {
+                return (
+                  <div
+                    key={`${day.dateStr}-${hour}`}
+                    className="p-1 border-l border-black/10 bg-gray-100"
+                  />
+                );
+              }
+
+              // Has a booking or block
+              if (slot) {
+                const isBlocked = slot.status === "blocked";
+                const isConfirmed = slot.status === "confirmed";
+                return (
+                  <button
+                    key={`${day.dateStr}-${hour}`}
+                    onClick={() => unblockSlot(slot.id)}
+                    className={`p-1 border-l border-black/10 text-xs text-center cursor-pointer hover:opacity-80 transition ${
+                      isBlocked
+                        ? "bg-gray-300 text-gray-600"
+                        : isConfirmed
+                        ? "bg-[#33286a] text-white"
+                        : "bg-yellow-200 text-yellow-800"
+                    }`}
+                    title={
+                      isBlocked
+                        ? "Blocked - click to unblock"
+                        : `Meeting with ${slot.attendee_email} - click to cancel`
+                    }
+                  >
+                    {isBlocked ? "✕" : "📅"}
+                  </button>
+                );
+              }
+
+              // Empty available slot
+              return (
+                <button
+                  key={`${day.dateStr}-${hour}`}
+                  onClick={() => blockSlot(day.dateStr, hour)}
+                  className="p-1 border-l border-black/10 bg-[#eef8ea] hover:bg-[#bbe1ac] transition cursor-pointer"
+                  title="Click to block this slot"
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mt-3 text-xs text-[#33286a]/80">
+        <div className="flex items-center gap-1">
+          <div className="w-4 h-4 rounded bg-[#eef8ea] border border-black/10" />
+          <span>Available</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-4 h-4 rounded bg-[#33286a]" />
+          <span>Booked</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-4 h-4 rounded bg-gray-300" />
+          <span>Blocked</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-4 h-4 rounded bg-gray-100 border border-black/10" />
+          <span>Past/Unavailable</span>
+        </div>
+      </div>
+
+      {/* Upcoming meetings list */}
+      {slots.filter((s) => s.status === "confirmed").length > 0 && (
+        <div className="mt-4 pt-4 border-t border-[#a1c596]">
+          <div className="text-sm font-semibold text-[#33286a] mb-2">Upcoming Meetings</div>
+          <div className="space-y-2">
+            {slots
+              .filter((s) => s.status === "confirmed" && new Date(s.meeting_datetime) > new Date())
+              .sort((a, b) => new Date(a.meeting_datetime) - new Date(b.meeting_datetime))
+              .slice(0, 5)
+              .map((slot) => {
+                const dt = new Date(slot.meeting_datetime);
+                return (
+                  <div
+                    key={slot.id}
+                    className="flex items-center justify-between bg-white rounded-lg p-2 border border-black/10"
+                  >
+                    <div>
+                      <div className="text-sm font-medium text-[#33286a]">
+                        {dt.toLocaleDateString("en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}{" "}
+                        at{" "}
+                        {dt.toLocaleTimeString("en-US", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </div>
+                      <div className="text-xs text-[#33286a]/70">{slot.attendee_email}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => unblockSlot(slot.id)}
+                      className="text-xs text-red-600 hover:text-red-800"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </Section>
+  );
+}
+
 function FilterIconButton({ active, onClick }) {
   return (
     <button
@@ -2395,6 +2720,9 @@ export default function LeadsPage() {
               </div>
             </details>
           </Section>
+
+          {/* 5) Meetings Calendar */}
+          <MeetingsCalendarSection />
         </div>
       </div>
 
