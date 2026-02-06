@@ -54,6 +54,14 @@ function formatShortDate(dateInput) {
   return `${day}/${month}`;
 }
 
+/** Format a YYYY-MM-DD week_start_date as "Week of Mon DD, YYYY" */
+function formatWeekLabel(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return "Week of " + d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function getMetricDelta(postValue, avgValue) {
   const post = Number(postValue);
   const avg = Number(avgValue);
@@ -466,8 +474,13 @@ export default function InsightsPage() {
 
   // Weekly Insights Modal state
   const [showWeeklyInsights, setShowWeeklyInsights] = useState(false);
+  const [selectedWeek, setSelectedWeek] = useState("");
   const [artistId, setArtistId] = useState("");
   const [profileId, setProfileId] = useState("");
+
+  // WH? history panel state
+  const [whHistory, setWhHistory] = useState([]);
+  const [whHistoryLimit, setWhHistoryLimit] = useState(3);
 
   useEffect(() => {
     const run = async () => {
@@ -573,6 +586,17 @@ export default function InsightsPage() {
         const map = {};
         (noteRows || []).forEach((r) => (map[r.section] = r.note));
         setNotesBySection(map);
+
+        // Fetch all weekly insights history for the WH? panel
+        const { data: whRows, error: whErr } = await supabase
+          .from("weekly_insights")
+          .select("id, week_start_date, slide_paths")
+          .eq("artist_id", artistId)
+          .order("week_start_date", { ascending: false });
+
+        if (!whErr && whRows) {
+          setWhHistory(whRows);
+        }
       } catch (e) {
         console.error(e);
         setErr(e?.message || "Failed to load.");
@@ -642,17 +666,50 @@ export default function InsightsPage() {
 
   return (
     <ArtistLayout title="Insights">
-      {/* WH? Button in top right */}
-      <div className="fixed top-4 right-4 z-50">
-        <button
-          onClick={() => setShowWeeklyInsights(true)}
-          className="px-4 py-2 bg-[#33296b] text-white rounded-xl font-semibold hover:opacity-90 transition shadow-lg"
-          title="View What Happened this week"
-        >
-          WH?
-        </button>
+      {/* WH? History Panel */}
+      <div className="artist-panel p-4 md:p-5 mb-4">
+        <h2 className="text-sm font-semibold mb-3">What Happened?</h2>
+
+        {whHistory.length === 0 ? (
+          <p className="text-sm opacity-70">No updates yet. Check back soon!</p>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {whHistory.slice(0, whHistoryLimit).map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedWeek(entry.week_start_date);
+                    setShowWeeklyInsights(true);
+                  }}
+                  className="w-full text-left px-4 py-3 rounded-xl bg-[#33296b] hover:opacity-90 transition flex items-center justify-between"
+                >
+                  <span className="text-sm font-medium text-white">
+                    {formatWeekLabel(entry.week_start_date)}
+                  </span>
+                  <span className="text-xs text-white/60">
+                    {entry.slide_paths?.length || 0} slide{entry.slide_paths?.length === 1 ? "" : "s"}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {whHistory.length > whHistoryLimit && (
+              <div className="flex justify-center pt-3">
+                <button
+                  type="button"
+                  onClick={() => setWhHistoryLimit((n) => n + 5)}
+                  className="px-4 py-2 rounded-full bg-white text-[#33286a] text-sm font-semibold shadow hover:opacity-90"
+                >
+                  Show more (+5)
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
-      
+
       {err && (
         <div className="mb-4 rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700">
           {err}
@@ -709,11 +766,12 @@ export default function InsightsPage() {
       
       {/* Weekly Insights Modal (manual access, 3 slides only) */}
       <WeeklyInsightsModal
+        key={selectedWeek}
         open={showWeeklyInsights}
         onClose={() => setShowWeeklyInsights(false)}
         artistId={artistId}
         profileId={profileId}
-        weekStartDate={getCurrentWeekMonday()}
+        weekStartDate={selectedWeek}
         isAutoPopup={false}
       />
     </ArtistLayout>
