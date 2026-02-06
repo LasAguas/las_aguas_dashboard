@@ -33,6 +33,7 @@ export default async function handler(req, res) {
           greenlight,
           audio_file_name,
           audio_start_seconds,
+          audio_snippet_duration,
           carousel_files
         )
       `)

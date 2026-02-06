@@ -322,7 +322,8 @@ async function toggleGreenlight() {
     if (!variation) return;
     // ✅ Removed old setFeedback - now using comment system
     setSnippetStart(Number(variation.audio_start_seconds) || 0);
-    
+    setSnippetDuration(Number(variation.audio_snippet_duration) || 10);
+
     // ✅ Sync caption editing state
     setEditableCaptionA(variation.caption_a || "");
     setEditableCaptionB(variation.caption_b || "");
@@ -521,25 +522,29 @@ if (!variation) return null;
     }
   };
 
-  const handleSaveSnippetStart = async () => {
+  const handleSaveSnippet = async () => {
     if (!variation?.id) return;
     setSavingSnippet(true);
 
     const { error } = await supabase
       .from("postvariations")
-      .update({ audio_start_seconds: Number(snippetStart) || 0 })
+      .update({
+        audio_start_seconds: Number(snippetStart) || 0,
+        audio_snippet_duration: Number(snippetDuration) || 10,
+      })
       .eq("id", variation.id);
 
     setSavingSnippet(false);
 
     if (error) {
-      console.error("Error saving snippet start:", error);
-      alert("Could not save snippet start.");
+      console.error("Error saving snippet:", error);
+      alert("Could not save snippet settings.");
       return;
     }
 
     // keep local variation in sync
     variation.audio_start_seconds = Number(snippetStart) || 0;
+    variation.audio_snippet_duration = Number(snippetDuration) || 10;
     if (typeof onRefreshPost === "function") onRefreshPost();
   };
 
@@ -849,11 +854,11 @@ if (!variation) return null;
 
                   <button
                     type="button"
-                    onClick={handleSaveSnippetStart}
+                    onClick={handleSaveSnippet}
                     disabled={savingSnippet}
                     className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-xs disabled:opacity-60"
                   >
-                    {savingSnippet ? "Saving…" : "Save snippet start"}
+                    {savingSnippet ? "Saving…" : "Save snippet"}
                   </button>
                 </div>
               </div>
