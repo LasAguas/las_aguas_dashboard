@@ -831,6 +831,7 @@ export default function LeadsPage() {
   const [adsUnansweredFilters, setAdsUnansweredFilters] = useState([]);
   const [adsAnsweredFilters, setAdsAnsweredFilters] = useState([]);
   const [crmLeadsFilters, setCrmLeadsFilters] = useState([]);
+  const [crmLeadsHidePaused, setCrmLeadsHidePaused] = useState(true);
   const [crmDsClientFilters, setCrmDsClientFilters] = useState([]);
   const [crmCreativeClientFilters, setCrmCreativeClientFilters] = useState([]);
 
@@ -1130,9 +1131,13 @@ export default function LeadsPage() {
   );
 
   const filteredCrmLeads = useMemo(() => {
-    const sorted = sortByNextContact(crmLeads);
+    let list = crmLeads;
+    if (crmLeadsHidePaused) {
+      list = list.filter((e) => !e.followup_paused);
+    }
+    const sorted = sortByNextContact(list);
     return applyFilters(sorted, crmLeadsFilters);
-  }, [crmLeads, crmLeadsFilters]);
+  }, [crmLeads, crmLeadsFilters, crmLeadsHidePaused]);
 
   const filteredCrmDsClients = useMemo(() => {
     const sorted = sortByNextContact(crmDsClients);
@@ -2561,7 +2566,7 @@ export default function LeadsPage() {
             defaultOpen={true}
             right={
               <div className="flex flex-col items-end gap-2">
-                <div className="text-xs text-[#33286a]/80">{loadingCrm ? "Loading…" : `${crmLeads.length} total`}</div>
+                <div className="text-xs text-[#33286a]/80">{loadingCrm ? "Loading…" : `${filteredCrmLeads.length} shown${crmLeadsHidePaused ? ` (${crmLeads.filter(e => e.followup_paused).length} paused hidden)` : ` of ${crmLeads.length}`}`}</div>
                 <div className="flex gap-2">
                   {/* Add Lead button - opens modal to create new CRM entity */}
                   <button
@@ -2571,6 +2576,14 @@ export default function LeadsPage() {
                     title="Add new lead"
                   >
                     + Add Lead
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCrmLeadsHidePaused((v) => !v)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold shadow transition-opacity ${crmLeadsHidePaused ? "bg-[#33286a] text-white" : "bg-white text-[#33286a]"}`}
+                    title={crmLeadsHidePaused ? "Show paused leads" : "Hide paused leads"}
+                  >
+                    {crmLeadsHidePaused ? "Show Paused" : "Hide Paused"}
                   </button>
                   <FilterIconButton active={showCrmLeadsFilters} onClick={() => setShowCrmLeadsFilters((v) => !v)} />
                 </div>
