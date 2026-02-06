@@ -4,25 +4,48 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
 
-const NAV = [
+const NAV_MAIN = [
   { href: "/dashboard/menu",              label: "Home" },
   { href: "/dashboard/calendar",          label: "Calendar" },
   { href: "/dashboard/project-steering",  label: "Project Steering" },
   { href: "/dashboard/leads",             label: "Leads" },
-  { href: "/dashboard/onboarding-admin",  label: "Onboarding" },
   { href: "/dashboard/posts-stats",       label: "Posts Stats" },
-  { href: "/dashboard/edit-next",         label: "Edit Next" },
 ];
+
+const NAV_MORE = [
+  { href: "/dashboard/edit-next",          label: "Edit Next" },
+  { href: "/dashboard/onboarding-admin",   label: "Onboarding" },
+  { href: "/dashboard/funnel-health",      label: "Funnel Health" },
+];
+
+function Chevron({ open }) {
+  return (
+    <svg
+      width="12" height="12" viewBox="0 0 12 12"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+      className={`transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <polyline points="2,4 6,8 10,4" />
+    </svg>
+  );
+}
 
 export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesktopOpen }) {
   const router = useRouter();
   const path = router.asPath || "";
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   function isActive(href) {
     if (href === "/dashboard/menu") return path === "/dashboard/menu" || path === "/dashboard";
     return path.startsWith(href);
   }
+
+  // Auto-expand "More" if the current route matches any item in it
+  const moreActive = NAV_MORE.some((item) => isActive(item.href));
+  const showMore = moreOpen || moreActive;
+
+  const sidebarExpanded = forceDesktopOpen || desktopOpen;
 
   return (
     <>
@@ -67,7 +90,7 @@ export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesk
             </div>
 
             <nav className="flex flex-col gap-1">
-              {NAV.map((item) => {
+              {NAV_MAIN.map((item) => {
                 const active = isActive(item.href);
                 return (
                   <Link
@@ -76,6 +99,34 @@ export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesk
                     onClick={() => setMobileOpen(false)}
                     className={[
                       "rounded-lg px-3 py-2.5 text-sm transition-colors",
+                      active ? "bg-black/5 font-semibold" : "hover:bg-black/5",
+                    ].join(" ")}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+
+              {/* More toggle */}
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm hover:bg-black/5 transition-colors"
+                type="button"
+              >
+                <span>More</span>
+                <Chevron open={showMore} />
+              </button>
+
+              {/* More items */}
+              {showMore && NAV_MORE.map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={[
+                      "rounded-lg pl-6 pr-3 py-2.5 text-sm transition-colors",
                       active ? "bg-black/5 font-semibold" : "hover:bg-black/5",
                     ].join(" ")}
                   >
@@ -93,11 +144,11 @@ export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesk
         <div
           className={[
             "h-screen sticky top-0 artist-sidebar transition-all duration-200",
-            (forceDesktopOpen || desktopOpen) ? "w-64" : "w-16",
+            sidebarExpanded ? "w-64" : "w-16",
           ].join(" ")}
         >
           <div className="p-3 flex items-center justify-between">
-            <div className={(forceDesktopOpen || desktopOpen) ? "text-sm font-semibold" : "sr-only"}>
+            <div className={sidebarExpanded ? "text-sm font-semibold" : "sr-only"}>
               Las Aguas
             </div>
             {!forceDesktopOpen && (
@@ -111,7 +162,7 @@ export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesk
           </div>
 
           <div className="px-2 pb-3">
-            {NAV.map((item) => {
+            {NAV_MAIN.map((item) => {
               const active = isActive(item.href);
               return (
                 <Link
@@ -122,12 +173,42 @@ export default function TeamNav({ forceDesktopOpen = false, desktopOpen, setDesk
                     active ? "bg-black/5 font-semibold" : "hover:bg-black/5",
                   ].join(" ")}
                 >
-                  <span className={(forceDesktopOpen || desktopOpen) ? "" : "sr-only"}>
+                  <span className={sidebarExpanded ? "" : "sr-only"}>
                     {item.label}
                   </span>
                 </Link>
               );
             })}
+
+            {/* More section (only when sidebar is expanded) */}
+            {sidebarExpanded && (
+              <>
+                <button
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className="flex items-center justify-between w-full rounded-lg px-3 py-2 my-1 text-sm hover:bg-black/5 transition-colors"
+                  type="button"
+                >
+                  <span>More</span>
+                  <Chevron open={showMore} />
+                </button>
+
+                {showMore && NAV_MORE.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={[
+                        "flex items-center gap-3 rounded-lg pl-6 pr-3 py-2 my-1 text-sm",
+                        active ? "bg-black/5 font-semibold" : "hover:bg-black/5",
+                      ].join(" ")}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </>
+            )}
           </div>
         </div>
       </aside>
