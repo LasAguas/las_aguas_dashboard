@@ -6,6 +6,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import Link from "next/link";
 import { useRouter } from "next/router";
+import TeamLayout from "../../components/team/TeamLayout";
 import { useFeedbackComments } from '../../hooks/useFeedbackComments';
 
 // Helpers
@@ -1917,16 +1918,6 @@ const [selectedMonth, setSelectedMonth] = useState('')
 // Checking width for dates
 const [isNarrow, setIsNarrow] = useState(false);
 
-const [menuOpen, setMenuOpen] = useState(false);
-
-const navItems = [
-  { href: "https://supabase.com/dashboard/project/gtccctajvobfvhlonaot/editor/17407?schema=public", label: "Supabase" },
-  { href: "/dashboard/edit-next", label: "Edit Next" },
-  { href: "/dashboard/leads", label: "Leads" },
-  { href: "/dashboard/onboarding-admin", label: "Onboarding" },
-  { href: "/dashboard/menu", label: "Home" },
-  { href: "/dashboard/posts-stats", label: "Posts Stats" },
-];
 
 useEffect(() => {
   if (!router.isReady) return;
@@ -2755,85 +2746,14 @@ function goToStats() {
 }
 
 return (
-  <div className="p-6">
-      <div className="absolute top-4 right-4 flex items-center space-x-2">
-        <Link
-          href="/dashboard/thisweek"
-        >
-          <button className="px-4 py-2 bg-[#a89ee4] rounded over:bg-[#bfb7f2] shadow-md">
+  <TeamLayout title="Calendar">
+      <div className="mb-4 flex justify-end">
+        <Link href="/dashboard/thisweek">
+          <button className="px-4 py-2 bg-[#bce1ac] rounded hover:bg-[#a9d69a] shadow-md text-sm font-medium">
             This Week's Posts
           </button>
         </Link>
-        
-        {/* Menu bubble */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((prev) => !prev)}
-            aria-label="Open menu"
-            className="
-              rounded-full 
-              bg-[#a89ee4]
-              shadow-lg 
-              border border-white
-              p-3                             /* ← updated padding */
-              flex flex-col justify-center items-center
-              hover:bg-[#bfb7f2]
-              transition
-            "
-          >
-            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
-            <span className="block w-5 h-0.5 bg-[#33286a] mb-1" />
-            <span className="block w-3 h-0.5 bg-[#33286a]" />
-          </button>
-
-          {menuOpen && (
-            <aside
-              className="
-                absolute right-0 top-14 z-40
-                w-64
-                bg-[#a89ee4]           /* same purple */
-                rounded-2xl 
-                shadow-lg 
-                p-4
-              "
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-[#33286a]">Menu</h2>
-                <button
-                  type="button"
-                  className="text-sm text-[#33286a]"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  ✕
-                </button>
-              </div>
-              <ul className="space-y-2">
-                {navItems.map((item) => (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      className="
-                        block w-full rounded-lg 
-                        bg-[#dcd4fa]              /* lighter purple content area */
-                        px-3 py-2 text-sm font-medium 
-                        text-[#33286a]
-                        hover:bg-white 
-                        hover:shadow
-                        transition
-                      "
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </aside>
-          )}
-        </div>
-
       </div>
-      <h1 className="text-2xl font-bold mb-4">Las Aguas Dashboard</h1>
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <label className="font-medium">Artist:</label>
         <select
@@ -3519,6 +3439,6 @@ return (
   deleting={deletingPost}
 />
 
-  </div>
+  </TeamLayout>
 )
 }

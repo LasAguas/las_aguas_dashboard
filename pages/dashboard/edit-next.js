@@ -6,6 +6,7 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { useRouter } from "next/router";
 import { supabase } from "../../lib/supabaseClient";
+import TeamLayout from "../../components/team/TeamLayout";
 
 // --- helpers (copied pattern from menu.js) ---
 const pad = (n) => String(n).padStart(2, "0");
@@ -1147,7 +1148,6 @@ export default function EditNextPage() {
     const [artistsById, setArtistsById] = useState({});
     const [loading, setLoading] = useState(true);
     const [errorMsg, setErrorMsg] = useState("");
-    const [menuOpen, setMenuOpen] = useState(false);
     const [selectedPost, setSelectedPost] = useState(null);
     const [selectedPostId, setSelectedPostId] = useState(null);
     const [selectedArtistId, setSelectedArtistId] = useState(null); 
@@ -1169,15 +1169,6 @@ export default function EditNextPage() {
     const [uploadMode, setUploadMode] = useState("new"); // 'new' | 'replace'
     const [replaceVariation, setReplaceVariation] = useState(null);
 
-
-  const navItems = [
-    { href: "/dashboard/calendar", label: "Calendar" },
-    { href: "/dashboard/edit-next", label: "Edit Next" },
-    { href: "/dashboard/leads", label: "Leads" },
-    { href: "/dashboard/onboarding-admin", label: "Onboarding" },
-    { href: "/dashboard/menu", label: "Home" },
-    { href: "/dashboard/posts-stats", label: "Posts Stats" },
-  ];
 
   useEffect(() => {
     async function loadData() {
@@ -1372,54 +1363,9 @@ export default function EditNextPage() {
   const statusPost = postDetails?.post || selectedPost;
 
   return (
-    <div className="min-h-screen bg-[#a89ee4] flex justify-center">
-      <div className="w-full max-w-6xl flex flex-col md:flex-row gap-4 p-4 md:p-8">
-        <div className="md:w-64 md:shrink-0">
-          {/* Mobile menu toggle, right-aligned */}
-          <div className="md:hidden flex justify-end mb-2">
-            <button
-              className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-[#bbe1ac] shadow"
-              onClick={() => setMenuOpen((prev) => !prev)}
-              aria-label={menuOpen ? "Hide menu" : "Show menu"}
-            >
-              <span className="text-xl leading-none">
-                {menuOpen ? "×" : "☰"}
-              </span>
-            </button>
-          </div>
-
-          <aside
-            className={`${
-              menuOpen ? "block" : "hidden"
-            } md:block w-full bg-[#bbe1ac] rounded-2xl shadow-lg p-4`}
-          >
-            <h2 className="text-lg font-semibold mb-3">Menu</h2>
-            <ul className="space-y-2">
-              {navItems.map((item) => (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={`block w-full rounded-lg px-3 py-2 text-sm font-medium hover:bg-white hover:shadow ${
-                      item.href === "/dashboard/edit-next"
-                        ? "bg-white"
-                        : "bg-[#eef8ea]"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </aside>
-        </div>
-
-
-        {/* Main content */}
-        <div className="flex-1 flex flex-col gap-4">
+    <TeamLayout title="Edit Next Queue">
+        <div className="flex flex-col gap-4">
           <section className="bg-[#bbe1ac] rounded-2xl shadow-lg p-4 md:p-6 flex-1">
-            <h1 className="text-xl md:text-2xl font-bold mb-4">
-              Edit Next Queue
-            </h1>
 
             {errorMsg && (
               <div className="text-red-600 text-sm mb-3 bg-white/60 rounded px-3 py-2">
@@ -1665,7 +1611,6 @@ export default function EditNextPage() {
             </div>
             )}
 
-      </div>
         {/* Media player modal */}
         {showMediaPlayer && selectedVariation && (
         <MediaPlayer
@@ -1712,6 +1657,6 @@ export default function EditNextPage() {
         )}
 
 
-    </div>
+    </TeamLayout>
   );
 }
