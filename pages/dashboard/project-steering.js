@@ -13,6 +13,123 @@ const FIELDS = [
   { key: "steering_current_bottlenecks", label: "Current Bottlenecks" },
 ];
 
+function FontsPanel({ artistId }) {
+  const [fonts, setFonts] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  async function loadFonts() {
+    if (!artistId) return;
+    const { data, error } = await supabase.storage
+      .from("artist-onboarding")
+      .list(`${artistId}/fonts`, { limit: 100 });
+    if (error) {
+      console.error("Failed to list fonts:", error);
+      return;
+    }
+    setFonts((data || []).filter((f) => f.name && f.name !== ".emptyFolderPlaceholder"));
+  }
+
+  useEffect(() => {
+    loadFonts();
+  }, [artistId]);
+
+  function getFontUrl(name) {
+    const { data } = supabase.storage
+      .from("artist-onboarding")
+      .getPublicUrl(`${artistId}/fonts/${name}`);
+    return data?.publicUrl || "";
+  }
+
+  async function handleUpload(e) {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const filePath = `${artistId}/fonts/${file.name}`;
+        const { error } = await supabase.storage
+          .from("artist-onboarding")
+          .upload(filePath, file, { upsert: true });
+        if (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          alert(`Failed to upload ${file.name}`);
+        }
+      }
+      await loadFonts();
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleDelete(name) {
+    if (!confirm(`Delete "${name}"?`)) return;
+    const { error } = await supabase.storage
+      .from("artist-onboarding")
+      .remove([`${artistId}/fonts/${name}`]);
+    if (error) {
+      console.error("Failed to delete font:", error);
+      alert("Failed to delete.");
+      return;
+    }
+    await loadFonts();
+  }
+
+  return (
+    <div className="artist-panel p-4 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold">Fonts</h2>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".ttf,.otf,.woff,.woff2,.zip"
+            multiple
+            onChange={handleUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="px-3 py-1.5 rounded-lg text-xs bg-[#33296b] text-white font-semibold hover:opacity-90 disabled:opacity-60"
+          >
+            {uploading ? "Uploading…" : "Upload Fonts"}
+          </button>
+        </div>
+      </div>
+
+      {fonts.length === 0 ? (
+        <div className="text-xs text-gray-400 italic">No fonts uploaded yet.</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+          {fonts.map((f) => (
+            <div
+              key={f.name}
+              className="flex items-center justify-between bg-white rounded-lg border border-gray-200 px-3 py-2"
+            >
+              <a
+                href={getFontUrl(f.name)}
+                download={f.name}
+                className="text-xs font-medium truncate hover:underline flex-1 mr-2"
+              >
+                {f.name}
+              </a>
+              <button
+                onClick={() => handleDelete(f.name)}
+                className="text-xs text-red-400 hover:text-red-600 shrink-0"
+                title="Delete"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EditablePanel({ title, value, onSave }) {
   const [draft, setDraft] = useState(value || "");
   const [saving, setSaving] = useState(false);
@@ -225,6 +342,9 @@ export default function ProjectSteeringPage() {
               </div>
             )}
           </div>
+
+          {/* Fonts */}
+          <FontsPanel artistId={artist.id} />
 
           {/* Three-column grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
