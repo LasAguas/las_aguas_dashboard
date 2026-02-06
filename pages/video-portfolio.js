@@ -2,7 +2,7 @@
 import Head from "next/head";
 import SiteHeader from "../components/SiteHeader";
 import "../styles/site.css";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Script from "next/script";
 
@@ -29,6 +29,50 @@ const VISUALISER_REELS = [
 function getPublicUrl(path) {
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return data?.publicUrl ?? null; // Supabase already returns an encoded URL
+}
+
+/**
+ * LazyVideo – only sets the <video> `src` once the element scrolls into view.
+ * Uses IntersectionObserver with a 200px rootMargin so the video starts loading
+ * just before it becomes visible, giving a smoother experience.
+ */
+function LazyVideo({ src, ...props }) {
+  const containerRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect(); // only need to trigger once
+        }
+      },
+      { rootMargin: "200px" } // start loading 200px before entering viewport
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
+      {isVisible ? (
+        <video src={src} {...props} />
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            background: "#000",
+          }}
+        />
+      )}
+    </div>
+  );
 }
 
 export default function VideoPortfolio() {
@@ -127,6 +171,7 @@ export default function VideoPortfolio() {
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                   ></iframe>
                 </div>
                 <h3 className="music-title">Sorvina — Live Session</h3>
@@ -141,6 +186,7 @@ export default function VideoPortfolio() {
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                   ></iframe>
                 </div>
                 <h3 className="music-title">CORP. — Live Session</h3>
@@ -155,6 +201,7 @@ export default function VideoPortfolio() {
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                   ></iframe>
                 </div>
                 <h3 className="music-title">Se Segura — Live at 90mil</h3>
@@ -169,6 +216,7 @@ export default function VideoPortfolio() {
                     frameBorder="0"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                   ></iframe>
                 </div>
                 <h3 className="music-title">Maia Valentine — Live Session</h3>
@@ -191,7 +239,7 @@ export default function VideoPortfolio() {
                 <article className="music-card" key={reel.path}>
                   <div className="video-frame-9x16">
                     {urlMap[reel.path] ? (
-                      <video
+                      <LazyVideo
                         src={urlMap[reel.path]}
                         muted
                         playsInline
@@ -199,7 +247,6 @@ export default function VideoPortfolio() {
                         preload="metadata"
                         style={{ width: "100%", height: "100%", objectFit: "cover" }}
                         onError={(e) => {
-                          // This will show you the *real* failing URL in the console
                           console.error("Video failed to load:", reel.path, urlMap[reel.path], e?.currentTarget?.error);
                         }}
                       />
@@ -227,7 +274,7 @@ export default function VideoPortfolio() {
                 <article className="music-card" key={reel.path}>
                   <div className="video-frame-9x16">
                     {urlMap[reel.path] ? (
-                      <video
+                      <LazyVideo
                         src={urlMap[reel.path]}
                         muted
                         playsInline
