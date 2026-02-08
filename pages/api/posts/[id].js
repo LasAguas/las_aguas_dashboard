@@ -33,14 +33,15 @@ export default async function handler(req, res) {
           greenlight,
           audio_file_name,
           audio_start_seconds,
-          audio_snippet_duration,
-          carousel_files
+          carousel_files,
+          text_only,
+          notes
         )
       `)
       .eq('id', id)
-      .order('test_version', { 
-        foreignTable: 'postvariations',
-        ascending: true 
+      .order('test_version', {
+        referencedTable: 'postvariations',
+        ascending: true
       })
       .single();
 

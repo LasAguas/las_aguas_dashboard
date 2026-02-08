@@ -68,6 +68,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
+  // Text-only editing
+  const [editableText, setEditableText] = useState(variation?.notes || '');
+  const [savingText, setSavingText] = useState(false);
+
   const audioRef = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
 
@@ -183,6 +187,23 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   const isImage = activeUrl ? /\.(jpe?g|png|gif|webp)$/i.test(activeUrl) : false;
   const isVideo = activeUrl ? /\.(mp4|mov|webm|ogg)$/i.test(activeUrl) : false;
+  const isTextOnly = Boolean(variation.text_only);
+
+  async function handleSaveText() {
+    if (!variation?.id || savingText) return;
+    setSavingText(true);
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ notes: editableText })
+      .eq("id", variation.id);
+    setSavingText(false);
+    if (error) {
+      console.error(error);
+      alert("Could not save text content.");
+      return;
+    }
+    variation.notes = editableText;
+  }
 
   async function handleSavePlatforms() {
     if (!variation || savingPlatforms) return;
@@ -351,6 +372,27 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
         <div className="flex flex-col md:flex-row gap-4">
           {/* Media area */}
           <div className="md:w-2/3">
+            {isTextOnly ? (
+              <div className="bg-gray-50 rounded-lg border p-4 min-h-[300px] flex flex-col">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Text Content (Mailing List)
+                </div>
+                <textarea
+                  value={editableText}
+                  onChange={(e) => setEditableText(e.target.value)}
+                  className="flex-1 w-full border rounded p-3 text-sm min-h-[250px] resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={savingText}
+                />
+                <button
+                  onClick={handleSaveText}
+                  disabled={savingText || editableText === (variation.notes || '')}
+                  className="mt-2 self-end px-4 py-1.5 rounded text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                >
+                  {savingText ? 'Saving…' : 'Save text'}
+                </button>
+              </div>
+            ) : (
             <div
               className="bg-black rounded-md flex items-center justify-center relative overflow-hidden"
               style={
@@ -447,6 +489,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
                 </>
               )}
             </div>
+            )}
           </div>
 
           {/* Right side: meta, platforms, audio, feedback actions */}
@@ -483,8 +526,8 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
               )}
             </div>
 
-            {/* Audio snippet */}
-            {audioUrl && (
+            {/* Audio snippet — hidden for text-only */}
+            {audioUrl && !isTextOnly && (
               <div className="mt-4 text-sm">
                 <div className="font-semibold mb-1">Audio snippet</div>
                 <audio
@@ -662,6 +705,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   const [variationDate, setVariationDate] = useState(defaultDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [textOnly, setTextOnly] = useState(false);
 
   // Audio library
   const [audioOptions, setAudioOptions] = useState([]);
@@ -786,6 +830,31 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   };
 
   const handleSave = async () => {
+    if (textOnly) {
+      if (!notes.trim()) { alert('Please enter text content.'); return; }
+      if (mode !== 'replace' && (!platforms || platforms.length === 0)) { alert('Please select at least one platform.'); return; }
+      setUploading(true);
+      try {
+        if (mode === 'replace' && variation) {
+          const { error: updateError } = await supabase
+            .from('postvariations')
+            .update({ text_only: true, file_name: null, notes, carousel_files: null, audio_file_name: null, length_seconds: null, ...(platforms && platforms.length ? { platforms } : {}) })
+            .eq('id', variation.id);
+          if (updateError) throw updateError;
+        } else {
+          const { data: existingVars, error: tvError } = await supabase.from('postvariations').select('test_version').eq('post_id', postId).order('test_version', { ascending: true });
+          if (tvError) throw tvError;
+          let nextVersion = 'A';
+          if (existingVars && existingVars.length > 0) { const lastVersion = existingVars[existingVars.length - 1].test_version || 'A'; nextVersion = String.fromCharCode(lastVersion.charCodeAt(0) + 1); }
+          const { error: insertError } = await supabase.from('postvariations').insert([{ post_id: postId, platforms, file_name: null, text_only: true, test_version: nextVersion, variation_post_date: variationDate, notes }]);
+          if (insertError) throw insertError;
+        }
+        onSave();
+      } catch (err) { console.error('Upload error:', err); alert('Failed to save text variation. See console.'); }
+      finally { setUploading(false); }
+      return;
+    }
+
     // In replace mode we only need a file; in new mode keep your existing requirements
     if (!file) return;
     if (mode !== 'replace' && (!platforms || platforms.length === 0)) return;
@@ -849,16 +918,17 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             file_name: fullFilePath,
             length_seconds: lengthSeconds,
             carousel_files: carouselPaths,
+            text_only: false,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
                   audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),      
+              : {}),
             ...(platforms && platforms.length ? { platforms } : {}),
           })
           .eq('id', variation.id);
-      
+
         if (updateError) throw updateError;
       } else {
         // ➕ NEW variation (existing behavior + audio fields)
@@ -894,12 +964,13 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             variation_post_date: variationDate,
             notes,
             carousel_files: carouselPaths,
+            text_only: false,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
                   audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),        
+              : {}),
           }]);
 
         if (insertError) throw insertError;
@@ -921,7 +992,27 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           {mode === 'replace' ? 'Replace Media' : 'Upload Media'}
         </h2>
 
-        {/* File upload */}
+        {/* Text-only toggle */}
+        {mode !== 'replace' && (
+          <div className="mb-4">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={textOnly}
+                onChange={(e) => {
+                  setTextOnly(e.target.checked);
+                  if (e.target.checked) { setFile(null); setExtraFiles([]); setSelectedAudioId(null); setAudioPreviewUrl(null); }
+                }}
+                disabled={uploading}
+              />
+              <span className="font-medium">Text Only (mailing list)</span>
+            </label>
+          </div>
+        )}
+
+        {/* File upload — hidden when text-only */}
+        {!textOnly && (
         <div className="mb-4">
           <label className="block text-sm font-medium mb-1">Select Media File</label>
           <input
@@ -940,8 +1031,10 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           )}
 
         </div>
+        )}
 
-        {/* Audio library selection + snippet controls */}
+        {/* Audio library selection + snippet controls — hidden when text-only */}
+        {!textOnly && (
         <div className="mb-4">
           <label className="block text-sm font-medium mb-1">
             Song (from audio library)
@@ -1022,6 +1115,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             </div>
           )}
         </div>
+        )}
 
 
         {/* Platform multi-select */}
@@ -1053,14 +1147,17 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Notes / Text Content */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Notes</label>
+          <label className="block text-sm font-medium mb-1">
+            {textOnly ? 'Text Content' : 'Notes'}
+          </label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            rows={3}
+            rows={textOnly ? 8 : 3}
             className="w-full border rounded p-2 text-sm"
+            placeholder={textOnly ? 'Enter the mailing list text content…' : ''}
           />
         </div>
 
@@ -1782,10 +1879,10 @@ export default function MenuPage() {
                             setShowMediaPlayer(true);
                           }}
                         >
-                          {v.file_name || "no file"} •{" "}
-                          {v.length_seconds
-                            ? `${v.length_seconds}s`
-                            : "length n/a"}
+                          {v.text_only
+                            ? "Text only (mailing list)"
+                            : <>{v.file_name || "no file"} • {v.length_seconds ? `${v.length_seconds}s` : "length n/a"}</>
+                          }
                         </div>
                       </li>
                     ))

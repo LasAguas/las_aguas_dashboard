@@ -106,9 +106,9 @@ export default function ArtistNavAdmin({ forceDesktopOpen = false, desktopOpen, 
         const postIds = posts.map((p) => p.id);
         const { data: varsData, error: varsErr } = await supabase
           .from("postvariations")
-          .select("id, post_id, file_name, greenlight, feedback")
+          .select("id, post_id, file_name, greenlight, feedback, text_only")
           .in("post_id", postIds)
-          .not("file_name", "is", null);
+          .or("file_name.not.is.null,text_only.eq.true");
 
         if (varsErr) throw varsErr;
         const vars = varsData || [];

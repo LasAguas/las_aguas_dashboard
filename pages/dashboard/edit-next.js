@@ -108,6 +108,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
 
+  // Text-only editing
+  const [editableText, setEditableText] = useState(variation?.notes || '');
+  const [savingText, setSavingText] = useState(false);
+
   const audioRef = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
 
@@ -217,6 +221,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
 
   if (!variation) return null;
 
+  const isTextOnly = Boolean(variation.text_only);
   const hasMedia = mediaUrls.length > 0;
   const hasCarousel = mediaUrls.length > 1;
   const activeUrl = hasMedia ? mediaUrls[currentIndex] : null;
@@ -245,6 +250,22 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
     } finally {
       setSavingPlatforms(false);
     }
+  }
+
+  async function handleSaveText() {
+    if (!variation?.id || savingText) return;
+    setSavingText(true);
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ notes: editableText })
+      .eq("id", variation.id);
+    setSavingText(false);
+    if (error) {
+      console.error(error);
+      alert("Could not save text content.");
+      return;
+    }
+    variation.notes = editableText;
   }
 
   async function toggleResolve() {
@@ -391,102 +412,123 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
         <div className="flex flex-col md:flex-row gap-4">
           {/* Media area */}
           <div className="md:w-2/3">
-            <div
-              className="bg-black rounded-md flex items-center justify-center relative overflow-hidden"
-              style={
-                hasCarousel
-                  ? { height: "70vh", maxHeight: "70vh" }                  // fixed for carousels
-                  : { minHeight: "240px", maxHeight: "70vh" }              // flexible for single media
-              }
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              {loading && (
-                <div className="text-sm text-gray-300">Loading media…</div>
-              )}
-              {!loading && error && (
-                <div className="text-sm text-red-400 px-4 text-center">
-                  {error}
+            {isTextOnly ? (
+              <div className="bg-gray-50 rounded-lg border p-4 min-h-[300px] flex flex-col">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Text Content (Mailing List)
                 </div>
-              )}
-              {!loading && !error && !hasMedia && (
-                <div className="text-sm text-gray-300 px-4 text-center">
-                  No media attached to this variation.
-                </div>
-              )}
-              {!loading && !error && hasMedia && activeUrl && (
-                <>
-                  {isImage && (
-                    <img
-                      src={activeUrl}
-                      alt={variation.file_name}
-                      className="max-h-[70vh] max-w-full object-contain"
-                    />
-                  )}
-                  {isVideo && (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        width: "100%",
-                      }}
-                    >
-                      <video
+                <textarea
+                  value={editableText}
+                  onChange={(e) => setEditableText(e.target.value)}
+                  className="flex-1 w-full border rounded p-3 text-sm min-h-[250px] resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={savingText}
+                />
+                <button
+                  onClick={handleSaveText}
+                  disabled={savingText || editableText === (variation.notes || '')}
+                  className="mt-2 self-end px-4 py-1.5 rounded text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                >
+                  {savingText ? 'Saving…' : 'Save text'}
+                </button>
+              </div>
+            ) : (
+              <div
+                className="bg-black rounded-md flex items-center justify-center relative overflow-hidden"
+                style={
+                  hasCarousel
+                    ? { height: "70vh", maxHeight: "70vh" }
+                    : { minHeight: "240px", maxHeight: "70vh" }
+                }
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
+                {loading && (
+                  <div className="text-sm text-gray-300">Loading media…</div>
+                )}
+                {!loading && error && (
+                  <div className="text-sm text-red-400 px-4 text-center">
+                    {error}
+                  </div>
+                )}
+                {!loading && !error && !hasMedia && (
+                  <div className="text-sm text-gray-300 px-4 text-center">
+                    No media attached to this variation.
+                  </div>
+                )}
+                {!loading && !error && hasMedia && activeUrl && (
+                  <>
+                    {isImage && (
+                      <img
                         src={activeUrl}
-                        autoPlay
-                        muted
-                        playsInline
-                        controls
-                        style={{
-                          maxHeight: "70vh",
-                          maxWidth: "70vw",
-                          width: "auto",
-                          height: "auto",
-                          objectFit: "contain",
-                        }}
+                        alt={variation.file_name}
+                        className="max-h-[70vh] max-w-full object-contain"
                       />
-                    </div>
-                  )}
-
-
-                  {!isImage && !isVideo && (
-                    <div className="text-sm text-gray-200 px-4 text-center">
-                      Unsupported file type
-                    </div>
-                  )}
-
-                  {hasCarousel && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={goPrev}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
+                    )}
+                    {isVideo && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          width: "100%",
+                        }}
                       >
-                        ‹
-                      </button>
-                      <button
-                        type="button"
-                        onClick={goNext}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
-                      >
-                        ›
-                      </button>
-                      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
-                        {mediaUrls.map((_, idx) => (
-                          <span
-                            key={idx}
-                            className={`w-2 h-2 rounded-full ${
-                              idx === currentIndex ? "bg-white" : "bg-gray-500"
-                            }`}
-                          />
-                        ))}
+                        <video
+                          src={activeUrl}
+                          autoPlay
+                          muted
+                          playsInline
+                          controls
+                          style={{
+                            maxHeight: "70vh",
+                            maxWidth: "70vw",
+                            width: "auto",
+                            height: "auto",
+                            objectFit: "contain",
+                          }}
+                        />
                       </div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
+                    )}
+
+                    {!isImage && !isVideo && (
+                      <div className="text-sm text-gray-200 px-4 text-center">
+                        Unsupported file type
+                      </div>
+                    )}
+
+                    {hasCarousel && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={goPrev}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
+                        >
+                          ‹
+                        </button>
+                        <button
+                          type="button"
+                          onClick={goNext}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center"
+                        >
+                          ›
+                        </button>
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                          {mediaUrls.map((_, idx) => (
+                            <span
+                              key={idx}
+                              className={`w-2 h-2 rounded-full ${
+                                idx === currentIndex ? "bg-white" : "bg-gray-500"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right side: meta, platforms, audio, feedback actions */}
@@ -523,8 +565,8 @@ function MediaPlayer({ variation, onClose, onRefreshPost, onReplaceRequested, on
               )}
             </div>
 
-            {/* Audio snippet */}
-            {audioUrl && (
+            {/* Audio snippet — hidden for text-only */}
+            {audioUrl && !isTextOnly && (
               <div className="mt-4 text-sm">
                 <div className="font-semibold mb-1">Audio snippet</div>
                 <audio
@@ -700,6 +742,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   const [variationDate, setVariationDate] = useState(defaultDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [textOnly, setTextOnly] = useState(false);
 
   // Audio library
   const [audioOptions, setAudioOptions] = useState([]);
@@ -824,6 +867,69 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
   };
 
   const handleSave = async () => {
+    if (textOnly) {
+      // Text-only mode: notes is required, no file needed
+      if (!notes.trim()) {
+        alert('Please enter text content.');
+        return;
+      }
+      if (mode !== 'replace' && (!platforms || platforms.length === 0)) {
+        alert('Please select at least one platform.');
+        return;
+      }
+      setUploading(true);
+      try {
+        if (mode === 'replace' && variation) {
+          const { error: updateError } = await supabase
+            .from('postvariations')
+            .update({
+              text_only: true,
+              file_name: null,
+              notes,
+              carousel_files: null,
+              audio_file_name: null,
+              length_seconds: null,
+              ...(platforms && platforms.length ? { platforms } : {}),
+            })
+            .eq('id', variation.id);
+          if (updateError) throw updateError;
+        } else {
+          const { data: existingVars, error: tvError } = await supabase
+            .from('postvariations')
+            .select('test_version')
+            .eq('post_id', postId)
+            .order('test_version', { ascending: true });
+          if (tvError) throw tvError;
+
+          let nextVersion = 'A';
+          if (existingVars && existingVars.length > 0) {
+            const lastVersion = existingVars[existingVars.length - 1].test_version || 'A';
+            nextVersion = String.fromCharCode(lastVersion.charCodeAt(0) + 1);
+          }
+
+          const { error: insertError } = await supabase
+            .from('postvariations')
+            .insert([{
+              post_id: postId,
+              platforms,
+              file_name: null,
+              text_only: true,
+              test_version: nextVersion,
+              variation_post_date: variationDate,
+              notes,
+            }]);
+          if (insertError) throw insertError;
+        }
+        onSave();
+      } catch (err) {
+        console.error('Upload error:', err);
+        alert('Failed to save text variation. See console.');
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
     // In replace mode we only need a file; in new mode keep your existing requirements
     if (!file) return;
     if (mode !== 'replace' && (!platforms || platforms.length === 0)) return;
@@ -864,7 +970,7 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             if (uploadError) throw uploadError;
             uploadedPaths.push(path);
         }
-      
+
       const fullFilePath = uploadedPaths[0];
       const carouselPaths = isImage && uploadedPaths.length > 1 ? uploadedPaths : null;
 
@@ -886,16 +992,17 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             file_name: fullFilePath,
             length_seconds: lengthSeconds,
             carousel_files: carouselPaths,
+            text_only: false,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
                   audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),      
+              : {}),
             ...(platforms && platforms.length ? { platforms } : {}),
           })
           .eq('id', variation.id);
-      
+
         if (updateError) throw updateError;
       } else {
         // ➕ NEW variation (existing behavior + audio fields)
@@ -931,12 +1038,13 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
             variation_post_date: variationDate,
             notes,
             carousel_files: carouselPaths,
+            text_only: false,
             ...(audioPath
               ? {
                   audio_file_name: audioPath,
                   audio_start_seconds: Number(snippetStart) || 0,
                 }
-              : {}),        
+              : {}),
           }]);
 
         if (insertError) throw insertError;
@@ -958,107 +1066,134 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           {mode === 'replace' ? 'Replace Media' : 'Upload Media'}
         </h2>
 
-        {/* File upload */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Select Media File</label>
-          <input
-            type="file"
-            multiple
-            accept="image/*,video/*"
-            onChange={handleFileChange}
-            className="w-full text-sm"
-            disabled={uploading}
-          />
-          {file && (
-            <p className="text-xs text-gray-500 mt-1">
-              {file.name}
-              {extraFiles.length > 0 && ` + ${extraFiles.length} more`}
-            </p>
-          )}
-
-        </div>
-
-        {/* Audio library selection + snippet controls */}
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">
-            Song (from audio library)
-          </label>
-
-          <select
-            className="w-full border rounded p-2 text-sm"
-            value={selectedAudioId || ""}
-            disabled={uploading || audioLoading || audioOptions.length === 0}
-            onChange={(e) => {
-              const id = e.target.value ? Number(e.target.value) : null;
-              setSelectedAudioId(id);
-
-              if (!id) {
-                setAudioPreviewUrl(null);
-                return;
-              }
-              const song = audioOptions.find((o) => o.id === id);
-              if (!song) return;
-              const { data } = supabase.storage
-                .from("post-variations")
-                .getPublicUrl(song.file_path);
-              setAudioPreviewUrl(data?.publicUrl || null);
-            }}
-          >
-            <option value="">
-              {audioLoading
-                ? "Loading songs…"
-                : audioOptions.length
-                ? "Select a song…"
-                : "No songs in audio library for this artist"}
-            </option>
-            {audioOptions.map((song) => (
-              <option key={song.id} value={song.id}>
-                {song.title}
-              </option>
-            ))}
-          </select>
-
-          {audioPreviewUrl && (
-            <div className="mt-2 space-y-2">
-              <audio
-                ref={audioRef}
-                src={audioPreviewUrl}
-                controls
-                className="w-full"
+        {/* Text-only toggle */}
+        {mode !== 'replace' && (
+          <div className="mb-4">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={textOnly}
+                onChange={(e) => {
+                  setTextOnly(e.target.checked);
+                  if (e.target.checked) {
+                    setFile(null);
+                    setExtraFiles([]);
+                    setSelectedAudioId(null);
+                    setAudioPreviewUrl(null);
+                  }
+                }}
+                disabled={uploading}
               />
-              <div className="flex gap-2 items-end text-xs">
-                <div className="flex-1">
-                  <label className="block mb-1">Snippet start (seconds)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={snippetStart}
-                    onChange={(e) => setSnippetStart(e.target.value)}
-                    className="w-full border rounded p-1"
-                  />
+              <span className="font-medium">Text Only (mailing list)</span>
+            </label>
+          </div>
+        )}
+
+        {/* File upload — hidden when text-only */}
+        {!textOnly && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Select Media File</label>
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              onChange={handleFileChange}
+              className="w-full text-sm"
+              disabled={uploading}
+            />
+            {file && (
+              <p className="text-xs text-gray-500 mt-1">
+                {file.name}
+                {extraFiles.length > 0 && ` + ${extraFiles.length} more`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Audio library selection + snippet controls — hidden when text-only */}
+        {!textOnly && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">
+              Song (from audio library)
+            </label>
+
+            <select
+              className="w-full border rounded p-2 text-sm"
+              value={selectedAudioId || ""}
+              disabled={uploading || audioLoading || audioOptions.length === 0}
+              onChange={(e) => {
+                const id = e.target.value ? Number(e.target.value) : null;
+                setSelectedAudioId(id);
+
+                if (!id) {
+                  setAudioPreviewUrl(null);
+                  return;
+                }
+                const song = audioOptions.find((o) => o.id === id);
+                if (!song) return;
+                const { data } = supabase.storage
+                  .from("post-variations")
+                  .getPublicUrl(song.file_path);
+                setAudioPreviewUrl(data?.publicUrl || null);
+              }}
+            >
+              <option value="">
+                {audioLoading
+                  ? "Loading songs…"
+                  : audioOptions.length
+                  ? "Select a song…"
+                  : "No songs in audio library for this artist"}
+              </option>
+              {audioOptions.map((song) => (
+                <option key={song.id} value={song.id}>
+                  {song.title}
+                </option>
+              ))}
+            </select>
+
+            {audioPreviewUrl && (
+              <div className="mt-2 space-y-2">
+                <audio
+                  ref={audioRef}
+                  src={audioPreviewUrl}
+                  controls
+                  className="w-full"
+                />
+                <div className="flex gap-2 items-end text-xs">
+                  <div className="flex-1">
+                    <label className="block mb-1">Snippet start (seconds)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={snippetStart}
+                      onChange={(e) => setSnippetStart(e.target.value)}
+                      className="w-full border rounded p-1"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block mb-1">Snippet length (seconds)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={snippetDuration}
+                      onChange={(e) => setSnippetDuration(e.target.value)}
+                      className="w-full border rounded p-1"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePreviewSnippet}
+                    className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                    disabled={uploading}
+                  >
+                    Preview snippet
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <label className="block mb-1">Snippet length (seconds)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={snippetDuration}
-                    onChange={(e) => setSnippetDuration(e.target.value)}
-                    className="w-full border rounded p-1"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePreviewSnippet}
-                  className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                  disabled={uploading}
-                >
-                  Preview snippet
-                </button>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
 
         {/* Platform multi-select */}
@@ -1090,14 +1225,17 @@ function UploadModal({ postId, artistId, defaultDate, mode = 'new', variation, o
           </div>
         </div>
 
-        {/* Notes */}
+        {/* Notes / Text Content */}
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-1">Notes</label>
+          <label className="block text-sm font-medium mb-1">
+            {textOnly ? 'Text Content' : 'Notes'}
+          </label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            rows={3}
+            rows={textOnly ? 8 : 3}
             className="w-full border rounded p-2 text-sm"
+            placeholder={textOnly ? 'Enter the mailing list text content…' : ''}
           />
         </div>
 
@@ -1568,8 +1706,13 @@ export default function EditNextPage() {
                                 setShowMediaPlayer(true);
                             }}
                             >
-                            {v.file_name || "no file"} •{" "}
-                            {v.length_seconds ? `${v.length_seconds}s` : "length n/a"}
+                            {v.text_only
+                              ? "Text only (mailing list)"
+                              : <>
+                                  {v.file_name || "no file"} •{" "}
+                                  {v.length_seconds ? `${v.length_seconds}s` : "length n/a"}
+                                </>
+                            }
                             </div>
                         </li>
                         ))

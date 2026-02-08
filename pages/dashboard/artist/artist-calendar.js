@@ -289,6 +289,10 @@ const [localGreenlight, setLocalGreenlight] = useState(
 );
 const [savingGreenlight, setSavingGreenlight] = useState(false);
 
+// Text-only editing
+const [editableText, setEditableText] = useState(variation?.notes || '');
+const [savingText, setSavingText] = useState(false);
+
 async function toggleGreenlight() {
   if (!variation?.id || savingGreenlight) return;
 
@@ -328,7 +332,24 @@ async function toggleGreenlight() {
     setEditableCaptionA(variation.caption_a || "");
     setEditableCaptionB(variation.caption_b || "");
     setIsEditingCaptions(false); // Reset edit mode when switching variations
+    setEditableText(variation?.notes || '');
   }, [variation?.id]);
+
+  async function handleSaveText() {
+    if (!variation?.id || savingText) return;
+    setSavingText(true);
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ notes: editableText })
+      .eq("id", variation.id);
+    setSavingText(false);
+    if (error) {
+      console.error(error);
+      alert("Could not save text content.");
+      return;
+    }
+    variation.notes = editableText;
+  }
 
   const getFileName = (p = "") => {
     const parts = String(p).split("/");
@@ -694,6 +715,27 @@ if (!variation) return null;
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Media */}
           <div>
+            {variation.text_only ? (
+              <div className="bg-gray-50 rounded-lg border p-4 min-h-[300px] flex flex-col">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Text Content (Mailing List)
+                </div>
+                <textarea
+                  value={editableText}
+                  onChange={(e) => setEditableText(e.target.value)}
+                  className="flex-1 w-full border rounded p-3 text-sm min-h-[250px] resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={savingText}
+                />
+                <button
+                  onClick={handleSaveText}
+                  disabled={savingText || editableText === (variation.notes || '')}
+                  className="mt-2 self-end px-4 py-1.5 rounded text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                >
+                  {savingText ? 'Saving\u2026' : 'Save text'}
+                </button>
+              </div>
+            ) : (
             <div
               className="relative w-full bg-gray-100 rounded overflow-hidden"
               onTouchStart={handleTouchStart}
@@ -805,9 +847,10 @@ if (!variation) return null;
                 </>
               )}
             </div>
+            )}
 
             {/* Audio snippet */}
-            {audioUrl && (
+            {audioUrl && !variation.text_only && (
               <div className="mt-4 border rounded p-3">
                 <div className="text-sm font-semibold mb-2">Song snippet</div>
 
@@ -1980,7 +2023,10 @@ function ArtistCalendarInner() {
           — {v.test_version || "—"}
         </div>
         <div className="text-xs text-gray-600">
-          {v.file_name || 'no file'} • {v.length_seconds ? `${v.length_seconds}s` : 'length n/a'}
+          {v.text_only
+            ? "Text only (mailing list)"
+            : <>{v.file_name || 'no file'} • {v.length_seconds ? `${v.length_seconds}s` : 'length n/a'}</>
+          }
         </div>
       </li>
     ))

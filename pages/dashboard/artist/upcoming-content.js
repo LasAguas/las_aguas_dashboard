@@ -104,6 +104,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
   );
   const [savingGreenlight, setSavingGreenlight] = useState(false);
 
+  // Text-only editing
+  const [editableText, setEditableText] = useState(variation?.notes || '');
+  const [savingText, setSavingText] = useState(false);
+
   async function toggleGreenlight() {
     if (!variation?.id || savingGreenlight) return;
 
@@ -134,7 +138,24 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
     if (!variation) return;
     setSnippetStart(Number(variation.audio_start_seconds) || 0);
     setLocalGreenlight(Boolean(variation?.greenlight));
+    setEditableText(variation?.notes || '');
   }, [variation?.id]);
+
+  async function handleSaveText() {
+    if (!variation?.id || savingText) return;
+    setSavingText(true);
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ notes: editableText })
+      .eq("id", variation.id);
+    setSavingText(false);
+    if (error) {
+      console.error(error);
+      alert("Could not save text content.");
+      return;
+    }
+    variation.notes = editableText;
+  }
 
   // ✅ Handler to submit new comment
   async function handleSubmitComment() {
@@ -337,6 +358,27 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Media */}
           <div>
+            {variation.text_only ? (
+              <div className="bg-gray-50 rounded-lg border p-4 min-h-[300px] flex flex-col">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Text Content (Mailing List)
+                </div>
+                <textarea
+                  value={editableText}
+                  onChange={(e) => setEditableText(e.target.value)}
+                  className="flex-1 w-full border rounded p-3 text-sm min-h-[250px] resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={savingText}
+                />
+                <button
+                  onClick={handleSaveText}
+                  disabled={savingText || editableText === (variation.notes || '')}
+                  className="mt-2 self-end px-4 py-1.5 rounded text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                >
+                  {savingText ? 'Saving\u2026' : 'Save text'}
+                </button>
+              </div>
+            ) : (
             <div
               className="relative bg-black rounded-lg overflow-hidden"
               onTouchStart={handleTouchStart}
@@ -397,6 +439,7 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
                 </>
               )}
             </div>
+            )}
           </div>
 
           {/* Right side: Feedback */}
@@ -614,13 +657,14 @@ function VariationsList({ variations, onOpenVariation }) {
         <button
           key={v.id}
           type="button"
-          onClick={() => v.file_name && onOpenVariation(v)}
-          disabled={!v.file_name}
+          onClick={() => (v.file_name || v.text_only) && onOpenVariation(v)}
+          disabled={!v.file_name && !v.text_only}
           className="w-full text-left artist-panel-secondary p-3 rounded-xl flex items-start justify-between gap-3 disabled:opacity-60"
         >
           <div className="min-w-0">
             <div className="text-sm font-medium text-[#33296b] truncate">
               {v.test_version ? `Variation ${v.test_version}` : `Variation ${v.id}`}
+              {v.text_only && <span className="ml-1 text-xs font-normal text-gray-500">(text)</span>}
             </div>
             <div className="text-xs text-gray-600">
               {Array.isArray(v.platforms) && v.platforms.length
@@ -636,7 +680,7 @@ function VariationsList({ variations, onOpenVariation }) {
             )}
           </div>
           <div className="text-[11px] text-gray-500 whitespace-nowrap">
-            {v.file_name ? "Tap to play" : "No media"}
+            {v.text_only ? "Text" : v.file_name ? "Tap to play" : "No media"}
           </div>
         </button>
       ))}

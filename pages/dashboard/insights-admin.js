@@ -287,9 +287,9 @@ function PostModal({ open, onClose, post, platformSnapsByPostId }) {
 
         const { data: vars, error } = await supabase
           .from("postvariations")
-          .select("file_name")
+          .select("file_name, text_only")
           .eq("post_id", postId)
-          .not("file_name", "is", null)
+          .or("file_name.not.is.null,text_only.eq.true")
           .limit(1);
 
         if (error) throw error;

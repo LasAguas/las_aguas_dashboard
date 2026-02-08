@@ -114,6 +114,10 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
   );
   const [savingGreenlight, setSavingGreenlight] = useState(false);
 
+  // Text-only editing
+  const [editableText, setEditableText] = useState(variation?.notes || '');
+  const [savingText, setSavingText] = useState(false);
+
   async function toggleGreenlight() {
     if (!variation?.id || savingGreenlight) return;
 
@@ -144,7 +148,24 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
     if (!variation) return;
     setSnippetStart(Number(variation.audio_start_seconds) || 0);
     setLocalGreenlight(Boolean(variation?.greenlight));
+    setEditableText(variation?.notes || '');
   }, [variation?.id]);
+
+  async function handleSaveText() {
+    if (!variation?.id || savingText) return;
+    setSavingText(true);
+    const { error } = await supabase
+      .from("postvariations")
+      .update({ notes: editableText })
+      .eq("id", variation.id);
+    setSavingText(false);
+    if (error) {
+      console.error(error);
+      alert("Could not save text content.");
+      return;
+    }
+    variation.notes = editableText;
+  }
 
   // ✅ Handler to submit new comment
   async function handleSubmitComment() {
@@ -345,68 +366,90 @@ function MediaPlayer({ variation, onClose, onRefreshPost }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Media */}
+          {/* Media or Text Content */}
           <div>
-            <div
-              className="relative bg-black rounded-lg overflow-hidden"
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              {mediaLoading && (
-                <div className="flex items-center justify-center min-h-[300px]">
-                  <div className="text-white text-sm">Loading media...</div>
+            {variation.text_only ? (
+              <div className="bg-gray-50 rounded-lg border p-4 min-h-[300px] flex flex-col">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Text Content (Mailing List)
                 </div>
-              )}
+                <textarea
+                  value={editableText}
+                  onChange={(e) => setEditableText(e.target.value)}
+                  className="flex-1 w-full border rounded p-3 text-sm min-h-[250px] resize-y focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  disabled={savingText}
+                />
+                <button
+                  onClick={handleSaveText}
+                  disabled={savingText || editableText === (variation.notes || '')}
+                  className="mt-2 self-end px-4 py-1.5 rounded text-xs font-semibold disabled:opacity-50"
+                  style={{ backgroundColor: "#a89ee4", color: "#33296b" }}
+                >
+                  {savingText ? 'Saving…' : 'Save text'}
+                </button>
+              </div>
+            ) : (
+              <div
+                className="relative bg-black rounded-lg overflow-hidden"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+              >
+                {mediaLoading && (
+                  <div className="flex items-center justify-center min-h-[300px]">
+                    <div className="text-white text-sm">Loading media...</div>
+                  </div>
+                )}
 
-              {!mediaLoading && mediaError && (
-                <div className="flex items-center justify-center min-h-[300px]">
-                  <div className="text-red-300 text-sm">Failed to load media</div>
-                </div>
-              )}
+                {!mediaLoading && mediaError && (
+                  <div className="flex items-center justify-center min-h-[300px]">
+                    <div className="text-red-300 text-sm">Failed to load media</div>
+                  </div>
+                )}
 
-              {!mediaLoading && !mediaError && activeUrl && (
-                <>
-                  {activeType === "video" ? (
-                    <video
-                      src={activeUrl}
-                      controls
-                      className="w-full"
-                      style={{ maxHeight: "70vh" }}
-                      onLoadStart={() => setMediaLoading(false)}
-                      onError={() => setMediaError(true)}
-                    />
-                  ) : activeType === "image" ? (
-                    <img
-                      src={activeUrl}
-                      alt="media"
-                      className="w-full object-contain"
-                      style={{ maxHeight: "70vh" }}
-                      onLoad={() => setMediaLoading(false)}
-                      onError={() => setMediaError(true)}
-                    />
-                  ) : (
-                    <div className="text-white p-4">Unsupported file type</div>
-                  )}
-                </>
-              )}
+                {!mediaLoading && !mediaError && activeUrl && (
+                  <>
+                    {activeType === "video" ? (
+                      <video
+                        src={activeUrl}
+                        controls
+                        className="w-full"
+                        style={{ maxHeight: "70vh" }}
+                        onLoadStart={() => setMediaLoading(false)}
+                        onError={() => setMediaError(true)}
+                      />
+                    ) : activeType === "image" ? (
+                      <img
+                        src={activeUrl}
+                        alt="media"
+                        className="w-full object-contain"
+                        style={{ maxHeight: "70vh" }}
+                        onLoad={() => setMediaLoading(false)}
+                        onError={() => setMediaError(true)}
+                      />
+                    ) : (
+                      <div className="text-white p-4">Unsupported file type</div>
+                    )}
+                  </>
+                )}
 
-              {hasCarousel && (
-                <>
-                  <button
-                    onClick={goPrev}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    onClick={goNext}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
-                  >
-                    ›
-                  </button>
-                </>
-              )}
-            </div>
+                {hasCarousel && (
+                  <>
+                    <button
+                      onClick={goPrev}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      onClick={goNext}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-black/70"
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right side: Feedback */}
@@ -642,15 +685,17 @@ function PostDetailsModal({ postId, onClose }) {
         const { data: vars, error: varsErr } = await supabase
           .from("postvariations")
           .select(`
-            id, 
-            post_id, 
-            file_name, 
-            test_version, 
-            platforms, 
-            length_seconds, 
-            greenlight, 
-            feedback, 
+            id,
+            post_id,
+            file_name,
+            test_version,
+            platforms,
+            length_seconds,
+            greenlight,
+            feedback,
             feedback_resolved,
+            text_only,
+            notes,
             feedback_comments!variation_id (
               id,
               resolved
@@ -764,24 +809,25 @@ function PostDetailsModal({ postId, onClose }) {
                             key={v.id}
                             type="button"
                             className="w-full text-left p-3 rounded-xl artist-card flex items-start justify-between gap-3 disabled:opacity-60"
-                            onClick={() => v.file_name && setMediaVar(v)}
-                            disabled={!v.file_name}
+                            onClick={() => (v.file_name || v.text_only) && setMediaVar(v)}
+                            disabled={!v.file_name && !v.text_only}
                         >
                             <div className="min-w-0">
                             <div className="text-sm font-medium text-[#33296b] truncate">
                                 {v.test_version ? `Variation ${v.test_version}` : `Variation ${v.id}`}
+                                {v.text_only && <span className="ml-1 text-xs font-normal text-gray-500">(text)</span>}
                             </div>
                             <div className="text-xs text-gray-600">
                                 {Array.isArray(v.platforms) && v.platforms.length
                                 ? v.platforms.join(", ")
                                 : "No platforms"}
                                 {v.length_seconds ? ` • ${v.length_seconds}s` : ""}
-                                {v.greenlight ? " • ✅ greenlit" : ""}
+                                {v.greenlight ? " • greenlit" : ""}
                             </div>
                             </div>
 
                             <div className="text-xs text-gray-500 whitespace-nowrap">
-                            {v.file_name ? "Tap to open" : "No media"}
+                            {v.text_only ? "Text" : v.file_name ? "Tap to open" : "No media"}
                             </div>
                         </button>
                         ))}
@@ -874,22 +920,24 @@ export default function ArtistHomePage() {
           const { data: varsData, error: varsErr } = await supabase
           .from("postvariations")
           .select(`
-            id, 
-            post_id, 
-            file_name, 
-            test_version, 
-            platforms, 
-            length_seconds, 
-            greenlight, 
-            feedback, 
+            id,
+            post_id,
+            file_name,
+            test_version,
+            platforms,
+            length_seconds,
+            greenlight,
+            feedback,
             feedback_resolved,
+            text_only,
+            notes,
             feedback_comments!variation_id (
               id,
               resolved
             )
           `)
           .in("post_id", postIds)
-          .not("file_name", "is", null);
+          .or("file_name.not.is.null,text_only.eq.true");
 
         if (varsErr) throw varsErr;
         
