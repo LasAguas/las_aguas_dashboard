@@ -1,5 +1,6 @@
 // pages/api/meetings/book.js
 // Book a meeting slot and send confirmation emails
+// Supports multi-member bookings (artist meetings) and single-member (lead meetings)
 
 import { supabaseAdmin } from "../../../lib/supabaseClient";
 import {
@@ -12,7 +13,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { datetime, leadId, email, phone, budget, notes } = req.body;
+  const { datetime, leadId, email, phone, budget, notes, members, topic } = req.body;
 
   // Validate required fields
   if (!datetime || !email) {
@@ -25,6 +26,9 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid email format" });
   }
 
+  // Combine notes and topic
+  const combinedNotes = [topic, notes].filter(Boolean).join(" | ");
+
   try {
     // Parse the datetime
     const meetingDatetime = new Date(datetime);
@@ -32,63 +36,72 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Invalid datetime format" });
     }
 
-    // Check if slot is still available (prevent race conditions)
-    const { data: existingSlot, error: checkError } = await supabaseAdmin
-      .from("meeting_slots")
-      .select("id")
-      .eq("meeting_datetime", meetingDatetime.toISOString())
-      .neq("status", "cancelled")
-      .single();
+    // Determine which team members to book for
+    const bookingMembers = members && members.length > 0 ? members : ["miguel"];
 
-    if (existingSlot) {
-      return res.status(409).json({
-        error: "This time slot has already been booked. Please select another time.",
-      });
-    }
+    // Check availability for ALL members
+    for (const member of bookingMembers) {
+      const { data: existingSlot, error: checkError } = await supabaseAdmin
+        .from("meeting_slots")
+        .select("id")
+        .eq("meeting_datetime", meetingDatetime.toISOString())
+        .eq("team_member", member)
+        .neq("status", "cancelled")
+        .single();
 
-    // checkError with code PGRST116 means no rows found, which is what we want
-    if (checkError && checkError.code !== "PGRST116") {
-      console.error("Error checking slot availability:", checkError);
-      return res.status(500).json({ error: "Failed to check availability" });
-    }
-
-    // Insert the meeting slot
-    const { data: newSlot, error: insertError } = await supabaseAdmin
-      .from("meeting_slots")
-      .insert([
-        {
-          meeting_datetime: meetingDatetime.toISOString(),
-          attendee_email: email,
-          attendee_phone: phone || null,
-          lead_id: leadId || null,
-          status: "confirmed",
-          notes: notes || null,
-        },
-      ])
-      .select()
-      .single();
-
-    if (insertError) {
-      // Handle unique constraint violation (double booking)
-      if (insertError.code === "23505") {
+      if (existingSlot) {
         return res.status(409).json({
-          error: "This time slot has already been booked. Please select another time.",
+          error: `This time slot has already been booked for ${member}. Please select another time.`,
         });
       }
-      console.error("Error inserting meeting slot:", insertError);
-      return res.status(500).json({ error: "Failed to book meeting" });
+
+      if (checkError && checkError.code !== "PGRST116") {
+        console.error(`Error checking slot for ${member}:`, checkError);
+        return res.status(500).json({ error: "Failed to check availability" });
+      }
+    }
+
+    // Insert a row for each team member
+    let firstSlot = null;
+    for (const member of bookingMembers) {
+      const { data: newSlot, error: insertError } = await supabaseAdmin
+        .from("meeting_slots")
+        .insert([
+          {
+            meeting_datetime: meetingDatetime.toISOString(),
+            attendee_email: email,
+            attendee_phone: phone || null,
+            lead_id: leadId || null,
+            status: "confirmed",
+            notes: combinedNotes || null,
+            team_member: member,
+          },
+        ])
+        .select()
+        .single();
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          return res.status(409).json({
+            error: `This time slot has already been booked for ${member}. Please select another time.`,
+          });
+        }
+        console.error(`Error inserting slot for ${member}:`, insertError);
+        return res.status(500).json({ error: "Failed to book meeting" });
+      }
+
+      if (!firstSlot) firstSlot = newSlot;
     }
 
     // Update the lead record with the meeting_slot_id if we have a leadId
-    if (leadId) {
+    if (leadId && firstSlot) {
       const { error: updateError } = await supabaseAdmin
         .from("ad_leads_en")
-        .update({ meeting_slot_id: newSlot.id })
+        .update({ meeting_slot_id: firstSlot.id })
         .eq("id", leadId);
 
       if (updateError) {
         console.error("Error updating lead with meeting_slot_id:", updateError);
-        // Don't fail the request, the meeting is still booked
       }
     }
 
@@ -111,7 +124,6 @@ export default async function handler(req, res) {
 
     // Send confirmation emails
     try {
-      // Email to attendee
       await sendMeetingConfirmationToAttendee({
         email,
         meetingDatetime: meetingDatetime.toISOString(),
@@ -120,18 +132,17 @@ export default async function handler(req, res) {
         timezone: "CET",
       });
 
-      // Update confirmation_sent_at
-      await supabaseAdmin
-        .from("meeting_slots")
-        .update({ confirmation_sent_at: new Date().toISOString() })
-        .eq("id", newSlot.id);
+      if (firstSlot) {
+        await supabaseAdmin
+          .from("meeting_slots")
+          .update({ confirmation_sent_at: new Date().toISOString() })
+          .eq("id", firstSlot.id);
+      }
     } catch (emailError) {
       console.error("Error sending attendee confirmation:", emailError);
-      // Don't fail the request - meeting is booked, email just failed
     }
 
     try {
-      // Email to admin
       await sendMeetingNotificationToAdmin({
         attendeeEmail: email,
         attendeePhone: phone,
@@ -141,20 +152,20 @@ export default async function handler(req, res) {
         timezone: "CET",
         leadId,
         budget,
-        notes,
+        notes: combinedNotes || notes,
       });
     } catch (emailError) {
       console.error("Error sending admin notification:", emailError);
-      // Don't fail the request
     }
 
     return res.status(200).json({
       success: true,
       meeting: {
-        id: newSlot.id,
-        datetime: newSlot.meeting_datetime,
+        id: firstSlot?.id,
+        datetime: firstSlot?.meeting_datetime,
         formattedDate,
         formattedTime,
+        members: bookingMembers,
       },
     });
   } catch (err) {

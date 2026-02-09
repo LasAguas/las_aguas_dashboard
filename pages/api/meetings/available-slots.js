@@ -1,77 +1,137 @@
 // pages/api/meetings/available-slots.js
 // Returns available meeting slots for the booking window
+// Supports per-member schedules and intersection mode
+//
+// ALL datetimes are handled as CET strings to avoid timezone conversion issues.
+// We never rely on JavaScript Date local timezone — we build and compare
+// explicit CET offset strings (+01:00) throughout.
 
 import { supabaseAdmin } from "../../../lib/supabaseClient";
 
 /**
- * Generate all possible meeting slots for the booking window
- * Rules:
- * - Monday-Thursday: 13:00, 14:00, 15:00, 16:00 (4 slots)
- * - Friday-Saturday: 14:00, 15:00 (2 slots)
- * - Sunday: No slots
- * - Minimum: 2 days from now
- * - Maximum: 3 weeks from now
+ * Per-member availability rules (hours in CET)
  */
-function generatePossibleSlots() {
+const MEMBER_HOURS = {
+  miguel: {
+    1: [13, 14, 15, 16],
+    2: [13, 14, 15, 16],
+    3: [13, 14, 15, 16],
+    4: [13, 14, 15, 16],
+    5: [14, 15],
+    6: [],
+    0: [],
+  },
+  sebastian: {
+    1: [9, 13, 14, 15, 16],
+    2: [9, 13, 14, 15, 16],
+    3: [9, 13, 14, 15, 16],
+    4: [9, 13, 14, 15, 16],
+    5: [9, 14, 15],
+    6: [15, 16],
+    0: [],
+  },
+  yannick: {
+    1: [13, 14, 15, 16],
+    2: [13, 14, 15, 16],
+    3: [13, 14, 15, 16],
+    4: [13, 14, 15, 16],
+    5: [14, 15],
+    6: [15, 16],
+    0: [],
+  },
+};
+
+/**
+ * Convert a CET datetime string (YYYY-MM-DDTHH:00:00+01:00) to its
+ * equivalent UTC ISO string for consistent comparison with Supabase data.
+ */
+function cetToUtcIso(cetString) {
+  return new Date(cetString).toISOString();
+}
+
+/**
+ * Generate all possible meeting slots for a specific team member.
+ * Uses pure date arithmetic on CET date strings — no reliance on
+ * JavaScript Date local timezone for day/hour logic.
+ */
+function generateSlotsForMember(member) {
+  const schedule = MEMBER_HOURS[member];
+  if (!schedule) return [];
+
   const slots = [];
-  const now = new Date();
 
-  // Start date: 2 days from now (in CET)
-  const startDate = new Date(now);
-  startDate.setDate(startDate.getDate() + 2);
-  startDate.setHours(0, 0, 0, 0);
+  // Get "today" in CET by formatting the current instant in Europe/Berlin
+  const nowUtc = new Date();
+  const cetFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const todayCet = cetFormatter.format(nowUtc); // "YYYY-MM-DD"
 
-  // End date: 3 weeks from now
-  const endDate = new Date(now);
-  endDate.setDate(endDate.getDate() + 21);
-  endDate.setHours(23, 59, 59, 999);
+  // Start date: 2 days from today (CET)
+  const start = addDays(todayCet, 2);
+  // End date: 21 days from today (CET)
+  const end = addDays(todayCet, 21);
 
-  // Iterate through each day
-  const currentDate = new Date(startDate);
-
-  while (currentDate <= endDate) {
-    const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-
-    let hours = [];
-
-    if (dayOfWeek >= 1 && dayOfWeek <= 4) {
-      // Monday to Thursday: 13:00-16:00
-      hours = [13, 14, 15, 16];
-    } else if (dayOfWeek === 5 || dayOfWeek === 6) {
-      // Friday and Saturday: 14:00-15:00
-      hours = [14, 15];
-    }
-    // Sunday (0): no slots
+  let current = start;
+  while (current <= end) {
+    // Get JS day of week for this CET date
+    const jsDay = getCetDayOfWeek(current);
+    const hours = schedule[jsDay] || [];
 
     for (const hour of hours) {
-      // Create a datetime in CET (Europe/Berlin)
-      const slotDate = new Date(currentDate);
-      slotDate.setHours(hour, 0, 0, 0);
-
-      // Convert to ISO string for consistent storage
-      // We'll format this as a CET datetime string
-      const year = slotDate.getFullYear();
-      const month = String(slotDate.getMonth() + 1).padStart(2, "0");
-      const day = String(slotDate.getDate()).padStart(2, "0");
       const hourStr = String(hour).padStart(2, "0");
-
-      // Store as ISO-like string with explicit CET interpretation
-      const slotDatetime = `${year}-${month}-${day}T${hourStr}:00:00+01:00`; // CET offset
+      const cetDatetime = `${current}T${hourStr}:00:00+01:00`;
 
       slots.push({
-        datetime: slotDatetime,
-        date: `${year}-${month}-${day}`,
+        datetime: cetDatetime,
+        utcIso: cetToUtcIso(cetDatetime),
+        date: current,
         time: `${hourStr}:00`,
-        dayOfWeek,
-        dayName: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][dayOfWeek],
+        dayOfWeek: jsDay,
+        dayName: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][jsDay],
       });
     }
 
-    // Move to next day
-    currentDate.setDate(currentDate.getDate() + 1);
+    current = addDays(current, 1);
   }
 
   return slots;
+}
+
+/** Add N days to a "YYYY-MM-DD" string, returns "YYYY-MM-DD" */
+function addDays(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Get JS day-of-week (0=Sun) for a "YYYY-MM-DD" string */
+function getCetDayOfWeek(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+/**
+ * Get booked/blocked UTC ISO datetime strings for a specific team member
+ */
+async function getBookedDatetimes(member) {
+  const { data: bookedSlots, error } = await supabaseAdmin
+    .from("meeting_slots")
+    .select("meeting_datetime")
+    .eq("team_member", member)
+    .neq("status", "cancelled");
+
+  if (error) {
+    console.error(`Error fetching booked slots for ${member}:`, error);
+    throw error;
+  }
+
+  return new Set(
+    (bookedSlots || []).map((slot) => new Date(slot.meeting_datetime).toISOString())
+  );
 }
 
 export default async function handler(req, res) {
@@ -80,36 +140,63 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Generate all possible slots
-    const allSlots = generatePossibleSlots();
+    const membersParam = req.query.members;
+    const members = membersParam
+      ? membersParam.split(",").map((m) => m.trim().toLowerCase()).filter((m) => MEMBER_HOURS[m])
+      : ["miguel"];
 
-    // Get already booked slots from database
-    const { data: bookedSlots, error } = await supabaseAdmin
-      .from("meeting_slots")
-      .select("meeting_datetime")
-      .neq("status", "cancelled");
+    const memberAvailableSets = [];
+    const debug = {};
 
-    if (error) {
-      console.error("Error fetching booked slots:", error);
-      return res.status(500).json({ error: "Failed to fetch availability" });
+    for (const member of members) {
+      const allSlots = generateSlotsForMember(member);
+      const bookedDatetimes = await getBookedDatetimes(member);
+
+      // Compare using UTC ISO strings on both sides
+      const availableUtcSet = new Set(
+        allSlots
+          .filter((slot) => !bookedDatetimes.has(slot.utcIso))
+          .map((slot) => slot.utcIso)
+      );
+
+      debug[member] = {
+        totalPossibleSlots: allSlots.length,
+        bookedCount: bookedDatetimes.size,
+        bookedDatetimes: [...bookedDatetimes],
+        sampleGeneratedUtc: allSlots.slice(0, 3).map((s) => s.utcIso),
+        availableAfterFilter: availableUtcSet.size,
+      };
+
+      memberAvailableSets.push(availableUtcSet);
     }
 
-    // Create a Set of booked datetime strings for fast lookup
-    const bookedDatetimes = new Set(
-      (bookedSlots || []).map((slot) => {
-        // Normalize the datetime for comparison
-        const d = new Date(slot.meeting_datetime);
-        return d.toISOString();
-      })
+    // Intersect all members' available sets
+    let intersectedUtc;
+    if (memberAvailableSets.length === 1) {
+      intersectedUtc = memberAvailableSets[0];
+    } else {
+      intersectedUtc = new Set(
+        [...memberAvailableSets[0]].filter((dt) =>
+          memberAvailableSets.every((set) => set.has(dt))
+        )
+      );
+    }
+
+    debug._intersection = { resultCount: intersectedUtc.size };
+
+    // Use first member's slots as reference for metadata, filter by intersection
+    const referenceSlots = generateSlotsForMember(members[0]);
+    const availableSlots = referenceSlots.filter((slot) =>
+      intersectedUtc.has(slot.utcIso)
     );
 
-    // Filter out booked slots
-    const availableSlots = allSlots.filter((slot) => {
-      const slotDate = new Date(slot.datetime);
-      return !bookedDatetimes.has(slotDate.toISOString());
-    });
+    debug._referenceSlots = {
+      member: members[0],
+      totalGenerated: referenceSlots.length,
+      afterIntersectionFilter: availableSlots.length,
+    };
 
-    // Group by date for easier frontend consumption
+    // Group by CET date
     const groupedByDate = {};
     for (const slot of availableSlots) {
       if (!groupedByDate[slot.date]) {
@@ -126,7 +213,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Convert to sorted array
     const availability = Object.values(groupedByDate).sort(
       (a, b) => new Date(a.date) - new Date(b.date)
     );
@@ -134,10 +220,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       availability,
       timezone: "Europe/Berlin (CET)",
-      bookingWindow: {
-        minDays: 2,
-        maxDays: 21,
-      },
+      members,
+      debug,
+      bookingWindow: { minDays: 2, maxDays: 21 },
     });
   } catch (err) {
     console.error("Error in available-slots:", err);

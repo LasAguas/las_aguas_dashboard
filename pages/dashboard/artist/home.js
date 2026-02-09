@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";  // ✅ Added useRef
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import ArtistLayout from "../../../components/artist/ArtistLayout";
 import { getMyArtistContext } from "../../../components/artist/artistData";
 import { supabase } from "../../../lib/supabaseClient";
@@ -856,6 +856,321 @@ function PostDetailsModal({ postId, onClose }) {
   );
 }
 
+/** -------- helpers for meeting scheduler -------- */
+function formatMeetingDate(dateStr, dayName) {
+  const date = new Date(dateStr + "T12:00:00");
+  const month = date.toLocaleDateString(undefined, { month: "short" });
+  const day = date.getDate();
+  return { month, day, dayName };
+}
+
+/** -------- Meeting Scheduler Panel -------- */
+function MeetingSchedulerPanel() {
+  const [userName, setUserName] = useState("");
+  const [artistEmail, setArtistEmail] = useState("");
+  const [projectLead, setProjectLead] = useState(null);
+  const [mtgLoading, setMtgLoading] = useState(true);
+
+  const [includesVideo, setIncludesVideo] = useState(false);
+  const [includesAds, setIncludesAds] = useState(false);
+
+  const [availability, setAvailability] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [topic, setTopic] = useState("");
+
+  const [showLocalTime, setShowLocalTime] = useState(false);
+  const [userTimezone, setUserTimezone] = useState("");
+
+  const [booking, setBooking] = useState(false);
+  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [mtgError, setMtgError] = useState("");
+
+  const getRequiredMembers = useCallback(() => {
+    if (!projectLead) return [];
+    const members = new Set([projectLead]);
+    if (includesVideo) members.add("yannick");
+    if (includesAds) members.add("miguel");
+    return [...members];
+  }, [projectLead, includesVideo, includesAds]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const { artistId } = await getMyArtistContext();
+        const { data: artist } = await supabase
+          .from("artists")
+          .select("project_lead")
+          .eq("id", artistId)
+          .single();
+        setProjectLead(artist?.project_lead || "sebastian");
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        setArtistEmail(user.email || "");
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+        setUserName(profile?.full_name || user.user_metadata?.full_name || "");
+      } catch (err) {
+        console.error("Failed to load meeting data:", err);
+      }
+    }
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    try {
+      setUserTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } catch {
+      setUserTimezone("Unknown");
+    }
+  }, []);
+
+  useEffect(() => {
+    const members = getRequiredMembers();
+    if (members.length === 0) return;
+
+    async function fetchAvailability() {
+      setMtgLoading(true);
+      setMtgError("");
+      setSelectedDate(null);
+      setSelectedSlot(null);
+      try {
+        const res = await fetch(`/api/meetings/available-slots?members=${members.join(",")}`);
+        if (!res.ok) throw new Error("Failed to fetch availability");
+        const data = await res.json();
+        const todayStr = new Date().toLocaleDateString("en-CA");
+        setAvailability((data.availability || []).filter((day) => day.date > todayStr));
+      } catch (err) {
+        console.error("Error fetching availability:", err);
+        setMtgError("Failed to load available times.");
+      } finally {
+        setMtgLoading(false);
+      }
+    }
+    fetchAvailability();
+  }, [getRequiredMembers]);
+
+  const formatTime = (datetime, time) => {
+    if (!showLocalTime) return time;
+    try {
+      return new Date(datetime).toLocaleTimeString(undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: userTimezone,
+      });
+    } catch {
+      return time;
+    }
+  };
+
+  async function handleBook() {
+    if (!selectedSlot) return;
+    setBooking(true);
+    setMtgError("");
+    try {
+      const members = getRequiredMembers();
+      const res = await fetch("/api/meetings/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datetime: selectedSlot.datetime, email: artistEmail, members, topic }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 409) {
+          setMtgError(data.error || "This slot was just booked. Please select another time.");
+          setSelectedSlot(null);
+          const refreshRes = await fetch(`/api/meetings/available-slots?members=${members.join(",")}`);
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json();
+            const todayStr = new Date().toLocaleDateString("en-CA");
+            setAvailability((refreshData.availability || []).filter((d) => d.date > todayStr));
+          }
+        } else {
+          setMtgError(data.error || "Failed to book meeting.");
+        }
+        return;
+      }
+      setBookingSuccess(true);
+    } catch (err) {
+      console.error("Booking error:", err);
+      setMtgError("Something went wrong. Please try again.");
+    } finally {
+      setBooking(false);
+    }
+  }
+
+  // ── Success view ──
+  if (bookingSuccess) {
+    return (
+      <Panel title="Schedule a Meeting">
+        <div className="text-center py-2">
+          <div className="w-14 h-14 bg-[#599b40] rounded-full flex items-center justify-center mx-auto mb-3">
+            <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold text-[#33296b] mb-1">Meeting Booked!</h3>
+          <p className="text-sm text-[#33296b]/80 mb-4">
+            We&apos;ll send details to <strong>{artistEmail}</strong>.
+          </p>
+          <div className="bg-white/60 rounded-xl p-3 mb-4 text-left text-sm text-[#33296b]">
+            <p><strong>Date:</strong> {new Date(selectedSlot.datetime).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+            <p className="mt-1"><strong>Time:</strong> {formatTime(selectedSlot.datetime, selectedSlot.time)} ({showLocalTime ? userTimezone : "CET"})</p>
+            <p className="mt-1"><strong>Duration:</strong> 1 hour</p>
+            {topic.trim() && <p className="mt-1"><strong>Topic:</strong> {topic}</p>}
+          </div>
+          <button
+            onClick={() => { setBookingSuccess(false); setSelectedDate(null); setSelectedSlot(null); setTopic(""); setIncludesVideo(false); setIncludesAds(false); }}
+            className="px-4 py-2 rounded-xl text-sm font-semibold bg-[#33296b] text-white hover:opacity-90 transition-opacity"
+          >
+            Schedule Another
+          </button>
+        </div>
+      </Panel>
+    );
+  }
+
+  // ── Main view ──
+  return (
+    <Panel title="Schedule a Meeting">
+      <p className="text-sm text-[#33296b]/80 mb-4">
+        Pick a date and time to schedule a meeting with the team.
+        {" "}Times shown in <strong>{showLocalTime ? userTimezone : "CET"}</strong>.
+      </p>
+
+      {userTimezone && userTimezone !== "Europe/Berlin" && (
+        <div className="mb-4">
+          <label className="inline-flex items-center text-sm text-[#33296b] cursor-pointer">
+            <input type="checkbox" checked={showLocalTime} onChange={(e) => setShowLocalTime(e.target.checked)} className="mr-2 accent-[#33296b]" />
+            Show in my timezone ({userTimezone})
+          </label>
+        </div>
+      )}
+
+      {/* Topic checkboxes */}
+      <div className="mb-4 p-3 bg-white/40 rounded-xl">
+        <div className="text-xs font-semibold text-[#33296b] mb-2">Will this meeting include questions about:</div>
+        <div className="flex flex-col gap-2">
+          <label className="inline-flex items-center text-sm text-[#33296b] cursor-pointer">
+            <input type="checkbox" checked={includesVideo} onChange={(e) => setIncludesVideo(e.target.checked)} className="mr-2 accent-[#33296b] w-4 h-4" />
+            Video (filming, editing, visuals)
+          </label>
+          <label className="inline-flex items-center text-sm text-[#33296b] cursor-pointer">
+            <input type="checkbox" checked={includesAds} onChange={(e) => setIncludesAds(e.target.checked)} className="mr-2 accent-[#33296b] w-4 h-4" />
+            Ads (campaigns, targeting, budget)
+          </label>
+        </div>
+        <p className="text-[11px] text-[#33296b]/50 mt-2">This helps us find times when the right team members are available.</p>
+      </div>
+
+      {mtgError && (
+        <div className="mb-3 text-sm text-red-700 bg-red-100 border border-red-300 rounded-lg px-3 py-2">{mtgError}</div>
+      )}
+
+      {mtgLoading ? (
+        <div className="text-center py-6">
+          <div className="animate-spin w-6 h-6 border-2 border-[#33296b] border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-xs text-[#33296b]/70">Loading times…</p>
+        </div>
+      ) : availability.length === 0 ? (
+        <p className="text-sm text-[#33296b]/70 py-4 text-center">No available slots right now.</p>
+      ) : (
+        <>
+          {/* Date pills */}
+          <div className="mb-4">
+            <div className="text-xs font-semibold text-[#33296b] mb-2">Select a date</div>
+            <div className="flex gap-1.5 overflow-x-auto pb-2">
+              {availability.map((day) => {
+                const { month, day: dayNum, dayName } = formatMeetingDate(day.date, day.dayName);
+                const isSelected = selectedDate === day.date;
+                return (
+                  <button
+                    key={day.date}
+                    onClick={() => { setSelectedDate(day.date); setSelectedSlot(null); }}
+                    className={[
+                      "flex-shrink-0 w-[64px] py-2.5 rounded-xl border-2 transition-all text-center",
+                      isSelected ? "border-[#33296b] bg-[#33296b] text-white" : "border-[#33296b]/25 bg-white/60 text-[#33296b] hover:border-[#33296b]/50",
+                    ].join(" ")}
+                  >
+                    <div className="text-[10px] font-medium">{dayName.slice(0, 3)}</div>
+                    <div className="text-xl font-bold leading-tight">{dayNum}</div>
+                    <div className="text-[10px]">{month}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Time grid */}
+          {selectedDate && (
+            <div className="mb-4">
+              <div className="text-xs font-semibold text-[#33296b] mb-2">Select a time</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {availability.find((d) => d.date === selectedDate)?.slots.map((slot) => {
+                  const isSelected = selectedSlot?.datetime === slot.datetime;
+                  return (
+                    <button
+                      key={slot.datetime}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={[
+                        "py-2 rounded-xl border-2 transition-all font-medium text-sm",
+                        isSelected ? "border-[#33296b] bg-[#33296b] text-white" : "border-[#33296b]/25 bg-white/60 text-[#33296b] hover:border-[#33296b]/50",
+                      ].join(" ")}
+                    >
+                      {formatTime(slot.datetime, slot.time)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Topic + email + confirm */}
+          {selectedSlot && (
+            <div className="border-t border-[#33296b]/15 pt-4 mt-1">
+              <div className="mb-3">
+                <label className="block text-xs font-semibold text-[#33296b] mb-1.5">What is this meeting about?</label>
+                <textarea
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g. Discuss upcoming release strategy, review content calendar…"
+                  className="w-full rounded-xl border border-gray-300 bg-white text-sm p-2.5 leading-relaxed focus:ring-2 focus:ring-[#33296b]/20 focus:border-[#33296b]/40 min-h-[70px] resize-none"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block text-xs font-semibold text-[#33296b] mb-1.5">Send confirmation to</label>
+                <input
+                  type="email"
+                  value={artistEmail}
+                  onChange={(e) => setArtistEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full rounded-xl border border-gray-300 bg-white text-sm p-2.5 focus:ring-2 focus:ring-[#33296b]/20 focus:border-[#33296b]/40"
+                />
+              </div>
+              <div className="bg-white/60 rounded-xl p-3 mb-3 text-sm text-[#33296b]">
+                <p><strong>Selected:</strong> {new Date(selectedSlot.datetime).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })} at {formatTime(selectedSlot.datetime, selectedSlot.time)}</p>
+                <p className="mt-1"><strong>Duration:</strong> 1 hour</p>
+              </div>
+              <button
+                onClick={handleBook}
+                disabled={booking}
+                className="w-full py-2.5 rounded-xl text-sm font-bold bg-[#33296b] text-white hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-opacity"
+              >
+                {booking ? "Booking…" : "Book Meeting"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
 /** -------- main page -------- */
 export default function ArtistHomePage() {
   const [loading, setLoading] = useState(true);
@@ -1139,6 +1454,11 @@ export default function ArtistHomePage() {
           </Panel>
         </div>
       )}
+
+      {/* Meeting Scheduler — always visible below the grid */}
+      <div className="mt-4">
+        <MeetingSchedulerPanel />
+      </div>
 
       {selectedPostId && (
         <PostDetailsModal postId={selectedPostId} onClose={() => setSelectedPostId(null)} />

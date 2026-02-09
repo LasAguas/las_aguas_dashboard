@@ -1,16 +1,25 @@
 // pages/api/meetings/manage-slots.js
 // Manage meeting slots - block/unblock times, get all meetings
+// Supports per-team-member calendars
 
 import { supabaseAdmin } from "../../../lib/supabaseClient";
 
 export default async function handler(req, res) {
-  // GET: Fetch all meetings and blocked slots
+  // GET: Fetch all meetings and blocked slots (optionally filtered by team member)
   if (req.method === "GET") {
     try {
-      const { data: slots, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from("meeting_slots")
         .select("*")
         .order("meeting_datetime", { ascending: true });
+
+      // Filter by team member if specified
+      const member = req.query.member;
+      if (member) {
+        query = query.eq("team_member", member.toLowerCase());
+      }
+
+      const { data: slots, error } = await query;
 
       if (error) {
         console.error("Error fetching meeting slots:", error);
@@ -24,13 +33,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // POST: Block a time slot (admin-only)
+  // POST: Block a time slot for a specific team member
   if (req.method === "POST") {
-    const { datetime, reason } = req.body;
+    const { datetime, reason, team_member } = req.body;
 
     if (!datetime) {
       return res.status(400).json({ error: "datetime is required" });
     }
+
+    const member = (team_member || "miguel").toLowerCase();
 
     try {
       const meetingDatetime = new Date(datetime);
@@ -38,11 +49,12 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Invalid datetime format" });
       }
 
-      // Check if slot already exists
+      // Check if slot already exists for this member
       const { data: existing, error: checkError } = await supabaseAdmin
         .from("meeting_slots")
         .select("id, status")
         .eq("meeting_datetime", meetingDatetime.toISOString())
+        .eq("team_member", member)
         .single();
 
       if (existing) {
@@ -61,6 +73,7 @@ export default async function handler(req, res) {
             attendee_email: "blocked@internal",
             status: "blocked",
             notes: reason || "Blocked by admin",
+            team_member: member,
           },
         ])
         .select()

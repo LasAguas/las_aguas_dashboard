@@ -348,14 +348,28 @@ function MeetingsCalendarSection() {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, 1 = next week, etc.
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedMember, setSelectedMember] = useState("miguel");
 
-  // Load slots
+  const TEAM_MEMBERS = [
+    { value: "miguel", label: "Miguel" },
+    { value: "sebastian", label: "Sebastian" },
+    { value: "yannick", label: "Yannick" },
+  ];
+
+  // Per-member availability hours (matches available-slots.js MEMBER_HOURS)
+  const MEMBER_HOURS = {
+    miguel:    { 1: [13,14,15,16], 2: [13,14,15,16], 3: [13,14,15,16], 4: [13,14,15,16], 5: [14,15], 6: [], 0: [] },
+    sebastian: { 1: [9,13,14,15,16], 2: [9,13,14,15,16], 3: [9,13,14,15,16], 4: [9,13,14,15,16], 5: [9,14,15], 6: [15,16], 0: [] },
+    yannick:   { 1: [13,14,15,16], 2: [13,14,15,16], 3: [13,14,15,16], 4: [13,14,15,16], 5: [14,15], 6: [15,16], 0: [] },
+  };
+
+  // Load slots for selected member
   const loadSlots = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/meetings/manage-slots");
+      const res = await fetch(`/api/meetings/manage-slots?member=${selectedMember}`);
       if (!res.ok) throw new Error("Failed to fetch slots");
       const data = await res.json();
       setSlots(data.slots || []);
@@ -369,17 +383,23 @@ function MeetingsCalendarSection() {
 
   useEffect(() => {
     loadSlots();
-  }, []);
+  }, [selectedMember]);
 
   // Generate weeks data
+  // Use local dates (setHours(12) to avoid DST edge cases) and format
+  // dateStr as YYYY-MM-DD in local time so it matches the CET strings
+  // we build when blocking slots.
   const generateWeeksData = () => {
     const weeks = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    const pad = (n) => String(n).padStart(2, "0");
+    const localDateStr = (d) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
     for (let w = 0; w < 3; w++) {
       const weekStart = new Date(today);
-      // Get Monday of the current week + offset
       const dayOfWeek = weekStart.getDay();
       const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
       weekStart.setDate(weekStart.getDate() + mondayOffset + w * 7);
@@ -390,7 +410,7 @@ function MeetingsCalendarSection() {
         date.setDate(date.getDate() + d);
         days.push({
           date,
-          dateStr: date.toISOString().split("T")[0],
+          dateStr: localDateStr(date),
           dayName: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][d],
           dayNum: date.getDate(),
           month: date.toLocaleDateString("en-US", { month: "short" }),
@@ -406,31 +426,34 @@ function MeetingsCalendarSection() {
   const weeks = generateWeeksData();
   const currentWeek = weeks[weekOffset];
 
-  // Get slot hours based on day (Mon-Thu: 13-16, Fri-Sat: 14-15, Sun: none)
+  // Get slot hours based on day AND selected member
   const getSlotHours = (dayIndex) => {
-    if (dayIndex < 4) return [13, 14, 15, 16]; // Mon-Thu
-    if (dayIndex < 6) return [14, 15]; // Fri-Sat
-    return []; // Sunday
+    // dayIndex: 0=Mon, 1=Tue, ... 6=Sun → convert to JS day (1=Mon...0=Sun)
+    const jsDay = dayIndex === 6 ? 0 : dayIndex + 1;
+    return MEMBER_HOURS[selectedMember]?.[jsDay] || [];
   };
 
+  // All possible hours across all members for the grid rows
+  const allHours = [9, 13, 14, 15, 16];
+
   // Find slot for a specific datetime
+  // Compare by building the same CET string the admin sends when blocking,
+  // then converting both sides to UTC ISO for an apples-to-apples match.
   const findSlot = (dateStr, hour) => {
+    const targetUtc = new Date(`${dateStr}T${String(hour).padStart(2, "0")}:00:00+01:00`).toISOString();
     return slots.find((s) => {
-      const slotDate = new Date(s.meeting_datetime);
-      const slotDateStr = slotDate.toISOString().split("T")[0];
-      const slotHour = slotDate.getHours();
-      return slotDateStr === dateStr && slotHour === hour;
+      return new Date(s.meeting_datetime).toISOString() === targetUtc;
     });
   };
 
-  // Block a slot
+  // Block a slot for the selected member
   const blockSlot = async (dateStr, hour) => {
     const datetime = `${dateStr}T${String(hour).padStart(2, "0")}:00:00+01:00`;
     try {
       const res = await fetch("/api/meetings/manage-slots", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ datetime, reason: "Blocked by admin" }),
+        body: JSON.stringify({ datetime, reason: "Blocked by admin", team_member: selectedMember }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -465,9 +488,6 @@ function MeetingsCalendarSection() {
     }
   };
 
-  // Get all unique hours across all days for the grid
-  const allHours = [13, 14, 15, 16];
-
   return (
     <Section
       title="Meeting Schedule"
@@ -484,6 +504,20 @@ function MeetingsCalendarSection() {
           {error}
         </div>
       )}
+
+      {/* Team member selector */}
+      <div className="mb-4">
+        <label className="text-xs font-semibold text-[#33286a]/70 mr-2">Calendar for:</label>
+        <select
+          value={selectedMember}
+          onChange={(e) => setSelectedMember(e.target.value)}
+          className="text-sm border border-black/15 rounded-lg px-3 py-1.5 bg-white text-[#33286a] font-medium"
+        >
+          {TEAM_MEMBERS.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Week navigation */}
       <div className="flex items-center justify-between mb-4">
