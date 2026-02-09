@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { ensureFreshTikTokToken } from "../../../lib/tiktokRefresh";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -94,21 +95,14 @@ async function snapshotOnePost({ postId }) {
   const videoId = extractTikTokVideoIdFromUrl(post.tiktok_url);
   if (!videoId) return { ok: false, reason: "Could not parse video id from tiktok_url" };
 
-  // Load token for the artist
-  const { data: authRow, error: authErr } = await supabaseAdmin
-    .from("artist_social_auth_status")
-    .select("access_token, refresh_token, access_expires_at")
-    .eq("artist_id", post.artist_id)
-    .eq("platform", "tiktok")
-    .eq("status", "ok")
-    .single();
-
-  if (authErr || !authRow?.access_token) {
-    return { ok: false, reason: "No TikTok token for this artist", detail: authErr };
+  // Ensure token is fresh (auto-refresh if expired)
+  const tokenResult = await ensureFreshTikTokToken(post.artist_id);
+  if (!tokenResult.ok) {
+    return { ok: false, reason: tokenResult.reason, detail: tokenResult.detail };
   }
 
   const metrics = await fetchTikTokVideoMetrics({
-    accessToken: authRow.access_token,
+    accessToken: tokenResult.access_token,
     videoId,
   });
 
