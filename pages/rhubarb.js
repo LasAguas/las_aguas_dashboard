@@ -98,7 +98,7 @@ const ARTISTS = [
     epk: null,
     setup: "Solo vocals + guitar, or with small accompanying ensemble",
     links: {
-      youtube: "https://youtube.com/@TODO",
+      youtube: "https://www.youtube.com/@cataroh",
       spotify: "https://open.spotify.com/artist/7G090Dm7RJ1lb7riAprrxq",
       apple: "https://music.apple.com/gb/artist/cataroh/1630499078",
       tidal: "https://tidal.com/artist/32761795/u",
@@ -182,7 +182,7 @@ const ARTISTS = [
   },
   {
     name: "Silver Omen",
-    subtitle: "Europop / Queer Dance",
+    subtitle: "Europop / Dance",
     origin: "Argentina",
     description:
       "Silver Omen is an Argentine artist based in Berlin making English-language Dance-Pop oriented at the queer dance scene. This is probably not what you're looking for for a traditional restaurant opening, but depending on the bar concept it could be a higher-energy fit.",
@@ -273,7 +273,7 @@ export default function RhubarbPage() {
                   The show at Cafe at Marla is the only &quot;Presented by Las Aguas&quot; live music
                   event we have produced to date. This was a fully Las Aguas-branded event where we
                   were brought in to help the launching of the cafe so we curated the line-up,
-                  handled promotion, and managed it from start to finish.
+                  filed the show, and managed it from start to finish.
                 </p>
 
                 <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
