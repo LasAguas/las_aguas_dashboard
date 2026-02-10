@@ -54,6 +54,58 @@ function ProgressDial({ pct }) {
   );
 }
 
+function FontsDownloadPanel({ artistId }) {
+  const [fonts, setFonts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!artistId) return;
+    (async () => {
+      const { data, error } = await supabase.storage
+        .from("artist-onboarding")
+        .list(`${artistId}/fonts`, { limit: 100 });
+      if (error) {
+        console.error("Failed to list fonts:", error);
+        setLoading(false);
+        return;
+      }
+      setFonts((data || []).filter((f) => f.name && f.name !== ".emptyFolderPlaceholder"));
+      setLoading(false);
+    })();
+  }, [artistId]);
+
+  function getFontUrl(name) {
+    const { data } = supabase.storage
+      .from("artist-onboarding")
+      .getPublicUrl(`${artistId}/fonts/${name}`);
+    return data?.publicUrl || "";
+  }
+
+  if (loading) return null;
+  if (fonts.length === 0) return null;
+
+  return (
+    <div className="artist-panel p-4">
+      <h2 className="text-sm font-semibold mb-3">Your Fonts</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+        {fonts.map((f) => (
+          <a
+            key={f.name}
+            href={getFontUrl(f.name)}
+            download={f.name}
+            className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium truncate hover:bg-gray-50 transition-colors"
+          >
+            <svg className="w-4 h-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span className="truncate">{f.name}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Collapsible({ title, completed, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -885,6 +937,8 @@ export default function OnboardingPage() {
           <div className="artist-panel">
             <ProgressDial pct={completion.pct} />
           </div>
+
+          <FontsDownloadPanel artistId={artistId} />
 
           {sections.map((s) => {
             // 1) Socials connections
