@@ -48,26 +48,24 @@ function LazyVideo({ src, ...props }) {
    DATA
    ─────────────────────────────────────────────────────── */
 
-// Videos for VAMOS A BAILAR / CORP. events
+// Videos for CORP. at Junction Bar
 const EVENT_VIDEOS_CORP = [
   { title: "CORP. Live at Junction Bar", path: "CORP Live at Junction Bar.mp4" },
   // TODO: add more 9:16 event reels here
 ];
 
-// Videos for Cafe at Marla event
-const EVENT_VIDEOS_MARLA = [
-  // TODO: add 9:16 reels from the Marla event
-  // { title: "Marla Event Reel 1", path: "marla-reel-1.mp4" },
+// Videos for VAMOS A BAILAR at Junction Bar
+const EVENT_VIDEOS_VAB = [
+  { title: "Conexion Salsa Live", path: "Conexion Salsa Reel.mp4" },
 ];
 
-// Images for Saba Lou listening party carousel
-const SABA_LOU_IMAGES = [
-  // TODO: replace with real image paths from /public or Supabase
-  "/rhubarb/saba-lou-1.jpg",
-  "/rhubarb/saba-lou-2.jpg",
-  "/rhubarb/saba-lou-3.jpg",
-  "/rhubarb/saba-lou-4.jpg",
+// Videos for Cafe at Marla event
+const EVENT_VIDEOS_MARLA = [
+  { title: "Cafe at Marla Event Reel", path: "Cafe at Marla Event Reel.mp4" },
 ];
+
+// Saba Lou listening party image
+const SABA_LOU_IMAGE = "/rhubarb/Saba-Lou-Listening-Party.JPG";
 
 // Artist data
 const ARTISTS = [
@@ -76,56 +74,55 @@ const ARTISTS = [
     subtitle: "Salsa Live Band",
     origin: "Germany / Cuba / Colombia",
     description:
-      "CONEXION is a large live salsa band delivering high-energy, high-level performances. They are ideal for a lively, dancing-oriented event. Due to the size of the ensemble and volume, they may not be the best fit for a quieter restaurant opening, but would be perfect for a bar launch or party setting.",
-    image: "/rhubarb/conexion.jpg",
+      "CONEXION is a large live salsa band delivering high-energy performances. They are ideal for a lively, dancing-oriented event. Due to the size of the ensemble and volume, they may not be the best fit for a quieter restaurant opening, but would be perfect for a bar launch or party setting.",
+    image: "/rhubarb/CONEXION-Salsa.JPG",
     epk: null,
-    setup: "8–12 musicians: horns, percussion, bass, piano, vocals",
+    setup: "6 musicians: trombone, percussion, drums, bass, piano, vocals",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@Conexionsalsa",
+      spotify: "https://open.spotify.com/artist/1GYEE0p9IdRek9nq5hctgQ",
+      apple: "https://music.apple.com/gb/artist/conexi%C3%B3n-salsa-live-band/1518567010",
+      tidal: "https://tidal.com/artist/19792344/u",
+      instagram: "https://www.instagram.com/conexionsalsa/",
+      tiktok: "https://www.tiktok.com/@conexionsalsa",
+      website: "https://conexion-salsa.com/",
     },
   },
   {
     name: "Cataroh",
     subtitle: "Singer-Songwriter in Spanish",
-    origin: "Chile (based in Hamburg)",
+    origin: "Chile",
     description:
-      "Cataroh is a Chilean singer-songwriter based in Hamburg, performing in Spanish. Her music creates a relaxed, intimate atmosphere — perfect for a more laid-back opening event. The set-up is flexible depending on available facilities, ranging from solo acoustic to a small ensemble.",
-    image: "/rhubarb/cataroh.jpg",
-    epk: "https://TODO-epk-link.com",
+      "Cataroh is a Chilean singer-songwriter based in Hamburg, performing in Spanish and English. Her music, a mix of RnB and Pop in Spanish, creates a relaxed, intimate atmosphere — perfect for a more laid-back opening event. The set-up is flexible depending on available facilities, ranging from solo acoustic to a small ensemble.",
+    image: "/rhubarb/Cataroh-Album.jpg",
+    epk: null,
     setup: "Solo vocals + guitar, or with small accompanying ensemble",
     links: {
       youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      spotify: "https://open.spotify.com/artist/7G090Dm7RJ1lb7riAprrxq",
+      apple: "https://music.apple.com/gb/artist/cataroh/1630499078",
+      tidal: "https://tidal.com/artist/32761795/u",
+      instagram: "https://www.instagram.com/cataroh/",
+      tiktok: "https://www.tiktok.com/@cataroh",
     },
   },
   {
     name: "Emetres",
     subtitle: "Pop in Spanish",
-    origin: "Venezuelan / Catalan",
+    origin: "Venezuelan / Catalunya",
     description:
-      "Emetres makes wholesome, warm pop music in Spanish with Venezuelan and Catalan roots. This is great for a more relaxed energy at an opening event. The set-up is flexible depending on the available facilities and can be adapted to fit the space.",
-    image: "/rhubarb/emetres.jpg",
-    epk: "https://TODO-epk-link.com",
-    setup: "Solo vocals + guitar/keys, or with backing musicians",
+      "Emetres makes wholesome, warm pop music in Spanish with Venezuelan and Catalan roots, like a pop-leaning version of the Marias. This is great for a relaxed opening event or a calm bar. The set-up is flexible depending on the available facilities and can be adapted to fit the space.",
+    image: "/rhubarb/Emetres-Presspic.JPG",
+    epk: null,
+    setup: "Duo: vocals + guitar/keys, or with backing musicians. Best with acoustic piano if possible",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@soyemetres",
+      spotify: "https://open.spotify.com/artist/0kyn948FvzvuJ5a2CJkUP3",
+      apple: "https://music.apple.com/gb/artist/emetres/1585897181",
+      tidal: "https://tidal.com/artist/8052967/u",
+      instagram: "https://www.instagram.com/soyemetres/",
+      tiktok: "https://www.tiktok.com/@soyemetres",
+      website: "https://www.soyemetres.com/",
     },
   },
   {
@@ -133,18 +130,17 @@ const ARTISTS = [
     subtitle: "Modern Latin Folk",
     origin: "Colombia",
     description:
-      "Aura performs modern music with strong roots in traditional Andean music and Latin folk. The set-up would be guitar and vocals, potentially accompanied by a double bassist who is based in Hamburg. A beautiful choice for an event that wants to feel both contemporary and culturally rich.",
-    image: "/rhubarb/aura.jpg",
-    epk: "https://TODO-epk-link.com",
-    setup: "Vocals + guitar, optionally with double bass",
+      "Aura performs singer-songwriter music with strong roots in traditional Andean music and Latin rock, think Cerati meets Natalia Lafourcade. The set-up would be guitar and vocals, potentially accompanied by a double bassist who is based in Hamburg. This would be my choice for an event that wants to feel both contemporary and culturally rich.",
+    image: "/rhubarb/Aura-at-Las-Aguas.jpeg",
+    epk: "/rhubarb/Aura EPK ENG.pdf",
+    setup: "Vocals + Guitar, optionally with double bass",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@AuraSofiaMusica",
+      spotify: "https://open.spotify.com/artist/3vqTj29POCaPTtlFzZKRTl",
+      apple: "https://music.apple.com/gb/artist/aura/1744347651",
+      tidal: "https://tidal.com/artist/48071512/u",
+      instagram: "https://www.instagram.com/aurasofiasotelo/",
+      tiktok: "https://www.tiktok.com/@aurasofiamusica",
     },
   },
   {
@@ -153,55 +149,54 @@ const ARTISTS = [
     origin: "Germany (audiences in Latin America, especially Brazil & Chile)",
     description:
       "Saba Lou doesn't sing in Spanish, but she has a strong audience in Germany and has played shows in Hamburg before. She also has a large following in Latin America, especially Brazil and Chile. A versatile and well-known artist who would bring a draw to any event.",
-    image: "/rhubarb/saba-lou.jpg",
-    epk: "https://TODO-epk-link.com",
-    setup: "Vocals + band (flexible configuration)",
+    image: "/rhubarb/Presspic-from-Store.JPG",
+    epk: "https://freight.cargo.site/m/B2560573123844327582325990100444/Saba-Lou-EPK.pdf",
+    setup: "Solo Vocals + Guitar (flexibly with more band members)",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@sabalouland",
+      spotify: "https://open.spotify.com/artist/4FctzCzQuNPwtblJLp7LFQ",
+      apple: "https://music.apple.com/gb/artist/saba-lou/568050451",
+      tidal: "https://tidal.com/artist/8785220/u",
+      instagram: "https://www.instagram.com/sabalouland/",
+      tiktok: "https://www.tiktok.com/@sabalouland",
+      website: "https://sabalouland.com/",
     },
   },
   {
     name: "Mercedes & Marxx",
     subtitle: "Latin Punk / Post-Pop",
-    origin: "Latin America (based in Berlin)",
+    origin: "Latin America",
     description:
-      "Mercedes & Marxx make punk and post-pop music. This may not be the typical choice for a restaurant or bar opening, but depending on the concept and energy you're going for, they could bring an exciting, unconventional edge to the event.",
-    image: "/rhubarb/mercedes-marxx.jpg",
+      "Mercedes & Marxx make punk and post-pop music. This might not be the choice for a restaurant or bar opening, but depending on the concept and energy you're going for, they could bring an cool, gritty edge to the event.",
+    image: "/rhubarb/Mercedes-and-Marxx.jpeg",
     epk: null,
-    setup: "Duo: vocals + guitar/bass, or with full band",
+    setup: "4-Person band, drums, bass, lead vocalist with guitar",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@MercedesMarxx",
+      spotify: "https://open.spotify.com/artist/11Biva5YYueJ1lSg2UzoS8",
+      apple: "https://music.apple.com/gb/artist/mercedes-marxx/1674920419",
+      tidal: "https://tidal.com/artist/46038973/u",
+      instagram: "https://www.instagram.com/mercedes.marxx/",
+      tiktok: "https://www.tiktok.com/@mercedes_marxx",
     },
   },
   {
     name: "Silver Omen",
     subtitle: "Europop / Queer Dance",
-    origin: "Argentina (based in Berlin)",
+    origin: "Argentina",
     description:
-      "Silver Omen is an Argentine artist based in Berlin making europop oriented at the queer dance scene. This is probably not what you're looking for for a traditional restaurant opening, but depending on the bar concept it could be an exciting fit.",
-    image: "/rhubarb/silver-omen.jpg",
-    epk: null,
+      "Silver Omen is an Argentine artist based in Berlin making English-language Dance-Pop oriented at the queer dance scene. This is probably not what you're looking for for a traditional restaurant opening, but depending on the bar concept it could be a higher-energy fit.",
+    image: "/rhubarb/Silver-Omen.jpg",
+    epk: "https://silveromen.com/epk",
     setup: "Solo electronic performance with vocals",
     links: {
-      youtube: "https://youtube.com/@TODO",
-      spotify: "https://open.spotify.com/artist/TODO",
-      apple: "https://music.apple.com/artist/TODO",
-      tidal: "https://tidal.com/artist/TODO",
-      instagram: "https://instagram.com/TODO",
-      tiktok: "https://tiktok.com/@TODO",
-      website: "https://TODO.com",
+      youtube: "https://www.youtube.com/@silveromen.mp4",
+      spotify: "https://open.spotify.com/artist/04PVbCwPl3UEsNnVJUZbUl",
+      apple: "https://music.apple.com/gb/artist/silver-omen/1820988833",
+      tidal: "https://tidal.com/artist/57012043/u",
+      instagram: "https://www.instagram.com/silver.omen",
+      tiktok: "https://www.tiktok.com/@silver.omen",
+      website: "https://silveromen.com/",
     },
   },
 ];
@@ -229,7 +224,7 @@ export default function RhubarbPage() {
   const [urlMap, setUrlMap] = useState({});
 
   useEffect(() => {
-    const all = [...EVENT_VIDEOS_CORP, ...EVENT_VIDEOS_MARLA];
+    const all = [...EVENT_VIDEOS_CORP, ...EVENT_VIDEOS_VAB, ...EVENT_VIDEOS_MARLA];
     const next = {};
     for (const item of all) {
       next[item.path] = getPublicUrl(item.path);
@@ -269,21 +264,20 @@ export default function RhubarbPage() {
               Previous Events
             </h2>
 
-            {/* --- VAMOS A BAILAR / CORP. at Junction Bar --- */}
-            <div className="rh-event-block">
-              <h3 className="rh-event-title">VAMOS A BAILAR &amp; CORP. at Junction Bar</h3>
-              <p className="rh-event-text">
-                For the VAMOS A BAILAR and CORP. shows at Junction Bar, Las Aguas handled the full
-                marketing and videography for the events. We coordinated the bookings with the
-                artists, managed on-site operations including merch tables and newsletter sign-ups,
-                and produced all promotional video content. These events demonstrate our end-to-end
-                capability — from artist liaison and event set-up through to content creation and
-                post-event marketing.
-              </p>
+            {/* --- Row 1: 3 reel events in columns --- */}
+            <div className="rh-events-row-3">
+              {/* Cafe at Marla */}
+              <div className="rh-event-block">
+                <h3 className="rh-event-title">Cafe at Marla — Presented by Las Aguas</h3>
+                <p className="rh-event-text">
+                  The show at Cafe at Marla is the only &quot;Presented by Las Aguas&quot; live music
+                  event we have produced to date. This was a fully Las Aguas-branded event where we
+                  were brought in to help the launching of the cafe so we curated the line-up,
+                  handled promotion, and managed it from start to finish.
+                </p>
 
-              <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-                {EVENT_VIDEOS_CORP.length > 0 ? (
-                  EVENT_VIDEOS_CORP.map((reel) => (
+                <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  {EVENT_VIDEOS_MARLA.map((reel) => (
                     <article className="rh-card" key={reel.path}>
                       <div className="video-frame-9x16">
                         {urlMap[reel.path] ? (
@@ -301,78 +295,99 @@ export default function RhubarbPage() {
                       </div>
                       <h4 className="rh-card-title">{reel.title}</h4>
                     </article>
-                  ))
-                ) : (
-                  <p style={{ color: "#a89fe4", fontStyle: "italic" }}>
-                    Video reels coming soon — add paths to EVENT_VIDEOS_CORP array.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* --- Cafe at Marla --- */}
-            <div className="rh-event-block" style={{ marginTop: "3rem" }}>
-              <h3 className="rh-event-title">Cafe at Marla — Presented by Las Aguas</h3>
-              <p className="rh-event-text">
-                The show at Cafe at Marla is the only &quot;Presented by Las Aguas&quot; live music
-                event we have produced to date. This was a fully Las Aguas-branded event where we
-                curated the line-up, handled promotion, and managed the evening from start to
-                finish.
-              </p>
-
-              <div className="music-grid" style={{ marginTop: "1.5rem" }}>
-                {EVENT_VIDEOS_MARLA.length > 0 ? (
-                  EVENT_VIDEOS_MARLA.map((reel) => (
-                    <article className="rh-card" key={reel.path}>
-                      <div className="video-frame-9x16">
-                        {urlMap[reel.path] ? (
-                          <LazyVideo
-                            src={urlMap[reel.path]}
-                            muted
-                            playsInline
-                            controls
-                            preload="metadata"
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                          />
-                        ) : (
-                          <div style={{ color: "#fff", padding: "1rem" }}>Loading...</div>
-                        )}
-                      </div>
-                      <h4 className="rh-card-title">{reel.title}</h4>
-                    </article>
-                  ))
-                ) : (
-                  <p style={{ color: "#a89fe4", fontStyle: "italic" }}>
-                    Video reels coming soon — add paths to EVENT_VIDEOS_MARLA array.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* --- Saba Lou Listening Party at Rhinoçeros Bar --- */}
-            <div className="rh-event-block" style={{ marginTop: "3rem" }}>
-              <h3 className="rh-event-title">
-                Saba Lou — Listening Party at Rhino&ccedil;eros Bar, Berlin
-              </h3>
-              <p className="rh-event-text">
-                We organised a listening party for Saba Lou at Rhino&ccedil;eros Bar in Berlin. The
-                event brought together fans, press, and industry in an intimate setting to preview
-                new material.
-              </p>
-
-              {/* Image carousel */}
-              <div className="rh-carousel" style={{ marginTop: "1.5rem" }}>
-                <div className="rh-carousel__inner">
-                  {SABA_LOU_IMAGES.map((src, i) => (
-                    <div className="rh-carousel__item" key={i}>
-                      <img
-                        src={src}
-                        alt={`Saba Lou listening party photo ${i + 1}`}
-                        className="rh-carousel__img"
-                      />
-                    </div>
                   ))}
                 </div>
+              </div>
+
+              {/* CORP. at Junction Bar */}
+              <div className="rh-event-block">
+                <h3 className="rh-event-title">CORP. at Junction Bar</h3>
+                <p className="rh-event-text">
+                  For the CORP. show at Junction Bar, Las Aguas handled the marketing and
+                  videography for the event. We coordinated the booking with the artist, managed
+                  on-site operations including merch tables and newsletter sign-ups, and produced
+                  all promotional video content.
+                </p>
+
+                <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  {EVENT_VIDEOS_CORP.map((reel) => (
+                    <article className="rh-card" key={reel.path}>
+                      <div className="video-frame-9x16">
+                        {urlMap[reel.path] ? (
+                          <LazyVideo
+                            src={urlMap[reel.path]}
+                            muted
+                            playsInline
+                            controls
+                            preload="metadata"
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
+                        ) : (
+                          <div style={{ color: "#fff", padding: "1rem" }}>Loading...</div>
+                        )}
+                      </div>
+                      <h4 className="rh-card-title">{reel.title}</h4>
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+              {/* VAMOS A BAILAR */}
+              <div className="rh-event-block">
+                <h3 className="rh-event-title">¡VAMOS A BAILAR!</h3>
+                <p className="rh-event-text">
+                  For CONEXION&apos;s &quot;¡VAMOS A BAILAR!&quot; January show at Pfefferberg Haus 13, we managed the marketing and
+                  videography and handled on-site work including working the door and newsletter sign-ups.
+                  We are continuing to do this work throughout the recurring event series.
+                </p>
+
+                <div style={{ marginTop: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                  {EVENT_VIDEOS_VAB.map((reel) => (
+                    <article className="rh-card" key={reel.path}>
+                      <div className="video-frame-9x16">
+                        {urlMap[reel.path] ? (
+                          <LazyVideo
+                            src={urlMap[reel.path]}
+                            muted
+                            playsInline
+                            controls
+                            preload="metadata"
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          />
+                        ) : (
+                          <div style={{ color: "#fff", padding: "1rem" }}>Loading...</div>
+                        )}
+                      </div>
+                      <h4 className="rh-card-title">{reel.title}</h4>
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* --- Row 2: Saba Lou — text left, image right --- */}
+            <div className="rh-events-row" style={{ marginTop: "2.5rem" }}>
+              <div className="rh-event-block">
+                <h3 className="rh-event-title">
+                  Saba Lou — Listening Party at Rhino&ccedil;eros Bar, Berlin
+                </h3>
+                <p className="rh-event-text">
+                  To celebrate a new vinyl print we organised a listening party for Saba Lou at Rhino&ccedil;eros Bar in Berlin.
+                  The event brought together fans and the team behind the album for a listening session and Q&amp;A at Berlin&apos;s highest-regarded Jazz Kissa.
+                </p>
+              </div>
+              <div className="rh-event-block">
+                <img
+                  src={SABA_LOU_IMAGE}
+                  alt="Saba Lou listening party at Rhinoçeros Bar"
+                  style={{
+                    width: "100%",
+                    borderRadius: "1.25rem",
+                    display: "block",
+                    objectFit: "cover",
+                  }}
+                />
               </div>
             </div>
           </section>
@@ -456,6 +471,32 @@ export default function RhubarbPage() {
             line-height: 1.45;
           }
 
+          /* ---------- event rows (3 columns for reels) ---------- */
+          .rh-events-row-3 {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 2rem;
+          }
+          @media (min-width: 900px) {
+            .rh-events-row-3 {
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              align-items: start;
+            }
+          }
+
+          /* ---------- event rows (2 columns for Saba Lou) ---------- */
+          .rh-events-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            gap: 2rem;
+          }
+          @media (min-width: 768px) {
+            .rh-events-row {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              align-items: center;
+            }
+          }
+
           /* ---------- event blocks ---------- */
           .rh-event-block {
             margin-top: 0;
@@ -492,39 +533,6 @@ export default function RhubarbPage() {
             background: #000;
             border-radius: 1.25rem;
             overflow: hidden;
-          }
-
-          /* ---------- image carousel (Saba Lou) ---------- */
-          .rh-carousel {
-            width: 100%;
-            overflow: hidden;
-            border-radius: 1.25rem;
-          }
-          .rh-carousel__inner {
-            display: flex;
-            gap: 1rem;
-            overflow-x: auto;
-            scroll-snap-type: x proximity;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
-            padding-bottom: 0.5rem;
-          }
-          .rh-carousel__inner::-webkit-scrollbar {
-            display: none;
-          }
-          .rh-carousel__item {
-            flex: 0 0 auto;
-            height: 420px;
-            border-radius: 1.25rem;
-            overflow: hidden;
-            background: #000;
-            scroll-snap-align: start;
-          }
-          .rh-carousel__img {
-            height: 100%;
-            width: auto;
-            display: block;
-            object-fit: cover;
           }
 
           /* ---------- artists grid (2 columns) ---------- */
