@@ -359,9 +359,9 @@ function MeetingsCalendarSection() {
 
   // Per-member availability hours (matches available-slots.js MEMBER_HOURS)
   const MEMBER_HOURS = {
-    miguel:    { 1: [13,14,15,16], 2: [13,14,15,16], 3: [13,14,15,16], 4: [13,14,15,16], 5: [14,15], 6: [], 0: [] },
-    sebastian: { 1: [9,13,14,15,16], 2: [9,13,14,15,16], 3: [9,13,14,15,16], 4: [9,13,14,15,16], 5: [9,14,15], 6: [15,16], 0: [] },
-    yannick:   { 1: [13,14,15,16], 2: [13,14,15,16], 3: [13,14,15,16], 4: [13,14,15,16], 5: [14,15], 6: [15,16], 0: [] },
+    miguel:    { 1: [11,12,13,14,15,16], 2: [11,12,13,14,15,16], 3: [11,12,13,14,15,16], 4: [11,12,13,14,15,16], 5: [14,15], 6: [14,15], 0: [] },
+    sebastian: { 1: [9,10,11,12,13,14,15,16], 2: [9,10,11,12,13,14,15,16], 3: [9,10,11,12,13,14,15,16], 4: [9,10,11,12,13,14,15,16], 5: [9,10,11,12,13,14,15,16], 6: [14,15], 0: [14,15] },
+    yannick:   { 1: [11,12,13,14,15,16], 2: [11,12,13,14,15,16], 3: [11,12,13,14,15,16], 4: [11,12,13,14,15,16], 5: [14,15], 6: [14,15], 0: [] },
   };
 
   // Load slots for selected member
@@ -434,7 +434,7 @@ function MeetingsCalendarSection() {
   };
 
   // All possible hours across all members for the grid rows
-  const allHours = [9, 13, 14, 15, 16];
+  const allHours = [9, 10, 11, 12, 13, 14, 15, 16];
 
   // Find slot for a specific datetime
   // Compare by building the same CET string the admin sends when blocking,
