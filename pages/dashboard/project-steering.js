@@ -11,6 +11,7 @@ const FIELDS = [
   { key: "steering_active_services", label: "Active Services" },
   { key: "steering_communication_rules", label: "Communication Rules" },
   { key: "steering_current_bottlenecks", label: "Current Bottlenecks" },
+  { key: "steering_language_guidelines", label: "Language Guidelines" },
 ];
 
 function FontsPanel({ artistId }) {
@@ -387,6 +388,11 @@ export default function ProjectSteeringPage() {
                 title="Current Bottlenecks"
                 value={artist.steering_current_bottlenecks}
                 onSave={(v) => saveField("steering_current_bottlenecks", v)}
+              />
+              <EditablePanel
+                title="Language Guidelines"
+                value={artist.steering_language_guidelines}
+                onSave={(v) => saveField("steering_language_guidelines", v)}
               />
             </div>
           </div>
