@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/metrics/youtube",
-      "schedule": "0 1 * * *"
-    },
-    {
-      "path": "/api/metrics/tiktok-batch",
-      "schedule": "0 2 * * *"
+      "path": "/api/metrics/collect-all",
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -392,7 +392,7 @@ export default function ScheduleMeetingPage() {
           )}
 
           {/* No availability message */}
-          {availability.length === 0 && (
+          {availability.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-[#33296b] mb-4">
                 No available time slots at the moment. Please check back later or contact us directly.
@@ -403,6 +403,17 @@ export default function ScheduleMeetingPage() {
               >
                 lasaguasproductions@gmail.com
               </a>
+            </div>
+          ) : (
+            <div className="text-center mt-6 text-sm text-[#33296b]/70">
+              Can&apos;t find a time that works?{" "}
+              <a
+                href="mailto:lasaguasproductions@gmail.com"
+                className="text-[#33296b] underline hover:opacity-80"
+              >
+                Email us
+              </a>{" "}
+              to request a different time.
             </div>
           )}
         </div>
