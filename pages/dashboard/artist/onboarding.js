@@ -270,6 +270,10 @@ export default function OnboardingPage() {
   const [savingEpk, setSavingEpk] = useState(false);
   const [savingMoodboard, setSavingMoodboard] = useState(false);
 
+  // EPK mode: "pdf" or "link"
+  const [epkMode, setEpkMode] = useState("pdf");
+  const [epkLinkInput, setEpkLinkInput] = useState("");
+
   // onboarding tables
   const [photoAssets, setPhotoAssets] = useState([]);
   const [oldPosts, setOldPosts] = useState([]);
@@ -362,11 +366,15 @@ export default function OnboardingPage() {
         // Handle EPK/Moodboard paths - only use truthy values
         const epkValue = artist?.epk_pdf_path;
         const moodValue = artist?.moodboard_pdf_path;
-        setEpkPath(epkValue && typeof epkValue === 'string' && epkValue.trim() ? epkValue.trim() : "");
+        const cleanEpk = epkValue && typeof epkValue === 'string' && epkValue.trim() ? epkValue.trim() : "";
+        setEpkPath(cleanEpk);
         setMoodboardPath(moodValue && typeof moodValue === 'string' && moodValue.trim() ? moodValue.trim() : "");
-        
-        console.log("[DEBUG] Loaded EPK path:", epkValue, "-> setState:", epkValue && typeof epkValue === 'string' && epkValue.trim() ? epkValue.trim() : "");
-        console.log("[DEBUG] Loaded Moodboard path:", moodValue, "-> setState:", moodValue && typeof moodValue === 'string' && moodValue.trim() ? moodValue.trim() : "");
+
+        // If the stored EPK value is a URL, switch to link mode
+        if (cleanEpk.startsWith("http")) {
+          setEpkMode("link");
+          setEpkLinkInput(cleanEpk);
+        }
 
         const [
           photosRes,
@@ -545,6 +553,22 @@ export default function OnboardingPage() {
     } catch (e) {
       console.error("Failed to save EPK PDF", e);
       alert(e?.message || "Failed to save EPK PDF.");
+    } finally {
+      setSavingEpk(false);
+    }
+  }
+
+  async function handleSaveEpkLink() {
+    if (!artistId) return alert("Missing artist id.");
+    const trimmed = epkLinkInput.trim();
+    if (!trimmed) return alert("Please enter a link.");
+    try {
+      setSavingEpk(true);
+      await saveArtistFields({ epk_pdf_path: trimmed });
+      setEpkPath(trimmed);
+    } catch (e) {
+      console.error("Failed to save EPK link", e);
+      alert(e?.message || "Failed to save EPK link.");
     } finally {
       setSavingEpk(false);
     }
@@ -773,10 +797,6 @@ export default function OnboardingPage() {
 
     const checks = [];
 
-    // --- Socials connections (4%) ---
-    // If you want "all tokens healthy", update socialsComplete separately to reflect that.
-    checks.push({ key: "socials", label: "Socials connections", weight: 4, ratio: socialsComplete ? 1 : 0 });
-
     // --- Artist Bio (4%) ---
     const bioDone = Boolean((bio ?? "").trim());
     checks.push({ key: "bio_text", label: "Artist Bio", weight: 4, ratio: bioDone ? 1 : 0 });
@@ -863,7 +883,6 @@ export default function OnboardingPage() {
 
     return { pct, checks, earned, total, songCount, musicRatio };
   }, [
-    socialsComplete,
     bio,
     preferredPronouns,
     photoAssets,
@@ -883,8 +902,6 @@ export default function OnboardingPage() {
     const findRatio = (key) => completion.checks.find((c) => c.key === key)?.ratio ?? 0;
 
     // Grouped "done" rules for collapsibles
-    const socialsDone = findRatio("socials") === 1;
-
     // Bio section = bio text + pronouns + photos
     const bioSectionDone =
       findRatio("bio_text") === 1 &&
@@ -907,7 +924,6 @@ export default function OnboardingPage() {
     const webDone = findRatio("web") === 1;
 
     const list = [
-      { key: "socials", title: "Socials connections", done: socialsDone },
       { key: "bio", title: "Bio + Photo assets", done: bioSectionDone },
       { key: "music", title: "Music", done: musicDone },
       { key: "youtube", title: "YouTube verification", done: youtubeDone },
@@ -941,71 +957,7 @@ export default function OnboardingPage() {
           <FontsDownloadPanel artistId={artistId} />
 
           {sections.map((s) => {
-            // 1) Socials connections
-            if (s.key === "socials") {
-                const rows = Array.isArray(socialStatus) ? socialStatus : [];
-                const byPlatform = new Map(rows.map((r) => [normalizePlatform(r.platform), r]));
-            
-                return (
-                <Collapsible
-                    key={s.key}
-                    title="Socials connections"
-                    completed={Boolean(s.done)}
-                    defaultOpen={!s.done}
-                >
-                    <div className="text-sm text-gray-700 mb-3">
-                    Connect your TikTok and Instagram accounts so stats can load correctly. Note: YouTube May Not Work Yet
-                    </div>
-            
-                    {/* Always show all 3 */}
-                    <div className="space-y-2">
-                    {SOCIALS.map((soc) => {
-                        const row = findPlatformRow(rows, soc.key);
-                        const healthy = isTokenHealthy(row);
-            
-                        return (
-                        <div
-                            key={soc.key}
-                            className="artist-panel-secondary p-3 rounded-xl flex items-center justify-between gap-3"
-                        >
-                            <div className="min-w-0">
-                            <div className="text-sm font-semibold">{soc.label}</div>
-            
-                            {healthy ? (
-                                <div className="text-xs text-gray-600">connection is complete ✅</div>
-                            ) : (
-                                <div className="text-xs text-gray-600">
-                                {row?.status ? `status: ${row.status}` : "not connected"}
-                                </div>
-                            )}
-                            </div>
-            
-                            {healthy ? (
-                            // Not a button, no link
-                            <div className="text-sm font-semibold text-[#33296b] whitespace-nowrap">
-                                Connected ✅
-                            </div>
-                            ) : (
-                            <a
-                                href={soc.href}
-                                className="rounded-xl px-3 py-2 text-sm bg-[#e6e7eb] text-[#33296b] font-semibold whitespace-nowrap"
-                            >
-                                connect {soc.label.toLowerCase()}
-                            </a>
-                            )}
-                        </div>
-                        );
-                    })}
-                    </div>
-            
-                    <div className="mt-3 text-xs text-gray-500">
-                    This section only shows your own artist’s connections.
-                    </div>
-                </Collapsible>
-                );
-            }
-  
-            // 2) Bio + photo assets
+            // 1) Bio + photo assets
             if (s.key === "bio") {
               return (
                 <Collapsible key={s.key} title="Bio + Photo assets" completed={Boolean(s.done)} defaultOpen={!s.done}>
@@ -1554,37 +1506,100 @@ export default function OnboardingPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* EPK */}
                     <div className="artist-panel-secondary p-4">
-                      <div className="text-sm font-semibold mb-2">EPK (PDF)</div>
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        onChange={(e) => setPendingEpkFile(e.target.files?.[0] || null)}
-                      />
-                      {pendingEpkFile && (
-                        <div className="mt-1 text-[11px] text-gray-600">
-                          Selected: {pendingEpkFile.name}
-                        </div>
-                      )}
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="text-sm font-semibold mb-2">EPK</div>
+
+                      {/* Toggle between PDF and Link */}
+                      <div className="flex gap-2 mb-3">
                         <button
                           type="button"
-                          onClick={handleSaveEpk}
-                          disabled={!pendingEpkFile || savingEpk}
-                          className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                          onClick={() => setEpkMode("pdf")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                            epkMode === "pdf"
+                              ? "bg-[#33296b] text-[#bbe1ac]"
+                              : "bg-black/5 text-[#33296b] hover:bg-black/10"
+                          }`}
                         >
-                          {savingEpk ? "Saving…" : "Save EPK"}
+                          Upload PDF
                         </button>
-                        {epkPublicUrl && (
-                          <a
-                            className="text-xs underline"
-                            href={epkPublicUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            open epk
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => setEpkMode("link")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                            epkMode === "link"
+                              ? "bg-[#33296b] text-[#bbe1ac]"
+                              : "bg-black/5 text-[#33296b] hover:bg-black/10"
+                          }`}
+                        >
+                          Paste Link
+                        </button>
                       </div>
+
+                      {epkMode === "pdf" && (
+                        <>
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => setPendingEpkFile(e.target.files?.[0] || null)}
+                          />
+                          {pendingEpkFile && (
+                            <div className="mt-1 text-[11px] text-gray-600">
+                              Selected: {pendingEpkFile.name}
+                            </div>
+                          )}
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSaveEpk}
+                              disabled={!pendingEpkFile || savingEpk}
+                              className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                            >
+                              {savingEpk ? "Saving…" : "Save EPK"}
+                            </button>
+                            {epkPublicUrl && !epkPath.startsWith("http") && (
+                              <a
+                                className="text-xs underline"
+                                href={epkPublicUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                open epk
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {epkMode === "link" && (
+                        <>
+                          <input
+                            type="url"
+                            value={epkLinkInput}
+                            onChange={(e) => setEpkLinkInput(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full rounded-xl border border-gray-200 p-2 text-sm"
+                          />
+                          <div className="mt-2 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSaveEpkLink}
+                              disabled={!epkLinkInput.trim() || savingEpk}
+                              className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                            >
+                              {savingEpk ? "Saving…" : "Save EPK Link"}
+                            </button>
+                            {epkPath.startsWith("http") && (
+                              <a
+                                className="text-xs underline"
+                                href={epkPath}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                open epk
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Mood board */}
