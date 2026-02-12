@@ -1,29 +1,6 @@
 // pages/api/metrics/collect-all.js
 // Single daily cron endpoint that collects metrics for all platforms.
-// Calls each batch handler directly instead of making HTTP requests.
-
-import youtubeHandler from "./youtube-batch";
-import tiktokHandler from "./tiktok-batch";
-import instagramHandler from "./instagram-batch";
-
-// Fake res object to capture what a handler would send back
-function createMockRes() {
-  let result = null;
-  let statusCode = 200;
-
-  const res = {
-    status(code) {
-      statusCode = code;
-      return res;
-    },
-    json(data) {
-      result = data;
-      return res;
-    },
-  };
-
-  return { res, getResult: () => ({ statusCode, result }) };
-}
+// Calls each batch endpoint via fetch with correct auth for each.
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -45,51 +22,74 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const results = {};
+  // Build base URL — try multiple sources to handle all environments
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = (req.headers["x-forwarded-proto"] || "https")
+    .toString()
+    .split(",")[0];
 
-  // --- YouTube batch ---
+  let baseUrl;
+  if (host) {
+    baseUrl = `${proto}://${host}`;
+  } else if (process.env.VERCEL_URL) {
+    baseUrl = `https://${process.env.VERCEL_URL}`;
+  } else {
+    return res.status(500).json({ error: "Cannot determine base URL" });
+  }
+
+  const results = { _baseUrl: baseUrl };
+
+  // Helper: fetch a batch endpoint, parse JSON safely
+  async function callBatch(name, path, headers) {
+    const url = `${baseUrl}${path}`;
+    const resp = await fetch(url, { method: "GET", headers });
+    const text = await resp.text();
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Return debug info if we got HTML instead of JSON
+      return {
+        ok: false,
+        error: "Non-JSON response",
+        status: resp.status,
+        bodyPreview: text.slice(0, 300),
+        urlCalled: url.replace(secret, "***"),
+      };
+    }
+  }
+
+  // --- YouTube batch (uses query-string auth) ---
   try {
-    const mock = createMockRes();
-    // YouTube handler expects cron=1&secret=... in query
-    const fakeReq = {
-      method: "GET",
-      headers: req.headers,
-      query: { cron: "1", secret },
-    };
-    await youtubeHandler(fakeReq, mock.res);
-    results.youtube = mock.getResult().result;
+    results.youtube = await callBatch(
+      "youtube",
+      `/api/metrics/youtube-batch?cron=1&secret=${encodeURIComponent(secret)}`,
+      { Authorization: `Bearer ${secret}` }
+    );
   } catch (e) {
     console.error("collect-all: YouTube failed", e);
     results.youtube = { ok: false, error: String(e) };
   }
 
-  // --- TikTok batch ---
+  // --- TikTok batch (uses Bearer auth) ---
   try {
-    const mock = createMockRes();
-    // TikTok handler expects Authorization: Bearer header
-    const fakeReq = {
-      method: "GET",
-      headers: { authorization: `Bearer ${secret}` },
-      query: {},
-    };
-    await tiktokHandler(fakeReq, mock.res);
-    results.tiktok = mock.getResult().result;
+    results.tiktok = await callBatch(
+      "tiktok",
+      `/api/metrics/tiktok-batch`,
+      { Authorization: `Bearer ${secret}` }
+    );
   } catch (e) {
     console.error("collect-all: TikTok failed", e);
     results.tiktok = { ok: false, error: String(e) };
   }
 
-  // --- Instagram batch ---
+  // --- Instagram batch (uses Bearer auth) ---
   try {
-    const mock = createMockRes();
-    // Instagram handler expects Authorization: Bearer header
-    const fakeReq = {
-      method: "GET",
-      headers: { authorization: `Bearer ${secret}` },
-      query: {},
-    };
-    await instagramHandler(fakeReq, mock.res);
-    results.instagram = mock.getResult().result;
+    results.instagram = await callBatch(
+      "instagram",
+      `/api/metrics/instagram-batch`,
+      { Authorization: `Bearer ${secret}` }
+    );
   } catch (e) {
     console.error("collect-all: Instagram failed", e);
     results.instagram = { ok: false, error: String(e) };
