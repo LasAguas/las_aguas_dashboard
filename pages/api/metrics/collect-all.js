@@ -1,7 +1,29 @@
 // pages/api/metrics/collect-all.js
 // Single daily cron endpoint that collects metrics for all platforms.
-// Vercel cron config calls this once per day; it fans out to the
-// existing batch endpoints with the correct auth for each.
+// Calls each batch handler directly instead of making HTTP requests.
+
+import youtubeHandler from "./youtube-batch";
+import tiktokHandler from "./tiktok-batch";
+import instagramHandler from "./instagram-batch";
+
+// Fake res object to capture what a handler would send back
+function createMockRes() {
+  let result = null;
+  let statusCode = 200;
+
+  const res = {
+    status(code) {
+      statusCode = code;
+      return res;
+    },
+    json(data) {
+      result = data;
+      return res;
+    },
+  };
+
+  return { res, getResult: () => ({ statusCode, result }) };
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -13,8 +35,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "CRON_SECRET not set" });
   }
 
-  // Vercel cron sends an Authorization header we can check,
-  // or we accept query-string secret for manual testing.
+  // Vercel cron sends an Authorization header; also accept query-string for manual testing
   const authHeader = req.headers.authorization || "";
   const querySecret = req.query?.secret;
   const authorized =
@@ -24,47 +45,51 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Build base URL from the request so it works in any environment
-  const proto = req.headers["x-forwarded-proto"] || "https";
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  const baseUrl = `${proto}://${host}`;
-
   const results = {};
 
-  // --- YouTube batch (uses query-string auth) ---
+  // --- YouTube batch ---
   try {
-    const url = `${baseUrl}/api/metrics/youtube-batch?cron=1&secret=${encodeURIComponent(secret)}`;
-    const resp = await fetch(url, {
+    const mock = createMockRes();
+    // YouTube handler expects cron=1&secret=... in query
+    const fakeReq = {
       method: "GET",
-      headers: { Authorization: `Bearer ${secret}` },
-    });
-    results.youtube = await resp.json();
+      headers: req.headers,
+      query: { cron: "1", secret },
+    };
+    await youtubeHandler(fakeReq, mock.res);
+    results.youtube = mock.getResult().result;
   } catch (e) {
     console.error("collect-all: YouTube failed", e);
     results.youtube = { ok: false, error: String(e) };
   }
 
-  // --- TikTok batch (uses Bearer auth) ---
+  // --- TikTok batch ---
   try {
-    const url = `${baseUrl}/api/metrics/tiktok-batch`;
-    const resp = await fetch(url, {
+    const mock = createMockRes();
+    // TikTok handler expects Authorization: Bearer header
+    const fakeReq = {
       method: "GET",
-      headers: { Authorization: `Bearer ${secret}` },
-    });
-    results.tiktok = await resp.json();
+      headers: { authorization: `Bearer ${secret}` },
+      query: {},
+    };
+    await tiktokHandler(fakeReq, mock.res);
+    results.tiktok = mock.getResult().result;
   } catch (e) {
     console.error("collect-all: TikTok failed", e);
     results.tiktok = { ok: false, error: String(e) };
   }
 
-  // --- Instagram batch (uses Bearer auth) ---
+  // --- Instagram batch ---
   try {
-    const url = `${baseUrl}/api/metrics/instagram-batch`;
-    const resp = await fetch(url, {
+    const mock = createMockRes();
+    // Instagram handler expects Authorization: Bearer header
+    const fakeReq = {
       method: "GET",
-      headers: { Authorization: `Bearer ${secret}` },
-    });
-    results.instagram = await resp.json();
+      headers: { authorization: `Bearer ${secret}` },
+      query: {},
+    };
+    await instagramHandler(fakeReq, mock.res);
+    results.instagram = mock.getResult().result;
   } catch (e) {
     console.error("collect-all: Instagram failed", e);
     results.instagram = { ok: false, error: String(e) };
