@@ -1,6 +1,46 @@
 // pages/api/metrics/collect-all.js
 // Single daily cron endpoint that collects metrics for all platforms.
-// Calls each batch endpoint via fetch with correct auth for each.
+// Imports and calls each batch handler directly (no HTTP self-calls)
+// to avoid Vercel Deployment Protection blocking the requests.
+
+import youtubeHandler from "./youtube-batch";
+import tiktokHandler from "./tiktok-batch";
+import instagramHandler from "./instagram-batch";
+
+// Creates a fake res object that captures what a handler sends back
+function createMockRes() {
+  let _status = 200;
+  let _body = null;
+  let _ended = false;
+
+  const res = {
+    status(code) {
+      _status = code;
+      return res;
+    },
+    json(data) {
+      _body = data;
+      _ended = true;
+      return res;
+    },
+    send(data) {
+      _body = data;
+      _ended = true;
+      return res;
+    },
+    end() {
+      _ended = true;
+      return res;
+    },
+    setHeader() { return res; },
+    getHeader() { return null; },
+  };
+
+  return {
+    res,
+    getResult: () => ({ status: _status, body: _body, ended: _ended }),
+  };
+}
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
@@ -12,7 +52,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "CRON_SECRET not set" });
   }
 
-  // Vercel cron sends an Authorization header; also accept query-string for manual testing
+  // Vercel cron sends Authorization header; also accept query-string for manual testing
   const authHeader = req.headers.authorization || "";
   const querySecret = req.query?.secret;
   const authorized =
@@ -22,74 +62,42 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Build base URL — try multiple sources to handle all environments
-  const host = req.headers["x-forwarded-host"] || req.headers.host;
-  const proto = (req.headers["x-forwarded-proto"] || "https")
-    .toString()
-    .split(",")[0];
+  const results = {};
 
-  let baseUrl;
-  if (host) {
-    baseUrl = `${proto}://${host}`;
-  } else if (process.env.VERCEL_URL) {
-    baseUrl = `https://${process.env.VERCEL_URL}`;
-  } else {
-    return res.status(500).json({ error: "Cannot determine base URL" });
-  }
-
-  const results = { _baseUrl: baseUrl };
-
-  // Helper: fetch a batch endpoint, parse JSON safely
-  async function callBatch(name, path, headers) {
-    const url = `${baseUrl}${path}`;
-    const resp = await fetch(url, { method: "GET", headers });
-    const text = await resp.text();
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      // Return debug info if we got HTML instead of JSON
-      return {
-        ok: false,
-        error: "Non-JSON response",
-        status: resp.status,
-        bodyPreview: text.slice(0, 300),
-        urlCalled: url.replace(secret, "***"),
-      };
-    }
-  }
-
-  // --- YouTube batch (uses query-string auth) ---
+  // --- YouTube batch ---
   try {
-    results.youtube = await callBatch(
-      "youtube",
-      `/api/metrics/youtube-batch?cron=1&secret=${encodeURIComponent(secret)}`,
-      { Authorization: `Bearer ${secret}` }
+    const mock = createMockRes();
+    await youtubeHandler(
+      { method: "GET", headers: req.headers, query: { cron: "1", secret } },
+      mock.res
     );
+    results.youtube = mock.getResult().body;
   } catch (e) {
     console.error("collect-all: YouTube failed", e);
     results.youtube = { ok: false, error: String(e) };
   }
 
-  // --- TikTok batch (uses Bearer auth) ---
+  // --- TikTok batch ---
   try {
-    results.tiktok = await callBatch(
-      "tiktok",
-      `/api/metrics/tiktok-batch`,
-      { Authorization: `Bearer ${secret}` }
+    const mock = createMockRes();
+    await tiktokHandler(
+      { method: "GET", headers: { authorization: `Bearer ${secret}` }, query: {} },
+      mock.res
     );
+    results.tiktok = mock.getResult().body;
   } catch (e) {
     console.error("collect-all: TikTok failed", e);
     results.tiktok = { ok: false, error: String(e) };
   }
 
-  // --- Instagram batch (uses Bearer auth) ---
+  // --- Instagram batch ---
   try {
-    results.instagram = await callBatch(
-      "instagram",
-      `/api/metrics/instagram-batch`,
-      { Authorization: `Bearer ${secret}` }
+    const mock = createMockRes();
+    await instagramHandler(
+      { method: "GET", headers: { authorization: `Bearer ${secret}` }, query: {} },
+      mock.res
     );
+    results.instagram = mock.getResult().body;
   } catch (e) {
     console.error("collect-all: Instagram failed", e);
     results.instagram = { ok: false, error: String(e) };
