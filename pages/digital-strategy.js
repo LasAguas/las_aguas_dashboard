@@ -281,7 +281,7 @@ export default function DigitalStrategyPage() {
                 </p>
               </article>
 
-              {/* Uwineza. */}
+              {/* CONEXION. */}
               <article
                 style={{
                   backgroundColor: "#271f5a",
@@ -297,8 +297,8 @@ export default function DigitalStrategyPage() {
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/Uwineza Roster Pic.jpg"
-                    alt="Uwineza Roster Pic"
+                    src="/roster/Conexion Roster Pic.jpg"
+                    alt="Conexion - Salsa Live Band Roster Pic"
                     className="roster-img"
                 >
                 </img>
@@ -309,7 +309,7 @@ export default function DigitalStrategyPage() {
                     marginBottom: "0.4rem",
                   }}
                 >
-                  Uwineza
+                  CONEXIÓN - SALSA LIVE BAND
                 </h3>
                 <p
                   style={{
@@ -317,15 +317,13 @@ export default function DigitalStrategyPage() {
                     color: "#599b40",
                   }}
                 >
+                  CONEXIÓN is a sextet of musicians from
                   <span style={{ color: "#a89fe4" }}>
-                    Olivia Dean meets Steve Lacey
+                    Cuba, Colombia, & Germany,
                   </span>
-                  , Dominic Fike, and Corrine Bailey. Uwineza is a Berlin-based
-                  romantic rock artist from South Africa. <br /><br />
-                  Her debut album{" "}
-                  <em>You're Gonna Hate It</em> was released in September 2024,
-                  followed by collaborations with{" "}
-                  <em>*Maliiik, Ju Zahkarii, and moss.png</em> in 2025.
+                  that have come together to form a salsa band, bringing fiery music to Berlin's small salsa scene. <br /><br />
+                  Their bi-monthly event, ¡VAMOS A BAILAR!, is the perfect example, regularly filling the dancefloor of Pfefferberg Haus 13, Berlin, with
+                  and hosting a Salsa dance class before the show for the first-timers!
                 </p>
 
                 <p
@@ -335,20 +333,20 @@ export default function DigitalStrategyPage() {
                     marginTop: "0.6rem",
                   }}
                 >
-                  With Las Aguas, we are working on her{" "}
+                  With Las Aguas, we are working on their{" "}
                   <span style={{ color: "#a89fe4" }}>
                     social media and marketing strategy.
                   </span>
                 </p>
                 <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
                   <a
-                    href="https://open.spotify.com/album/7olp6hYLNx1nXdJjmqiZWg"
+                    href="https://conexion-salsa.com/termine-2-2-2-2/"
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
                     style={{ color: "#599b40" }}
                   >
-                    Check out their music!
+                    Check out their upcoming shows!
                   </a>
                 </p>
               </article>
@@ -480,7 +478,7 @@ export default function DigitalStrategyPage() {
                 </p>
               </article>
 
-              {/* KOOB */}
+              {/* Silver Omen */}
               <article
                 style={{
                   backgroundColor: "#271f5a",
@@ -496,8 +494,8 @@ export default function DigitalStrategyPage() {
                     backgroundColor: "#000",
                     marginBottom: "0.9rem",
                   }}
-                    src="/roster/KOOB Roster Pic.jpg"
-                    alt="KOOB Roster Pic"
+                    src="/roster/Silver Omen Roster Pic.jpg"
+                    alt="Silver Omen Roster Pic"
                     className="roster-img"
                 >
                   {/* TODO: replace with Saba Lou image */}
@@ -509,7 +507,7 @@ export default function DigitalStrategyPage() {
                     marginBottom: "0.4rem",
                   }}
                 >
-                  KOOB
+                  Silver Omen
                 </h3>
                 <p
                   style={{
@@ -517,12 +515,8 @@ export default function DigitalStrategyPage() {
                     color: "#599b40",
                   }}
                 >
-                  Dubbed “the Belarusian Soul Princess”, KOOB first appeared on
-                  the public radar in{" "}
-                  <span style={{ color: "#a89fe4" }}>Belarus</span> as the
-                  frontwoman of the soul band Dee Tree. After two years of a
-                  busy band life, she entered her solo path with the single{" "}
-                  <em>Jungle</em>.
+                  Silver Omen is an {" "} <span style={{ color: "#a89fe4" }}> Argentine </span> Berlin-based dance pop artist, whose approach to pop blends deep topics of sexuality, self-image, and acceptance with the light and the dark of a life lived in the Berlin club and party scene. His music is a mix of influences including{" "}
+                  <span style={{ color: "#a89fe4" }}> The Weeknd, Charli XCX, Troye Sivan, and Robyn.</span> 
                 </p>
                 <p
                   style={{
@@ -531,24 +525,34 @@ export default function DigitalStrategyPage() {
                     marginTop: "0.6rem",
                   }}
                 >
-                  In 2020 two things happened – the political crisis in Belarus
-                  and a subsequent move to Berlin – both of which heavily
-                  influenced her music. While preserving her soulful roots, KOOB
-                  is shifting towards songs for social change,{" "}
+                  His artist name is a direct reference to his roots: “Silver” represents Argentina, named after the Latin word argentum,
+                  while “Omen” symbolizes the duality of his themes – finding the good in the bad, and the bad in the good.
+                  Even at the end of the world, his music leaves room to {" "}
                   <span style={{ color: "#a89fe4" }}>
-                    mixing electronic sounds, field recordings, gospel and
-                    Belarusian spirituals.
+                    dance and shine.
                   </span>
                 </p>
+                {/*<p
+                  style={{
+                    fontSize: "0.95rem",
+                    color: "#599b40",
+                    marginTop: "0.6rem",
+                  }}
+                >
+                  With Las Aguas, we are working on their{" "}
+                  <span style={{ color: "#a89fe4" }}>
+                    social media and marketing strategy.
+                  </span>
+                </p>*/}
                 <p style={{ marginTop: "0.6rem", fontSize: "0.9rem" }}>
                   <a
-                    href="https://tidal.com/artist/40379216/u"
+                    href="https://tidal.com/artist/57012043/u"
                     target="_blank"
                     rel="noreferrer"
                     className="underline"
                     style={{ color: "#599b40" }}
                   >
-                    Check out her music!
+                    Check out his music!
                   </a>
                 </p>
               </article>

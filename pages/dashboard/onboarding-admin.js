@@ -284,6 +284,10 @@ export default function OnboardingAdminPage() {
   const [epkPath, setEpkPath] = useState("");
   const [moodboardPath, setMoodboardPath] = useState("");
 
+  // EPK mode: "pdf" or "link" (matches artist-side toggle)
+  const [epkMode, setEpkMode] = useState("pdf");
+  const [epkLinkInput, setEpkLinkInput] = useState("");
+
   // pending PDFs + saving state for EPK / mood board
   const [pendingEpkFile, setPendingEpkFile] = useState(null);
   const [pendingMoodboardFile, setPendingMoodboardFile] = useState(null);
@@ -398,8 +402,18 @@ export default function OnboardingAdminPage() {
           gvl: Boolean(artist?.funding_gvl_membership),
           labelOrPublisher: Boolean(artist?.funding_label_or_publisher_contract),
         });
-        setEpkPath(artist?.epk_pdf_path || "");
+        const loadedEpk = artist?.epk_pdf_path || "";
+        setEpkPath(loadedEpk);
         setMoodboardPath(artist?.moodboard_pdf_path || "");
+
+        // If the stored EPK value is a URL, switch to link mode
+        if (loadedEpk.startsWith("http")) {
+          setEpkMode("link");
+          setEpkLinkInput(loadedEpk);
+        } else {
+          setEpkMode("pdf");
+          setEpkLinkInput("");
+        }
 
         const [
           photosRes,
@@ -604,6 +618,22 @@ export default function OnboardingAdminPage() {
     } catch (e) {
       console.error("Failed to save EPK PDF (admin)", e);
       alert(e?.message || "Failed to save EPK PDF.");
+    } finally {
+      setSavingEpk(false);
+    }
+  }
+
+  async function handleSaveEpkLink() {
+    if (!artistId) return alert("No artist selected.");
+    const trimmed = epkLinkInput.trim();
+    if (!trimmed) return alert("Please enter a link.");
+    try {
+      setSavingEpk(true);
+      await saveArtistFields({ epk_pdf_path: trimmed });
+      setEpkPath(trimmed);
+    } catch (e) {
+      console.error("Failed to save EPK link (admin)", e);
+      alert(e?.message || "Failed to save EPK link.");
     } finally {
       setSavingEpk(false);
     }
@@ -1853,37 +1883,100 @@ export default function OnboardingAdminPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               {/* EPK */}
                               <div className="artist-panel-secondary p-4">
-                                <div className="text-sm font-semibold mb-2">EPK (PDF)</div>
-                                <input
-                                  type="file"
-                                  accept="application/pdf"
-                                  onChange={(e) => setPendingEpkFile(e.target.files?.[0] || null)}
-                                />
-                                {pendingEpkFile && (
-                                  <div className="mt-1 text-[11px] text-gray-600">
-                                    Selected: {pendingEpkFile.name}
-                                  </div>
-                                )}
-                                <div className="mt-2 flex items-center gap-2">
+                                <div className="text-sm font-semibold mb-2">EPK</div>
+
+                                {/* Toggle between PDF and Link */}
+                                <div className="flex gap-2 mb-3">
                                   <button
                                     type="button"
-                                    onClick={handleSaveEpk}
-                                    disabled={!pendingEpkFile || savingEpk}
-                                    className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                                    onClick={() => setEpkMode("pdf")}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                      epkMode === "pdf"
+                                        ? "bg-[#33296b] text-[#bbe1ac]"
+                                        : "bg-black/5 text-[#33296b] hover:bg-black/10"
+                                    }`}
                                   >
-                                    {savingEpk ? "Saving…" : "Save EPK"}
+                                    Upload PDF
                                   </button>
-                                  {epkPath && (
-                                    <a
-                                      className="text-xs underline"
-                                      href={publicOnboardingUrl(epkPath)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      open epk
-                                    </a>
-                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setEpkMode("link")}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                      epkMode === "link"
+                                        ? "bg-[#33296b] text-[#bbe1ac]"
+                                        : "bg-black/5 text-[#33296b] hover:bg-black/10"
+                                    }`}
+                                  >
+                                    Paste Link
+                                  </button>
                                 </div>
+
+                                {epkMode === "pdf" && (
+                                  <>
+                                    <input
+                                      type="file"
+                                      accept="application/pdf"
+                                      onChange={(e) => setPendingEpkFile(e.target.files?.[0] || null)}
+                                    />
+                                    {pendingEpkFile && (
+                                      <div className="mt-1 text-[11px] text-gray-600">
+                                        Selected: {pendingEpkFile.name}
+                                      </div>
+                                    )}
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSaveEpk}
+                                        disabled={!pendingEpkFile || savingEpk}
+                                        className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                                      >
+                                        {savingEpk ? "Saving…" : "Save EPK"}
+                                      </button>
+                                      {epkPath && !epkPath.startsWith("http") && (
+                                        <a
+                                          className="text-xs underline"
+                                          href={publicOnboardingUrl(epkPath)}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          open epk
+                                        </a>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+
+                                {epkMode === "link" && (
+                                  <>
+                                    <input
+                                      type="url"
+                                      value={epkLinkInput}
+                                      onChange={(e) => setEpkLinkInput(e.target.value)}
+                                      placeholder="https://..."
+                                      className="w-full rounded-xl border border-gray-200 p-2 text-sm"
+                                    />
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSaveEpkLink}
+                                        disabled={!epkLinkInput.trim() || savingEpk}
+                                        className="px-3 py-1.5 rounded-lg text-xs bg-[#bce1ac] text-[#33296b] hover:opacity-90 disabled:opacity-60"
+                                      >
+                                        {savingEpk ? "Saving…" : "Save EPK Link"}
+                                      </button>
+                                      {epkPath.startsWith("http") && (
+                                        <a
+                                          className="text-xs underline"
+                                          href={epkPath}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          open epk
+                                        </a>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
                               </div>
 
                               {/* Mood board */}
