@@ -107,7 +107,7 @@ export default function HomePage() {
                 Las Aguas Productions · Creative and Label Services
               </div>
               <h1 id="home-hero-heading" className="site-hero__title">
-                You be the artist, we handle{" "}
+                You be the artist, we'll handle{" "}
                 <span className="site-hero__title-accent">the tech</span>
               </h1>
 
@@ -145,7 +145,7 @@ export default function HomePage() {
 
           {/* CAROUSEL STRIP */}
           <section className="site-strip" aria-label="Las Aguas projects">
-          <div className="site-strip__label">Selected work &amp; BTS</div>
+          <div className="site-strip__label">Behind the Scenes</div>
 
           <div className="site-carousel">
             <div className="site-carousel__inner">
@@ -264,6 +264,12 @@ export default function HomePage() {
               artists who want to stay in control of their masters while
               building teams around studio, strategy, and release campaigns.
             </p>
+
+            <div className="mt-4">
+              <Link href="/faqs" className="site-btn site-btn--ghost" style={{ fontSize: "0.8rem", padding: "0.5rem 1.2rem" }}>
+                Read our FAQs
+              </Link>
+            </div>
           </section>
         </div>
       </main>

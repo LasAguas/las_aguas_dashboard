@@ -1856,6 +1856,17 @@ export default function OnboardingPage() {
 
             return null;
           })}
+
+          {/* FAQs link */}
+          <div className="artist-panel p-4 text-center">
+            <div className="text-sm text-gray-600 mb-2">Have questions?</div>
+            <Link
+              href="/dashboard/artist/faqs"
+              className="inline-block rounded-xl px-5 py-2.5 text-sm font-semibold bg-[#33296b] text-[#bbe1ac] hover:opacity-90 transition"
+            >
+              View FAQs
+            </Link>
+          </div>
         </div>
       )}
     </ArtistLayout>
