@@ -107,7 +107,7 @@ export default function HomePage() {
                 Las Aguas Productions · Creative and Label Services
               </div>
               <h1 id="home-hero-heading" className="site-hero__title">
-                You be the artist, we'll handle{" "}
+                You be the artist, we handle{" "}
                 <span className="site-hero__title-accent">the tech</span>
               </h1>
 

@@ -1188,9 +1188,15 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
     const instagramPostsWithoutData = useMemo(() => {
       if (!instagramPosts || instagramPosts.length === 0) return [];
       return instagramPosts.filter(
-        (p) => !instagramLatestSnapshotByPostId.has(p.id)
+        (p) => {
+          if (instagramLatestSnapshotByPostId.has(p.id)) return false;
+          // Filter out inactive clients
+          const artist = artistById.get(p.artist_id);
+          if (artist && artist.active_client === false) return false;
+          return true;
+        }
       );
-    }, [instagramPosts, instagramLatestSnapshotByPostId]);
+    }, [instagramPosts, instagramLatestSnapshotByPostId, artistById]);
 
     // ADD THIS NEW MEMO FOR YOUTUBE:
     const postsWithoutData = useMemo(() => {
@@ -1204,9 +1210,16 @@ const tiktokLatestSnapshotByPostId = useMemo(() => {
     const tiktokPostsWithoutData = useMemo(() => {
       if (!tiktokPosts || tiktokPosts.length === 0) return [];
       return tiktokPosts.filter(
-        (p) => !tiktokLatestSnapshotByPostId.has(p.id) && p.post_type !== "Carousel"
+        (p) => {
+          if (tiktokLatestSnapshotByPostId.has(p.id)) return false;
+          if (p.post_type === "Carousel") return false;
+          // Filter out inactive clients
+          const artist = artistById.get(p.artist_id);
+          if (artist && artist.active_client === false) return false;
+          return true;
+        }
       );
-    }, [tiktokPosts, tiktokLatestSnapshotByPostId]);
+    }, [tiktokPosts, tiktokLatestSnapshotByPostId, artistById]);
 
     const instagramArtistAverages = useMemo(() => {
       const byArtist = new Map();
@@ -3196,11 +3209,18 @@ const recentPosts = useMemo(() => {
           artist={artistById.get(igLinkModalPost.artist_id)}
           onClose={closeIgLinkModal}
           onUpdatedUrl={(newUrl) => {
-            setInstagramPosts((prev) =>
-              (prev || []).map((p) =>
-                p.id === igLinkModalPost.id ? { ...p, instagram_url: newUrl } : p
-              )
-            );
+            if (newUrl) {
+              setInstagramPosts((prev) =>
+                (prev || []).map((p) =>
+                  p.id === igLinkModalPost.id ? { ...p, instagram_url: newUrl } : p
+                )
+              );
+            } else {
+              // Link cleared — remove from IG posts list
+              setInstagramPosts((prev) =>
+                (prev || []).filter((p) => p.id !== igLinkModalPost.id)
+              );
+            }
           }}
         />
       )}
@@ -3228,11 +3248,18 @@ const recentPosts = useMemo(() => {
           artist={artistById.get(ttLinkModalPost.artist_id)}
           onClose={closeTtLinkModal}
           onUpdatedUrl={(newUrl) => {
-            setTiktokPosts((prev) =>
-              (prev || []).map((p) =>
-                p.id === ttLinkModalPost.id ? { ...p, tiktok_url: newUrl } : p
-              )
-            );
+            if (newUrl) {
+              setTiktokPosts((prev) =>
+                (prev || []).map((p) =>
+                  p.id === ttLinkModalPost.id ? { ...p, tiktok_url: newUrl } : p
+                )
+              );
+            } else {
+              // Link cleared — remove from TT posts list
+              setTiktokPosts((prev) =>
+                (prev || []).filter((p) => p.id !== ttLinkModalPost.id)
+              );
+            }
           }}
         />
       )}
@@ -3504,25 +3531,25 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
     setMessage("");
 
     const trimmed = url.trim();
-    if (!trimmed) {
-      setError("Please enter a valid Instagram URL.");
-      return;
-    }
+    // Allow empty value to clear the link
+    const valueToSave = trimmed || null;
 
     try {
       setSaving(true);
       const { error: supaErr } = await supabase
         .from("posts")
-        .update({ instagram_url: trimmed })
+        .update({ instagram_url: valueToSave })
         .eq("id", post.id);
 
       if (supaErr) {
         setError(supaErr.message || "Failed to update Instagram URL.");
       } else {
-        setMessage(
-          "Saved. You can now fetch stats for this post."
-        );
-        if (onUpdatedUrl) onUpdatedUrl(trimmed);
+        if (valueToSave) {
+          setMessage("Saved. You can now fetch stats for this post.");
+        } else {
+          setMessage("Link removed.");
+        }
+        if (onUpdatedUrl) onUpdatedUrl(valueToSave);
       }
     } catch (err) {
       setError(err.message || "Failed to update Instagram URL.");
@@ -3626,6 +3653,7 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste URL or leave empty to remove link"
               className="w-full border rounded-lg px-2 py-1.5 text-sm"
             />
             {post.instagram_url && (
@@ -3686,7 +3714,7 @@ function InstagramLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
                 disabled={saving}
                 className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
               >
-                {saving ? "Saving…" : "Save new link"}
+                {saving ? "Saving…" : url.trim() ? "Save new link" : "Remove link"}
               </button>
             </div>
           </div>
@@ -4081,7 +4109,7 @@ function YouTubeLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
                 disabled={saving}
                 className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
               >
-                {saving ? "Saving…" : "Save new link"}
+                {saving ? "Saving…" : url.trim() ? "Save new link" : "Remove link"}
               </button>
             </div>
           </div>
@@ -4104,23 +4132,25 @@ function TikTokLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
     setMessage("");
 
     const trimmed = url.trim();
-    if (!trimmed) {
-      setError("Please enter a valid TikTok URL.");
-      return;
-    }
+    // Allow empty value to clear the link
+    const valueToSave = trimmed || null;
 
     try {
       setSaving(true);
       const { error: supaErr } = await supabase
         .from("posts")
-        .update({ tiktok_url: trimmed })
+        .update({ tiktok_url: valueToSave })
         .eq("id", post.id);
 
       if (supaErr) {
         setError(supaErr.message || "Failed to update TikTok URL.");
       } else {
-        setMessage("Saved. You can now fetch stats for this post.");
-        if (onUpdatedUrl) onUpdatedUrl(trimmed);
+        if (valueToSave) {
+          setMessage("Saved. You can now fetch stats for this post.");
+        } else {
+          setMessage("Link removed.");
+        }
+        if (onUpdatedUrl) onUpdatedUrl(valueToSave);
       }
     } catch (err) {
       setError(err.message || "Failed to update TikTok URL.");
@@ -4221,6 +4251,7 @@ function TikTokLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste URL or leave empty to remove link"
               className="w-full border rounded-lg px-2 py-1.5 text-sm"
             />
             {post.tiktok_url && (
@@ -4270,7 +4301,7 @@ function TikTokLinkFixModal({ post, artist, onClose, onUpdatedUrl }) {
                 disabled={saving}
                 className="text-xs px-3 py-1.5 rounded-lg bg-black text-white disabled:opacity-50"
               >
-                {saving ? "Saving…" : "Save new link"}
+                {saving ? "Saving…" : url.trim() ? "Save new link" : "Remove link"}
               </button>
             </div>
           </div>
